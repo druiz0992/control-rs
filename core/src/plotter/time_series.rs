@@ -19,7 +19,7 @@ pub fn plot_states<S: State>(
         });
 
     let mut chart = ChartBuilder::on(&root)
-        .caption("State Trajectories", ("sans-serif", 30))
+        .caption("State trajectory", ("sans-serif", 30))
         .margin(10)
         .x_label_area_size(40)
         .y_label_area_size(40)
@@ -41,12 +41,12 @@ pub fn plot_states<S: State>(
         chart
             .draw_series(LineSeries::new(series, &Palette99::pick(i)))?
             .label(label)
-            .legend(move |(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &Palette99::pick(i)));
+            .legend(move |(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], Palette99::pick(i)));
     }
 
     chart
         .configure_series_labels()
-        .background_style(&WHITE)
+        .background_style(WHITE)
         .draw()?;
 
     Ok(())
@@ -98,7 +98,7 @@ pub fn plot_energy(
 
     chart
         .configure_series_labels()
-        .background_style(&WHITE)
+        .background_style(WHITE)
         .draw()?;
 
     Ok(())

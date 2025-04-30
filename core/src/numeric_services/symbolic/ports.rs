@@ -15,7 +15,7 @@ where
     R: SymbolicRegistry,
 {
     fn clone_box(&self) -> Box<dyn SymbolicExpr<R>>;
-    fn to_fn<'a>(&self, registry: &Arc<R>) -> Result<SymbolicFn, SymbolicError>;
+    fn to_fn(&self, registry: &Arc<R>) -> Result<SymbolicFn, SymbolicError>;
 }
 
 impl<R> Clone for Box<dyn SymbolicExpr<R>>

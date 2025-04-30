@@ -34,7 +34,7 @@ where
         loop {
             clear_background(BLACK);
             let dt = get_frame_time();
-            simulator.step(dt as f64);
+            let _ = simulator.step(dt as f64);
 
             let model = simulator.model();
             let state = simulator.state();

@@ -4,17 +4,29 @@ use crate::numeric_services::symbolic::{SymbolicEvalResult, SymbolicFn};
 use crate::physics::traits::State;
 use std::sync::Arc;
 
+const DEFAULT_MAX_ITERS: usize = 100;
+const DEFAULT_TOLERANCE: f64 = 1e-6;
+
+#[derive(Debug, Default)]
 pub struct NewtonSolver {
     pub max_iters: usize,
     pub tolerance: f64,
 }
 
 impl NewtonSolver {
-    pub fn new(max_iters: usize, tolerance: f64) -> Self {
+    pub fn new() -> Self {
         Self {
-            max_iters,
-            tolerance,
+            max_iters: DEFAULT_MAX_ITERS,
+            tolerance: DEFAULT_TOLERANCE,
         }
+    }
+
+    pub fn set_max_iters(&mut self, max_iters: usize) {
+        self.max_iters = max_iters;
+    }
+
+    pub fn set_tolerance(&mut self, tolerance: f64) {
+        self.tolerance = tolerance;
     }
 }
 

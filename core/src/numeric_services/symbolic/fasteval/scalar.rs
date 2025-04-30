@@ -136,13 +136,13 @@ where
         Box::new(self.clone())
     }
 
-    fn to_fn<'a>(&self, registry: &Arc<R>) -> Result<SymbolicFn, SymbolicError> {
+    fn to_fn(&self, registry: &Arc<R>) -> Result<SymbolicFn, SymbolicError> {
         let expr_str = self.to_string();
-        let registry = Arc::clone(&registry);
+        let registry = Arc::clone(registry);
 
-        let mut slab = Slab::with_capacity(10000);
+        let mut slab = Slab::with_capacity(4096);
         let parser = Parser {
-            expr_depth_limit: DEFAULT_EXPR_DEPTH_LIMIT * 10,
+            expr_depth_limit: DEFAULT_EXPR_DEPTH_LIMIT,
             expr_len_limit: DEFAULT_EXPR_LEN_LIMIT * 100,
         };
 

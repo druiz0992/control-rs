@@ -3,7 +3,7 @@ use crate::physics::GRAVITY as G;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct DoublePendulum {
     m1: f64,
     m2: f64,
@@ -22,7 +22,7 @@ impl DoublePendulum {
 
             registry.insert_vector(
                 "state",
-                ExprVector::new(&vec!["theta1", "omega1", "theta2", "omega2"]),
+                ExprVector::new(&["theta1", "omega1", "theta2", "omega2"]),
             );
         }
 

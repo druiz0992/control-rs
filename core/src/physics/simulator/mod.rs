@@ -1,6 +1,6 @@
 pub mod basic_sim;
 
-use super::traits::Dynamics;
+use super::{ModelError, traits::Dynamics};
 use crate::physics::Energy;
 
 pub use basic_sim::simulator::BasicSim;
@@ -14,7 +14,7 @@ pub trait PhysicsSim {
         steps: usize,
     ) -> Vec<(f64, <Self::Model as Dynamics>::State, Energy)>;
 
-    fn step(&mut self, dt: f64) -> &<Self::Model as Dynamics>::State;
+    fn step(&mut self, dt: f64) -> Result<&<Self::Model as Dynamics>::State, ModelError>;
 
     fn model(&self) -> &Self::Model;
 

@@ -1,5 +1,8 @@
+#![allow(unused_imports)]
 use control_rs::numeric_services::symbolic::fasteval::ExprRegistry;
-use control_rs::physics::discretizer::{BackwardEuler, RK4Symbolic};
+use control_rs::physics::discretizer::{
+    BackwardEuler, Discretizer, HermiteSimpson, ImplicitMidpoint, RK4Symbolic,
+};
 use control_rs::physics::models::{DoublePendulum, DoublePendulumState};
 use control_rs::physics::simulator::{BasicSim, PhysicsSim};
 use control_rs::{plotter, utils};
@@ -24,8 +27,10 @@ fn main() {
     let steps = 1000;
 
     let model = DoublePendulum::new(m1, m2, l1, l2, Some(&registry));
-    //let integrator = RK4Symbolic::new(&model, Arc::clone(&registry));
-    let integrator = BackwardEuler::new(&model, Arc::clone(&registry));
+    //let integrator = RK4Symbolic::new(&model, Arc::clone(&registry)).unwrap();
+    //let integrator = BackwardEuler::new(&model, Arc::clone(&registry)).unwrap();
+    let integrator = HermiteSimpson::new(&model, Arc::clone(&registry)).unwrap();
+    //let integrator = ImplicitMidpoint::new(&model, Arc::clone(&registry)).unwrap();
     let mut sim = BasicSim::new(model, integrator, state0);
 
     let history = sim.simulate_steps(dt, steps);

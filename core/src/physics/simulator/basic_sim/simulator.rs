@@ -1,5 +1,5 @@
-use crate::physics::Energy;
 use crate::physics::traits::{Discretizer, Dynamics, PhysicsSim};
+use crate::physics::{Energy, ModelError};
 
 pub struct BasicSim<M, D>
 where
@@ -42,15 +42,15 @@ where
         for _ in 0..steps {
             let energy = self.energy(&self.state);
             history.push((t, self.state.clone(), energy));
-            self.step(dt);
+            let _ = self.step(dt);
             t += dt;
         }
         history
     }
 
-    fn step(&mut self, dt: f64) -> &M::State {
-        self.state = self.discretizer.step(&self.model, &self.state, dt);
-        &self.state
+    fn step(&mut self, dt: f64) -> Result<&M::State, ModelError> {
+        self.state = self.discretizer.step(&self.model, &self.state, dt)?;
+        Ok(&self.state)
     }
 
     fn model(&self) -> &Self::Model {

@@ -1,7 +1,7 @@
 use super::model::DoublePendulum;
 use super::state::DoublePendulumState;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
-use crate::physics::traits::Dynamics;
+use crate::physics::traits::{Describable, Dynamics};
 use crate::physics::{GRAVITY as G, energy::Energy};
 use nalgebra::Vector3;
 use std::sync::Arc;
@@ -108,5 +108,11 @@ impl Dynamics for DoublePendulum {
 
         // Return as a symbolic vector
         ExprVector::from_vec(vec![dtheta1, domega1, dtheta2, domega2])
+    }
+}
+
+impl Describable for DoublePendulum {
+    fn name(&self) -> &'static str {
+        "Doubple Pendulum"
     }
 }

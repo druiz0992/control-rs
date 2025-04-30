@@ -6,17 +6,14 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-/// The `Sympy` struct provides an implementation of the `DerivativeEngine` trait
-/// for computing derivatives using a Python backend powered by the SymPy library.
-///
 /// # Constants
 /// - `PYTHON_SCRIPT_PATH`: Path to the Python script that performs the differentiation.
 /// - `PYTHON_INTERPRETER`: The Python interpreter to use (default is `python3`).
-///
-
 const PYTHON_SCRIPT_PATH: &str = "src/numeric_services/differentiation/sympy_engine/backend.py";
 const PYTHON_INTERPRETER: &str = "python3";
 
+/// The `Sympy` struct provides an implementation of the `DerivativeEngine` trait
+/// for computing derivatives using a Python backend powered by the SymPy library.
 #[derive(Debug, Default)]
 pub struct Sympy {
     path: String,
