@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn test_insert_vector() {
         let registry = ExprRegistry::new();
-        let expr = ExprVector::new(&vec!["x + 1", "x+2"]);
+        let expr = ExprVector::new(&["x + 1", "x+2"]);
         registry.insert_vector("y", expr.clone());
         assert_eq!(registry.get("y").unwrap(), ExprRecord::Vector(expr));
     }

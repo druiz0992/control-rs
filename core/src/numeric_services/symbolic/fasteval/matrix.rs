@@ -54,7 +54,7 @@ pub struct ExprMatrix {
 impl ExprMatrix {
     pub fn new(matrix: &Vec<&[&str]>) -> Self {
         let converted_matrix = matrix
-            .into_iter()
+            .iter()
             .map(|row| row.iter().map(|&s| ExprScalar::new(s)).collect())
             .collect();
         ExprMatrix {
@@ -62,10 +62,10 @@ impl ExprMatrix {
         }
     }
 
-    pub fn from_string(matrix: &Vec<Vec<String>>) -> Self {
+    pub fn from_string(matrix: &[Vec<String>]) -> Self {
         let converted_matrix = matrix
-            .into_iter()
-            .map(|row| row.iter().map(|s| ExprScalar::new(s)).collect())
+            .iter()
+            .map(|row| row.iter().map(ExprScalar::new).collect())
             .collect();
         ExprMatrix {
             matrix: converted_matrix,
@@ -104,9 +104,9 @@ impl ExprMatrix {
         let cols = other.matrix[0].len();
         let mut result_matrix = vec![vec![ExprScalar::default(); cols]; rows];
 
-        for i in 0..rows {
-            for j in 0..cols {
-                result_matrix[i][j] = (0..self.matrix[0].len())
+        for (i, row) in result_matrix.iter_mut().enumerate().take(rows) {
+            for (j, cell) in row.iter_mut().enumerate().take(cols) {
+                *cell = (0..self.matrix[0].len())
                     .map(|k| self.matrix[i][k].mul(&other.matrix[k][j]))
                     .fold(ExprScalar::default(), |acc, val| acc.add(&val));
             }
@@ -179,7 +179,7 @@ where
         for row in &self.matrix {
             let mut fn_row = Vec::new();
             for expr in row {
-                let f = expr.to_fn(&registry)?;
+                let f = expr.to_fn(registry)?;
                 fn_row.push(f);
             }
             fn_matrix.push(fn_row);

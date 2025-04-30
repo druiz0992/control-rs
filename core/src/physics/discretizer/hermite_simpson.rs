@@ -1,5 +1,8 @@
-use crate::physics::traits::{Discretizer, Dynamics};
-use crate::solver::Solver;
+use super::helpers::symbolic_intrinsic_step;
+use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, SymbolicExpr, SymbolicFn};
+use crate::physics::ModelError;
+use crate::physics::traits::{Describable, Discretizer, Dynamics};
+use std::sync::Arc;
 
 // Hermite–Simpson residual:
 //
@@ -13,37 +16,82 @@ use crate::solver::Solver;
 //
 // The root of R(x_{k+1}) gives the next state satisfying the Hermite–Simpson integration scheme.
 
-pub struct HermiteSimpson<S> {
-    solver: S,
+pub struct HermiteSimpson {
+    registry: Arc<ExprRegistry>,
+    residual_func: SymbolicFn,
+    jacobian_func: SymbolicFn,
 }
 
-impl<S> HermiteSimpson<S> {
-    pub fn new(solver: S) -> Self {
-        HermiteSimpson { solver }
+impl HermiteSimpson {
+    pub fn new<D: Dynamics>(model: &D, registry: Arc<ExprRegistry>) -> Result<Self, ModelError> {
+        let dt_expr = ExprScalar::new("dt");
+        let dt6 = dt_expr.scalef(1.0 / 6.0);
+        let dt8 = dt_expr.scalef(1.0 / 8.0);
+        let current_state = registry
+            .get_vector("state")
+            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
+        let next_state = current_state.next_state();
+        registry.insert_vector("next_state", next_state.clone());
+
+        let dyn_current_state = model
+            .dynamics_symbolic(current_state.clone().wrap(), &registry)
+            .wrap();
+
+        let dyn_next_state = model
+            .dynamics_symbolic(next_state.clone().wrap(), &registry)
+            .wrap();
+
+        let mid_state = dyn_current_state
+            .sub(&dyn_next_state)
+            .wrap()
+            .scale(&dt8)
+            .add(&current_state.add(&next_state).wrap().scalef(0.5));
+
+        let dyn_mid_state = model.dynamics_symbolic(mid_state.wrap(), &registry).wrap();
+
+        let mut residual = dyn_current_state
+            .add(&dyn_mid_state.scalef(4.0))
+            .add(&dyn_next_state)
+            .wrap()
+            .scale(&dt6);
+        residual = current_state.add(&residual).sub(&next_state).wrap();
+
+        let jacobian = residual
+            .jacobian(&next_state)
+            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
+
+        let residual_func = residual
+            .to_fn(&registry)
+            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
+        let jacobian_func = jacobian
+            .to_fn(&registry)
+            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
+
+        Ok(HermiteSimpson {
+            registry,
+            residual_func,
+            jacobian_func,
+        })
     }
 }
 
-impl<D, S> Discretizer<D> for HermiteSimpson<S>
+impl<D> Discretizer<D> for HermiteSimpson
 where
     D: Dynamics,
-    S: Solver<D::State>,
 {
-    fn step(&mut self, model: &D, state: &D::State, dt: f64) -> D::State {
-        let f = |x_next: &D::State| {
-            let f_k = model.dynamics(state);
-            let f_next = model.dynamics(x_next);
+    fn step(&mut self, _model: &D, state: &D::State, dt: f64) -> Result<D::State, ModelError> {
+        symbolic_intrinsic_step::<D>(
+            &self.registry,
+            &self.residual_func,
+            &self.jacobian_func,
+            state,
+            dt,
+        )
+    }
+}
 
-            let x_mid = (state.clone() + x_next.clone()) * 0.5
-                + (f_k.clone() - f_next.clone()) * (dt / 8.0);
-
-            let f_mid = model.dynamics(&x_mid);
-
-            let delta = (f_k + f_mid * 4.0 + f_next) * (dt / 6.0);
-
-            x_next.clone() - state.clone() - delta
-        };
-
-        //self.solver.solve(f, state.clone())
-        todo!();
+impl Describable for HermiteSimpson {
+    fn name(&self) -> &'static str {
+        "Hermite-Simpson"
     }
 }

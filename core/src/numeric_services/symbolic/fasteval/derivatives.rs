@@ -4,7 +4,6 @@ use crate::numeric_services::differentiation::models::{
     DerivativeRequest, DerivativeResponse, DerivativeType,
 };
 use crate::numeric_services::differentiation::sympy_engine::Sympy;
-use crate::numeric_services::symbolic::ports::SymbolicExpr;
 use crate::numeric_services::symbolic::fasteval::{ExprRecord, ExprVector};
 
 pub fn compute_derivatives(

@@ -1,4 +1,5 @@
-use crate::numeric_services::symbolic::{SymbolicError, SymbolicEvalResult};
+use crate::numeric_services::symbolic::SymbolicEvalResult;
+use crate::physics::ModelError;
 use std::ops::{Add, Div, Mul, Sub};
 
 /// A trait representing a state in a physical system, providing methods for
@@ -19,14 +20,13 @@ use std::ops::{Add, Div, Mul, Sub};
 /// ```rust
 /// use control_rs::physics::traits::State;
 /// use macros::StateOps;
-
+///
 /// #[derive(Clone, Debug, StateOps)]
 /// struct MyState {
 ///     position: f64,
 ///     velocity: f64,
 /// }
 /// ```
-/// State representation
 pub trait State:
     Sized
     + Add<Output = Self>
@@ -41,19 +41,17 @@ pub trait State:
 }
 
 pub trait FromSymbolicEvalResult: Sized {
-    type Error;
-    fn from_symbolic(result: SymbolicEvalResult) -> Result<Self, Self::Error>;
+    fn from_symbolic(result: SymbolicEvalResult) -> Result<Self, ModelError>;
 }
 
 impl<S: State> FromSymbolicEvalResult for S {
-    type Error = SymbolicError;
-    fn from_symbolic(value: SymbolicEvalResult) -> Result<Self, Self::Error> {
+    fn from_symbolic(value: SymbolicEvalResult) -> Result<Self, ModelError> {
         match value {
             SymbolicEvalResult::Vector(expr) => {
                 let vec: Vec<f64> = expr.iter().cloned().collect();
                 Ok(S::from_vec(vec))
             }
-            _ => Err(SymbolicError::EvaluationError),
+            _ => Err(ModelError::EvaluationError),
         }
     }
 }

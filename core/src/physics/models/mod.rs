@@ -4,3 +4,4 @@ pub mod state;
 
 pub use double_pendulum::DoublePendulum;
 pub use double_pendulum::state::DoublePendulumState;
+pub use dynamics::Dynamics;

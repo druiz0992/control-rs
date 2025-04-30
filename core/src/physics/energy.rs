@@ -1,4 +1,3 @@
-
 /// Represents the energy of a physical system, including both kinetic and potential components.
 ///
 /// # Fields
@@ -6,7 +5,7 @@
 /// - `potential`: The potential energy of the system, represented as a `f64`.
 ///
 /// # Methods
-/// 
+///
 /// ## Constructors
 /// - `new(kinetic: f64, potential: f64) -> Self`
 ///   - Creates a new `Energy` instance with the specified kinetic and potential energy values.
@@ -32,7 +31,7 @@
 /// # Examples
 /// ```
 /// use control_rs::physics::energy::Energy;
-/// 
+///
 /// let mut energy = Energy::new(10.0, 20.0);
 /// assert_eq!(energy.total(), 30.0);
 ///
@@ -69,14 +68,16 @@ impl Energy {
         if kinetic < 0.0 {
             return Err("Kinetic energy cannot be negative");
         }
-        Ok(self.kinetic = kinetic)
+        self.kinetic = kinetic;
+        Ok(())
     }
 
     pub fn set_potential(&mut self, potential: f64) -> Result<(), &'static str> {
         if potential < 0.0 {
             return Err("Potential energy cannot be negative");
         }
-        Ok(self.potential = potential)
+        self.potential = potential;
+        Ok(())
     }
 }
 

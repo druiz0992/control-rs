@@ -55,8 +55,8 @@ impl ExprVector {
         let expr: Vec<_> = vector.iter().map(|s| ExprScalar::new(*s)).collect();
         Self { vector: expr }
     }
-    pub fn from_string(vector: &Vec<String>) -> Self {
-        let expr: Vec<_> = vector.iter().map(|s| ExprScalar::new(s)).collect();
+    pub fn from_string(vector: &[String]) -> Self {
+        let expr: Vec<_> = vector.iter().map(ExprScalar::new).collect();
         Self { vector: expr }
     }
 
@@ -168,6 +168,19 @@ impl ExprVector {
             Err(SymbolicError::UnexpectedResultType)
         }
     }
+
+    pub fn next_state(&self) -> Self {
+        ExprVector::new(
+            &self
+                .as_vec()
+                .iter()
+                .map(|e| format!("next_{}", e.as_str()))
+                .collect::<Vec<String>>()
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>(),
+        )
+    }
 }
 
 impl IntoIterator for ExprVector {
@@ -222,7 +235,7 @@ where
         let mut scalar_fns = Vec::new();
 
         for expr in &self.vector {
-            let f = expr.to_fn(&registry)?;
+            let f = expr.to_fn(registry)?;
             scalar_fns.push(f);
         }
 
