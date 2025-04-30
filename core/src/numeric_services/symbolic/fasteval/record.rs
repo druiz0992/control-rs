@@ -1,5 +1,5 @@
 use super::{ExprMatrix, ExprScalar, ExprVector};
-use crate::numeric_services::symbolic::SymbolicExpr;
+use crate::numeric_services::symbolic::ports::SymbolicExpr;
 
 // Registry symbolic expression representation
 #[derive(Debug, Clone)]

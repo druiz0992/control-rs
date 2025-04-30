@@ -1,6 +1,6 @@
-use crate::numeric_services::symbolic::SymbolicFn;
-use crate::numeric_services::symbolic::fasteval::{ExprRegistry, ExprScalar, ExprVector};
-use crate::numeric_services::traits::SymbolicExpr;
+use crate::numeric_services::symbolic::{
+    ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFn,
+};
 use crate::physics::traits::{Discretizer, Dynamics, State};
 use crate::solver::Solver;
 use crate::solver::newton::NewtonSolver;
@@ -35,14 +35,14 @@ impl BackwardEuler {
         registry.insert_vector("next_state", next_state.clone());
 
         let dyn_next_state = model
-            .dynamics_symbolic(next_state.clone().wrap())
+            .dynamics_symbolic(next_state.clone().wrap(), &registry)
             .scale(&dt_expr);
 
         let residual = next_state.sub(&current_state).sub(&dyn_next_state);
         let jacobian = residual.jacobian(&next_state).unwrap();
 
-        let residual_func = residual.to_fn(registry.as_dyn_registry()).unwrap();
-        let jacobian_func = jacobian.to_fn(registry.as_dyn_registry()).unwrap();
+        let residual_func = residual.to_fn(&registry).unwrap();
+        let jacobian_func = jacobian.to_fn(&registry).unwrap();
         BackwardEuler {
             registry,
             residual_func,

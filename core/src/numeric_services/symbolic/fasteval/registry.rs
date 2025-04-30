@@ -1,5 +1,6 @@
-use crate::numeric_services::symbolic::fasteval::{ExprMatrix, ExprRecord, ExprScalar, ExprVector};
-use crate::numeric_services::symbolic::{SymbolicError, SymbolicRegistry};
+use crate::numeric_services::symbolic::error::SymbolicError;
+use crate::numeric_services::symbolic::{ExprMatrix, ExprRecord, ExprScalar, ExprVector};
+use crate::numeric_services::symbolic::ports::SymbolicRegistry;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
@@ -12,8 +13,7 @@ use std::sync::{Arc, RwLock};
 ///
 /// # Examples
 /// ```
-/// use control_rs::numeric_services::symbolic::fasteval::{ExprRecord,ExprRegistry};
-/// use control_rs::numeric_services::traits::SymbolicRegistry;
+/// use control_rs::numeric_services::symbolic::{ExprRecord, ExprVector, ExprRegistry, SymbolicRegistry};
 ///
 /// let registry = ExprRegistry::new();
 /// registry.insert_var("x", 42.0);
@@ -37,10 +37,6 @@ impl ExprRegistry {
         Self {
             entries: Arc::new(RwLock::new(HashMap::new())),
         }
-    }
-
-    pub fn as_dyn_registry(self: &Arc<Self>) -> Arc<dyn SymbolicRegistry<Record = ExprRecord>> {
-        Arc::clone(self) as Arc<dyn SymbolicRegistry<Record = ExprRecord>>
     }
 
     ///   Inserts a variable with the given name and value into the registry.

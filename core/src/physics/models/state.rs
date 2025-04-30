@@ -17,33 +17,23 @@ use std::ops::{Add, Div, Mul, Sub};
 /// Implementing the `State` trait for a custom struct:
 ///
 /// ```rust
-/// use control_rs::physics::state::State;
-///
+/// use control_rs::physics::traits::State;
+/// use macros::StateOps;
+
+/// #[derive(Clone, Debug, StateOps)]
 /// struct MyState {
 ///     position: f64,
 ///     velocity: f64,
 /// }
-///
-/// impl State for MyState {
-///     fn as_vec(&self) -> Vec<f64> {
-///         vec![self.position, self.velocity]
-///     }
-///
-///     fn from_vec(v: Vec<f64>) -> Self {
-///         Self {
-///             position: v[0],
-///             velocity: v[1],
-///         }
-///     }
-///
-///     fn labels() -> &'static [&'static str] {
-///         &["position", "velocity"]
-///     }
-/// }
 /// ```
 /// State representation
 pub trait State:
-    Sized + Add<Output = Self> + Sub<Output = Self> + Mul<f64, Output = Self> + Div<f64, Output = Self> + PartialEq
+    Sized
+    + Add<Output = Self>
+    + Sub<Output = Self>
+    + Mul<f64, Output = Self>
+    + Div<f64, Output = Self>
+    + PartialEq
 {
     fn as_vec(&self) -> Vec<f64>;
     fn from_vec(v: Vec<f64>) -> Self;
@@ -55,7 +45,7 @@ pub trait FromSymbolicEvalResult: Sized {
     fn from_symbolic(result: SymbolicEvalResult) -> Result<Self, Self::Error>;
 }
 
-impl<S:State> FromSymbolicEvalResult for S {
+impl<S: State> FromSymbolicEvalResult for S {
     type Error = SymbolicError;
     fn from_symbolic(value: SymbolicEvalResult) -> Result<Self, Self::Error> {
         match value {

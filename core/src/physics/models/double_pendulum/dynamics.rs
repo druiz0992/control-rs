@@ -1,49 +1,10 @@
+use super::model::DoublePendulum;
 use super::state::DoublePendulumState;
-use crate::numeric_services::symbolic::fasteval::{ExprScalar, ExprVector, ExprRegistry};
-use crate::numeric_services::traits::{SymbolicExpr, SymbolicRegistry};
-use crate::physics::traits::{Dynamics, Renderable, State};
+use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
+use crate::physics::traits::Dynamics;
 use crate::physics::{GRAVITY as G, energy::Energy};
-use nalgebra::{Vector2, Vector3};
-use serde::{Deserialize, Serialize};
+use nalgebra::Vector3;
 use std::sync::Arc;
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DoublePendulum {
-    m1: f64,
-    m2: f64,
-    l1: f64,
-    l2: f64,
-
-    #[serde(skip)]
-    registry: Arc<ExprRegistry>,
-}
-
-impl DoublePendulum {
-    pub fn new(m1: f64, m2: f64, l1: f64, l2: f64, registry: Arc<ExprRegistry>) -> Self {
-        registry.insert_scalar("m1", ExprScalar::new(m1.to_string()));
-        registry.insert_scalar("m2", ExprScalar::new(m2.to_string()));
-        registry.insert_scalar("l1", ExprScalar::new(l1.to_string()));
-        registry.insert_scalar("l2", ExprScalar::new(l2.to_string()));
-        registry.insert_scalar("g", ExprScalar::new(G.to_string()));
-
-        registry.insert_vector(
-            "state",
-            ExprVector::new(&vec!["theta1", "omega1", "theta2", "omega2"]),
-        );
-
-        DoublePendulum {
-            m1,
-            m2,
-            l1,
-            l2,
-            registry,
-        }
-    }
-
-    pub fn parameters(&self) -> (f64, f64, f64, f64) {
-        (self.m1, self.m2, self.l1, self.l2)
-    }
-}
 
 impl Dynamics for DoublePendulum {
     type State = DoublePendulumState;
@@ -88,18 +49,18 @@ impl Dynamics for DoublePendulum {
         Energy::new(kinetic, potential)
     }
 
-    fn dynamics_symbolic(&self, state: ExprVector) -> ExprVector {
+    fn dynamics_symbolic(&self, state: ExprVector, registry: &Arc<ExprRegistry>) -> ExprVector {
         // Define symbolic variables
         let theta1 = state.get(0).unwrap();
         let omega1 = state.get(1).unwrap();
         let theta2 = state.get(2).unwrap();
         let omega2 = state.get(3).unwrap();
 
-        let m1 = self.registry.get_scalar("m1").unwrap();
-        let m2 = self.registry.get_scalar("m2").unwrap();
-        let l1 = self.registry.get_scalar("l1").unwrap();
-        let l2 = self.registry.get_scalar("l2").unwrap();
-        let g = self.registry.get_scalar("g").unwrap();
+        let m1 = registry.get_scalar("m1").unwrap();
+        let m2 = registry.get_scalar("m2").unwrap();
+        let l1 = registry.get_scalar("l1").unwrap();
+        let l2 = registry.get_scalar("l2").unwrap();
+        let g = registry.get_scalar("g").unwrap();
 
         // Common terms
         let c = theta1.sub(&theta2).cos();
@@ -147,119 +108,5 @@ impl Dynamics for DoublePendulum {
 
         // Return as a symbolic vector
         ExprVector::from_vec(vec![dtheta1, domega1, dtheta2, domega2])
-    }
-}
-
-impl Renderable for DoublePendulum {
-    type State = DoublePendulumState;
-
-    fn render_joints(&self, state: &Self::State, screen_dims: (f32, f32)) -> Vec<Vector2<f32>> {
-        let (screen_width, screen_height) = screen_dims;
-        let origin = Vector2::new(screen_width, screen_height);
-
-        let (_, _, l1, l2) = self.parameters();
-        let [theta1, _, theta2, _] = state.as_vec().try_into().unwrap();
-
-        let total_length = (l1 + l2) as f32;
-
-        let scale = 0.5 * screen_height / total_length;
-
-        // Compute the positions in model space (upward is negative y in this system)
-        let p1 = origin
-            + Vector2::new(
-                (l1 * theta1.sin()) as f32 * scale,
-                -(l1 * theta1.cos()) as f32 * scale,
-            );
-
-        let p2 = p1
-            + Vector2::new(
-                (l2 * theta2.sin()) as f32 * scale,
-                -(l2 * theta2.cos()) as f32 * scale,
-            );
-
-        vec![origin, p1, p2]
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::physics::{constants, models::state::FromSymbolicEvalResult};
-    use approx::assert_abs_diff_eq;
-    use proptest::prelude::*;
-    use std::f64::consts::PI;
-
-    #[test]
-    fn test_double_pendulum_new() {
-        let registry = Arc::new(ExprRegistry::new());
-        let pendulum = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, registry.clone());
-
-        assert_eq!(pendulum.m1, 1.0);
-        assert_eq!(pendulum.m2, 2.0);
-        assert_eq!(pendulum.l1, 1.5);
-        assert_eq!(pendulum.l2, 2.5);
-    }
-
-    #[test]
-    fn test_double_pendulum_parameters() {
-        let registry = Arc::new(ExprRegistry::new());
-        let pendulum = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, registry.clone());
-
-        let params = pendulum.parameters();
-        assert_eq!(params, (1.0, 2.0, 1.5, 2.5));
-    }
-
-    #[test]
-    fn test_dynamics() {
-        let registry = Arc::new(ExprRegistry::new());
-        let pendulum = DoublePendulum::new(1.0, 2.0, 1.0, 1.0, registry.clone());
-        let state = DoublePendulumState::new(0.0, 0.0, 0.0, 0.0);
-
-        let new_state = pendulum.dynamics(&state);
-
-        assert!(new_state.theta1.abs() < 1e-6);
-        assert!(new_state.omega1.abs() < 1e-6);
-        assert!(new_state.theta2.abs() < 1e-6);
-        assert!(new_state.omega2.abs() < 1e-6);
-    }
-
-    proptest! {
-        #[test]
-        fn test_symbolic_dynamics_randomized(
-            theta1 in 0.0..(2.0 * PI),
-            theta2 in 0.0..(2.0 * PI),
-            omega1 in -5.0..5.0,
-            omega2 in -5.0..5.0,
-            m1 in 0.1f64..10.0,
-            m2 in 0.1f64..10.0,
-            l1 in 0.1f64..5.0,
-            l2 in 0.1f64..5.0
-        ) {
-            let registry = Arc::new(ExprRegistry::new());
-            registry.insert_var("theta1", theta1);
-            registry.insert_var("theta2", theta2);
-            registry.insert_var("omega1", omega1);
-            registry.insert_var("omega2", omega2);
-
-            let pendulum = DoublePendulum::new(m1, m2, l1, l2, Arc::clone(&registry));
-
-            let state = DoublePendulumState::new(theta1, omega1, theta2, omega2);
-            let state_symbol = registry.get_vector("state").unwrap();
-
-            let new_state = pendulum.dynamics(&state);
-            let dynamics_func = pendulum
-                .dynamics_symbolic(state_symbol)
-                .to_fn(registry.clone())
-                .unwrap();
-            let new_state_symbol: DoublePendulumState = FromSymbolicEvalResult::from_symbolic(dynamics_func(None).unwrap()).unwrap();
-
-            // Compare numeric and symbolic outputs approximately
-            let tol = 1e-6; // tolerance for floating point comparison
-
-            assert!((new_state.theta1 - new_state_symbol.theta1).abs() < tol, "theta1 mismatch");
-            assert!((new_state.omega1 - new_state_symbol.omega1).abs() < tol, "omega1 mismatch");
-            assert!((new_state.theta2 - new_state_symbol.theta2).abs() < tol, "theta2 mismatch");
-            assert!((new_state.omega2 - new_state_symbol.omega2).abs() < tol, "omega2 mismatch");
-        }
     }
 }

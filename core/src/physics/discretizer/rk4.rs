@@ -1,6 +1,4 @@
-use crate::numeric_services::symbolic::fasteval::{ExprRegistry, ExprScalar};
-use crate::numeric_services::symbolic::SymbolicFn;
-use crate::numeric_services::traits::SymbolicExpr;
+use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, SymbolicExpr, SymbolicFn};
 use crate::physics::traits::{Discretizer, Dynamics, FromSymbolicEvalResult, State};
 use std::sync::Arc;
 
@@ -40,15 +38,15 @@ impl RK4Symbolic {
         let dt2 = dt.scalef(0.5).wrap();
         let dt6 = dt.scalef(1.0 / 6.0).wrap();
 
-        let k1_s = model.dynamics_symbolic(state.clone()).wrap();
+        let k1_s = model.dynamics_symbolic(state.clone(), &registry).wrap();
         let k2_s = model
-            .dynamics_symbolic(k1_s.scale(&dt2).add(&state).wrap())
+            .dynamics_symbolic(k1_s.scale(&dt2).add(&state).wrap(), &registry)
             .wrap();
         let k3_s = model
-            .dynamics_symbolic(k2_s.scale(&dt2).add(&state).wrap())
+            .dynamics_symbolic(k2_s.scale(&dt2).add(&state).wrap(), &registry)
             .wrap();
         let k4_s = model
-            .dynamics_symbolic(k3_s.scale(&dt).add(&state).wrap())
+            .dynamics_symbolic(k3_s.scale(&dt).add(&state).wrap(), &registry)
             .wrap();
         let mut result_s = k1_s
             .add(&k4_s)
@@ -57,7 +55,7 @@ impl RK4Symbolic {
             .wrap();
         result_s = result_s.scale(&dt6);
         result_s = result_s.add(&state);
-        let step_func = result_s.to_fn(registry.as_dyn_registry()).unwrap();
+        let step_func = result_s.to_fn(&registry).unwrap();
         Self {
             step_func,
             registry,
@@ -94,8 +92,7 @@ mod tests {
     #[test]
     fn test_rk4_step() {
         let mut rk4 = RK4::new();
-        let registry = Arc::new(ExprRegistry::new());
-        let dynamics = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, registry.clone());
+        let dynamics = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, None);
         let initial_state = DoublePendulumState::new(0.0, 0.0, 0.0, 0.0);
         let dt = 0.1;
 
@@ -107,7 +104,7 @@ mod tests {
     #[test]
     fn test_rk4_symbolic_step() {
         let registry = Arc::new(ExprRegistry::new());
-        let dynamics = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, Arc::clone(&registry));
+        let dynamics = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, Some(&registry));
 
         let theta1 = 0.0;
         let omega1 = 0.0;
@@ -136,7 +133,7 @@ mod tests {
             l2 in 0.1f64..5.0
         ) {
             let registry = Arc::new(ExprRegistry::new());
-            let dynamics = DoublePendulum::new(m1, m2, l1, l2, Arc::clone(&registry));
+            let dynamics = DoublePendulum::new(m1, m2, l1, l2, Some(&registry));
             let state = DoublePendulumState::new(theta1, omega1, theta2, omega2);
             let mut rk4_symbolic = RK4Symbolic::new(&dynamics, Arc::clone(&registry));
             let mut rk4 = RK4::new();

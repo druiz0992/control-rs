@@ -1,10 +1,10 @@
 use super::derivatives::compute_derivatives;
 use super::{ExprMatrix, ExprScalar};
-use crate::numeric_services::differentiation::{DerivativeResponse, DerivativeType};
+use crate::numeric_services::differentiation::models::{DerivativeResponse, DerivativeType};
+use crate::numeric_services::symbolic::error::SymbolicError;
 use crate::numeric_services::symbolic::fasteval::ExprRecord;
-use crate::numeric_services::symbolic::{
-    SymbolicError, SymbolicEvalResult, SymbolicExpr, SymbolicFn, SymbolicRegistry,
-};
+use crate::numeric_services::symbolic::models::{SymbolicEvalResult, SymbolicFn};
+use crate::numeric_services::symbolic::ports::{SymbolicExpr, SymbolicRegistry};
 use nalgebra::DVector;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -20,7 +20,7 @@ use std::sync::Arc;
 /// # Examples
 ///
 /// ```
-/// use control_rs::numeric_services::symbolic::fasteval::ExprVector;
+/// use control_rs::numeric_services::symbolic::ExprVector;
 ///
 /// // Create a new ExprVector
 /// let vector = ExprVector::new(&["x", "y", "z"]);
@@ -31,7 +31,7 @@ use std::sync::Arc;
 /// let result = vec1.add(&vec2);
 ///
 /// // Scale a vector
-/// let scaled = vec1.scale(2.0);
+/// let scaled = vec1.scalef(2.0);
 ///
 /// // Calculate dot product
 /// let dot_product = vec1.dot(&vec2).unwrap();
@@ -197,33 +197,32 @@ impl<'a> IntoIterator for &'a mut ExprVector {
     }
 }
 
-impl SymbolicExpr for ExprVector {
-    type Record = ExprRecord;
+impl std::fmt::Display for ExprVector {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let content = self
+            .vector
+            .iter()
+            .map(|c| c.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
 
-    fn clone_box(&self) -> Box<dyn SymbolicExpr<Record = Self::Record>> {
+        write!(f, "[{}]", content)
+    }
+}
+
+impl<R> SymbolicExpr<R> for ExprVector
+where
+    R: SymbolicRegistry<Record = ExprRecord> + 'static,
+{
+    fn clone_box(&self) -> Box<dyn SymbolicExpr<R>> {
         Box::new(self.clone())
     }
 
-    fn to_string(&self) -> String {
-        format!(
-            "[{}]",
-            self.vector
-                .iter()
-                .map(|c| c.to_string())
-                .collect::<Vec<_>>()
-                .join(",")
-        )
-    }
-
-    fn to_fn<'a>(
-        &self,
-        registry: Arc<dyn SymbolicRegistry<Record = Self::Record>>,
-    ) -> Result<SymbolicFn, SymbolicError> {
+    fn to_fn<'a>(&self, registry: &Arc<R>) -> Result<SymbolicFn, SymbolicError> {
         let mut scalar_fns = Vec::new();
 
         for expr in &self.vector {
-            let registry_clone = Arc::clone(&registry);
-            let f = expr.to_fn(registry_clone)?;
+            let f = expr.to_fn(&registry)?;
             scalar_fns.push(f);
         }
 
@@ -392,9 +391,9 @@ mod tests {
     #[test]
     fn test_to_fn() {
         let registry = Arc::new(ExprRegistry::new());
-        let vec_expr = ExprVector::new(&["x+2", "y+3", "z"]);
+        let expr = ExprVector::new(&["x+2", "y+3", "z"]);
 
-        let func = vec_expr.to_fn(registry.as_dyn_registry()).unwrap();
+        let func = expr.to_fn(&registry).unwrap();
 
         let vars = HashMap::from([
             ("x".to_string(), 1.0),

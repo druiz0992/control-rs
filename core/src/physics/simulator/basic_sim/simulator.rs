@@ -1,7 +1,5 @@
-use crate::numeric_services::symbolic::fasteval::{ExprScalar, ExprRegistry};
+use crate::physics::Energy;
 use crate::physics::traits::{Discretizer, Dynamics, PhysicsSim};
-use crate::physics::{Energy, constants};
-use std::sync::{Arc, RwLock};
 
 pub struct BasicSim<M, D>
 where
@@ -11,7 +9,6 @@ where
     discretizer: D,
     model: M,
     state: M::State,
-    registry: Arc<ExprRegistry>,
 }
 
 impl<M, D> BasicSim<M, D>
@@ -19,17 +16,11 @@ where
     M: Dynamics,
     D: Discretizer<M>,
 {
-    pub fn new(
-        model: M,
-        discretizer: D,
-        initial_state: M::State,
-        registry: Arc<ExprRegistry>,
-    ) -> Self {
+    pub fn new(model: M, discretizer: D, initial_state: M::State) -> Self {
         BasicSim {
             discretizer,
             model,
             state: initial_state,
-            registry,
         }
     }
 

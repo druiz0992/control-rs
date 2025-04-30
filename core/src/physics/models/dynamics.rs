@@ -1,11 +1,13 @@
-use crate::{numeric_services::symbolic::fasteval::ExprVector, physics::Energy};
+use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
+use crate::physics::Energy;
 use nalgebra::Vector2;
+use std::sync::Arc;
 
 pub trait Dynamics {
     type State: Clone + super::state::State;
 
     fn dynamics(&self, state: &Self::State) -> Self::State;
-    fn dynamics_symbolic(&self, state: ExprVector) -> ExprVector;
+    fn dynamics_symbolic(&self, state: ExprVector, registry: &Arc<ExprRegistry>) -> ExprVector;
     fn energy(&self, state: &Self::State) -> Energy;
 }
 

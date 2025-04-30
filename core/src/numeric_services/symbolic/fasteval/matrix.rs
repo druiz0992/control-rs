@@ -1,8 +1,8 @@
 use super::scalar::ExprScalar;
+use crate::numeric_services::symbolic::error::SymbolicError;
 use crate::numeric_services::symbolic::fasteval::ExprRecord;
-use crate::numeric_services::symbolic::{
-    SymbolicError, SymbolicEvalResult, SymbolicExpr, SymbolicFn, SymbolicRegistry,
-};
+use crate::numeric_services::symbolic::models::{SymbolicEvalResult, SymbolicFn};
+use crate::numeric_services::symbolic::ports::{SymbolicExpr, SymbolicRegistry};
 use nalgebra::DMatrix;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -27,8 +27,7 @@ use std::sync::Arc;
 /// # Examples
 ///
 /// ```rust
-/// use control_rs::numeric_services::symbolic::fasteval::ExprMatrix;
-/// use crate::control_rs::numeric_services::traits::SymbolicExpr;
+/// use control_rs::numeric_services::symbolic::{SymbolicExpr, ExprMatrix};
 ///
 /// let matrix = ExprMatrix::new(&vec![&["1", "2"], &["3", "4"]]);
 /// let transposed = matrix.transpose();
@@ -47,7 +46,7 @@ use std::sync::Arc;
 /// - The `matmul` method assumes that the dimensions of the matrices are
 ///   compatible for multiplication.
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ExprMatrix {
     matrix: Vec<Vec<ExprScalar>>,
 }
@@ -146,41 +145,41 @@ impl<'a> IntoIterator for &'a mut ExprMatrix {
     }
 }
 
-impl SymbolicExpr for ExprMatrix {
-    type Record = ExprRecord;
+impl std::fmt::Display for ExprMatrix {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let rows = self
+            .matrix
+            .iter()
+            .map(|row| {
+                let row_str = row
+                    .iter()
+                    .map(|scalar| scalar.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("[{}]", row_str)
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
 
-    fn clone_box(&self) -> Box<dyn SymbolicExpr<Record = Self::Record>> {
+        write!(f, "[{}]", rows)
+    }
+}
+
+impl<R> SymbolicExpr<R> for ExprMatrix
+where
+    R: SymbolicRegistry<Record = ExprRecord> + 'static,
+{
+    fn clone_box(&self) -> Box<dyn SymbolicExpr<R>> {
         Box::new(self.clone())
     }
-    fn to_string(&self) -> String {
-        format!(
-            "[{}]",
-            self.matrix
-                .iter()
-                .map(|row| {
-                    format!(
-                        "[{}]",
-                        row.iter()
-                            .map(|scalar| scalar.to_string())
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join(", ")
-        )
-    }
 
-    fn to_fn<'a>(
-        &self,
-        registry: Arc<dyn SymbolicRegistry<Record = Self::Record>>,
-    ) -> Result<SymbolicFn, SymbolicError> {
+    fn to_fn<'a>(&self, registry: &Arc<R>) -> Result<SymbolicFn, SymbolicError> {
         let mut fn_matrix = Vec::new();
 
         for row in &self.matrix {
             let mut fn_row = Vec::new();
             for expr in row {
-                let f = expr.to_fn(Arc::clone(&registry))?;
+                let f = expr.to_fn(&registry)?;
                 fn_row.push(f);
             }
             fn_matrix.push(fn_row);
@@ -275,7 +274,7 @@ mod tests {
         registry.insert_var("z", 2.0);
         registry.insert_var("w", 4.0);
         let matrix = ExprMatrix::new(&vec![&["x+1", "y-2"], &["z+3", "w-4"]]);
-        let matrix_fn = matrix.to_fn(registry.as_dyn_registry()).unwrap();
+        let matrix_fn = matrix.to_fn(&registry).unwrap();
 
         if let Ok(SymbolicEvalResult::Matrix(result)) = matrix_fn(None) {
             assert_eq!(result[(0, 0)], 3.0);

@@ -1,11 +1,8 @@
-use control_rs::numeric_services::symbolic::fasteval::{ExprScalar, ExprVector, ExprRegistry};
-use control_rs::physics::constants;
 use control_rs::physics::discretizer::RK4;
 use control_rs::physics::models::{DoublePendulum, DoublePendulumState};
 use control_rs::physics::simulator::{BasicSim, PhysicsSim};
 use control_rs::{plotter, utils};
 use std::f64::consts::PI;
-use std::sync::Arc;
 
 fn main() {
     let m1 = 1.0;
@@ -18,15 +15,14 @@ fn main() {
     let theta2 = PI / 1.8;
     let omega2 = 0.0;
 
-    let registry = Arc::new(ExprRegistry::new());
     let state0 = DoublePendulumState::new(theta1, omega1, theta2, omega2);
 
     let dt = 0.01;
     let steps = 1000;
 
-    let model = DoublePendulum::new(m1, m2, l1, l2, Arc::clone(&registry));
+    let model = DoublePendulum::new(m1, m2, l1, l2, None);
     let integrator = RK4::new();
-    let mut sim = BasicSim::new(model, integrator, state0, Arc::clone(&registry));
+    let mut sim = BasicSim::new(model, integrator, state0);
 
     let history = sim.simulate_steps(dt, steps);
 

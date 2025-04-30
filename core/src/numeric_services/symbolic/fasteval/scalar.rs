@@ -1,9 +1,9 @@
 use super::derivatives::compute_derivatives;
-use crate::numeric_services::differentiation::DerivativeType;
+use crate::numeric_services::differentiation::models::DerivativeType;
+use crate::numeric_services::symbolic::error::SymbolicError;
 use crate::numeric_services::symbolic::fasteval::{ExprRecord, ExprVector};
-use crate::numeric_services::symbolic::{
-    SymbolicError, SymbolicEvalResult, SymbolicExpr, SymbolicFn, SymbolicRegistry,
-};
+use crate::numeric_services::symbolic::models::{SymbolicEvalResult, SymbolicFn};
+use crate::numeric_services::symbolic::ports::{SymbolicExpr, SymbolicRegistry};
 use fasteval::parser::{DEFAULT_EXPR_DEPTH_LIMIT, DEFAULT_EXPR_LEN_LIMIT};
 use fasteval::{Compiler, Evaler, Parser, Slab};
 use std::collections::HashMap;
@@ -122,21 +122,21 @@ impl ExprScalar {
     }
 }
 
-impl SymbolicExpr for ExprScalar {
-    type Record = ExprRecord;
+impl std::fmt::Display for ExprScalar {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
-    fn clone_box(&self) -> Box<dyn SymbolicExpr<Record = Self::Record>> {
+impl<R> SymbolicExpr<R> for ExprScalar
+where
+    R: SymbolicRegistry<Record = ExprRecord> + 'static,
+{
+    fn clone_box(&self) -> Box<dyn SymbolicExpr<R>> {
         Box::new(self.clone())
     }
 
-    fn to_string(&self) -> String {
-        self.0.clone()
-    }
-
-    fn to_fn<'a>(
-        &self,
-        registry: Arc<dyn SymbolicRegistry<Record = Self::Record>>,
-    ) -> Result<SymbolicFn, SymbolicError> {
+    fn to_fn<'a>(&self, registry: &Arc<R>) -> Result<SymbolicFn, SymbolicError> {
         let expr_str = self.to_string();
         let registry = Arc::clone(&registry);
 
@@ -187,15 +187,16 @@ impl SymbolicExpr for ExprScalar {
 }
 
 // Define a helper function to handle common logic
-fn eval_symbolic_expr<T>(
+fn eval_symbolic_expr<T, R>(
     expr: T,
-    registry: Arc<dyn SymbolicRegistry<Record = T::Record>>,
+    registry: Arc<R>,
     vars_opt: Option<&HashMap<String, f64>>,
 ) -> Option<f64>
 where
-    T: SymbolicExpr,
+    T: SymbolicExpr<R>,
+    R: SymbolicRegistry,
 {
-    expr.to_fn(registry)
+    expr.to_fn(&registry)
         .ok()
         .and_then(|f| f(vars_opt).ok())
         .and_then(|result| match result {
@@ -286,7 +287,7 @@ mod tests {
         let registry = Arc::new(ExprRegistry::default());
 
         // Test with no variables
-        let func = expr.to_fn(registry.as_dyn_registry()).unwrap();
+        let func = expr.to_fn(&registry).unwrap();
         let result = func(None);
         assert!(result.is_err());
     }
@@ -297,7 +298,7 @@ mod tests {
         let registry = Arc::new(ExprRegistry::default());
 
         // Test with a variable provided
-        let func = expr.to_fn(registry.as_dyn_registry()).unwrap();
+        let func = expr.to_fn(&registry).unwrap();
 
         let mut vars = HashMap::new();
         vars.insert("x".to_string(), 5.0);
@@ -311,7 +312,7 @@ mod tests {
         let expr = ExprScalar::new("x");
         let registry = Arc::new(ExprRegistry::default());
 
-        let func = expr.to_fn(registry.as_dyn_registry()).unwrap();
+        let func = expr.to_fn(&registry).unwrap();
         let mut vars = HashMap::new();
         vars.insert("y".to_string(), 10.0);
         let result = func(Some(&vars));
@@ -323,7 +324,7 @@ mod tests {
         let expr = ExprScalar::new("x");
         let registry = Arc::new(ExprRegistry::default());
         registry.insert_var("x", 3.0);
-        let func = expr.to_fn(registry.as_dyn_registry()).unwrap();
+        let func = expr.to_fn(&registry).unwrap();
 
         let result = func(None);
         assert!(result.is_ok());
@@ -338,7 +339,7 @@ mod tests {
         registry.insert_scalar("y", expr_y);
         registry.insert_var("x", 3.0);
         let expr = ExprScalar::new("y + 1");
-        let func = expr.to_fn(registry.as_dyn_registry()).unwrap();
+        let func = expr.to_fn(&registry).unwrap();
         let result = func(None);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), SymbolicEvalResult::Scalar(7.0));

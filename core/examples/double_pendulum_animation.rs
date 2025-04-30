@@ -17,7 +17,7 @@ async fn main() {
     let theta2 = PI / 1.8;
     let omega2 = 0.0;
 
-    let model = DoublePendulum::new(m1, m2, l1, l2);
+    let model = DoublePendulum::new(m1, m2, l1, l2, None);
     let state0 = DoublePendulumState::new(theta1, omega1, theta2, omega2);
 
     let integrator = RK4::new();

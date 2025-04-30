@@ -23,10 +23,10 @@ fn main() {
     let dt = 0.01;
     let steps = 1000;
 
-    let model = DoublePendulum::new(m1, m2, l1, l2, Arc::clone(&registry));
+    let model = DoublePendulum::new(m1, m2, l1, l2, Some(&registry));
     //let integrator = RK4Symbolic::new(&model, Arc::clone(&registry));
     let integrator = BackwardEuler::new(&model, Arc::clone(&registry));
-    let mut sim = BasicSim::new(model, integrator, state0, Arc::clone(&registry));
+    let mut sim = BasicSim::new(model, integrator, state0);
 
     let history = sim.simulate_steps(dt, steps);
 
