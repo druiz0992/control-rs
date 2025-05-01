@@ -51,7 +51,11 @@ impl<S: State> FromSymbolicEvalResult for S {
                 let vec: Vec<f64> = expr.iter().cloned().collect();
                 Ok(S::from_vec(vec))
             }
-            _ => Err(ModelError::EvaluationError),
+            SymbolicEvalResult::Matrix(m) => Err(ModelError::Unexpected(format!(
+                "Expecting a vector, received matrix {}",
+                m
+            ))),
+            SymbolicEvalResult::Scalar(s) => Err(ModelError::Unexpected(format!("Expecting a vector, received a scalar {}", s)))
         }
     }
 }

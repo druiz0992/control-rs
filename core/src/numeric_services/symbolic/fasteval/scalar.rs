@@ -181,7 +181,7 @@ where
                     }
                 })
                 .map(SymbolicEvalResult::Scalar)
-                .map_err(|_| SymbolicError::EvaluationError)
+                .map_err(|e| SymbolicError::Other(e.to_string()))
         }))
     }
 }

@@ -1,6 +1,6 @@
 use crate::numeric_services::symbolic::error::SymbolicError;
-use crate::numeric_services::symbolic::{ExprMatrix, ExprRecord, ExprScalar, ExprVector};
 use crate::numeric_services::symbolic::ports::SymbolicRegistry;
+use crate::numeric_services::symbolic::{ExprMatrix, ExprRecord, ExprScalar, ExprVector};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
@@ -62,25 +62,25 @@ impl ExprRegistry {
     pub fn get_var(&self, name: &str) -> Result<f64, SymbolicError> {
         match self.get(name)? {
             ExprRecord::Var(var) => Ok(var),
-            _ => Err(SymbolicError::UnexpectedResultType),
+            _ => Err(SymbolicError::ExprNotFound(name.to_string())),
         }
     }
     pub fn get_scalar(&self, name: &str) -> Result<ExprScalar, SymbolicError> {
         match self.get(name)? {
             ExprRecord::Scalar(expr) => Ok(expr),
-            _ => Err(SymbolicError::UnexpectedResultType),
+            _ => Err(SymbolicError::ExprNotFound(name.to_string())),
         }
     }
     pub fn get_vector(&self, name: &str) -> Result<ExprVector, SymbolicError> {
         match self.get(name)? {
             ExprRecord::Vector(expr) => Ok(expr),
-            _ => Err(SymbolicError::UnexpectedResultType),
+            _ => Err(SymbolicError::ExprNotFound(name.to_string())),
         }
     }
     pub fn get_matrix(&self, name: &str) -> Result<ExprMatrix, SymbolicError> {
         match self.get(name)? {
             ExprRecord::Matrix(expr) => Ok(expr),
-            _ => Err(SymbolicError::UnexpectedResultType),
+            _ => Err(SymbolicError::ExprNotFound(name.to_string())),
         }
     }
 }
@@ -93,7 +93,7 @@ impl SymbolicRegistry for ExprRegistry {
         entries
             .get(name)
             .cloned()
-            .ok_or(SymbolicError::ExprNotFound)
+            .ok_or(SymbolicError::ExprNotFound(name.to_string()))
     }
 
     fn insert(&self, name: &str, value: ExprRecord) {
@@ -150,7 +150,7 @@ mod tests {
         let registry = ExprRegistry::new();
         assert!(matches!(
             registry.get("y"),
-            Err(SymbolicError::ExprNotFound)
+            Err(SymbolicError::ExprNotFound(_))
         ));
     }
 
@@ -159,7 +159,7 @@ mod tests {
         let registry = ExprRegistry::new();
         assert!(matches!(
             registry.get("z"),
-            Err(SymbolicError::ExprNotFound)
+            Err(SymbolicError::ExprNotFound(_))
         ));
     }
 

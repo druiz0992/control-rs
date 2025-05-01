@@ -192,7 +192,7 @@ where
 
             for row in &fn_matrix {
                 for f in row {
-                    match f(vars_opt).map_err(|_| SymbolicError::EvaluationError)? {
+                    match f(vars_opt)? {
                         SymbolicEvalResult::Scalar(val) => values.push(val),
                         _ => return Err(SymbolicError::UnexpectedResultType),
                     }

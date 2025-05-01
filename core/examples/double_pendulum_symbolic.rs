@@ -29,8 +29,8 @@ fn main() {
     let model = DoublePendulum::new(m1, m2, l1, l2, Some(&registry));
     //let integrator = RK4Symbolic::new(&model, Arc::clone(&registry)).unwrap();
     //let integrator = BackwardEuler::new(&model, Arc::clone(&registry)).unwrap();
-    let integrator = HermiteSimpson::new(&model, Arc::clone(&registry)).unwrap();
-    //let integrator = ImplicitMidpoint::new(&model, Arc::clone(&registry)).unwrap();
+    //let integrator = HermiteSimpson::new(&model, Arc::clone(&registry)).unwrap();
+    let integrator = ImplicitMidpoint::new(&model, Arc::clone(&registry)).unwrap();
     let mut sim = BasicSim::new(model, integrator, state0);
 
     let history = sim.simulate_steps(dt, steps);

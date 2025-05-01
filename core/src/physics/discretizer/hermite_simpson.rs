@@ -1,7 +1,8 @@
 use super::helpers::symbolic_intrinsic_step;
-use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, SymbolicExpr, SymbolicFn};
+use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::ModelError;
 use crate::physics::traits::{Describable, Discretizer, Dynamics};
+use crate::solver::newton::NewtonSolver;
 use std::sync::Arc;
 
 // Hermite–Simpson residual:
@@ -18,8 +19,7 @@ use std::sync::Arc;
 
 pub struct HermiteSimpson {
     registry: Arc<ExprRegistry>,
-    residual_func: SymbolicFn,
-    jacobian_func: SymbolicFn,
+    solver: NewtonSolver,
 }
 
 impl HermiteSimpson {
@@ -55,23 +55,9 @@ impl HermiteSimpson {
             .wrap()
             .scale(&dt6);
         residual = current_state.add(&residual).sub(&next_state).wrap();
+        let solver = NewtonSolver::new_root_solver(&residual, &["next_state"], &registry)?;
 
-        let jacobian = residual
-            .jacobian(&next_state)
-            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
-
-        let residual_func = residual
-            .to_fn(&registry)
-            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
-        let jacobian_func = jacobian
-            .to_fn(&registry)
-            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
-
-        Ok(HermiteSimpson {
-            registry,
-            residual_func,
-            jacobian_func,
-        })
+        Ok(HermiteSimpson { registry, solver })
     }
 }
 
@@ -80,13 +66,7 @@ where
     D: Dynamics,
 {
     fn step(&mut self, _model: &D, state: &D::State, dt: f64) -> Result<D::State, ModelError> {
-        symbolic_intrinsic_step::<D>(
-            &self.registry,
-            &self.residual_func,
-            &self.jacobian_func,
-            state,
-            dt,
-        )
+        symbolic_intrinsic_step::<D>(&self.registry, state, &self.solver, dt)
     }
 }
 

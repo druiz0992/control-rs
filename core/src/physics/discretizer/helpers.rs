@@ -1,16 +1,15 @@
-use crate::numeric_services::symbolic::{ExprRegistry, SymbolicFn};
+use crate::numeric_services::symbolic::ExprRegistry;
 use crate::physics::ModelError;
 use crate::physics::models::state::State;
 use crate::physics::traits::Dynamics;
-use crate::solver::Solver;
+use crate::solver::RootSolver;
 use crate::solver::newton::NewtonSolver;
 use std::sync::Arc;
 
 pub fn symbolic_intrinsic_step<D: Dynamics>(
     registry: &Arc<ExprRegistry>,
-    residual_func: &SymbolicFn,
-    jacobian_func: &SymbolicFn,
     state: &D::State,
+    solver: &NewtonSolver,
     dt: f64,
 ) -> Result<D::State, ModelError> {
     registry.insert_var("dt", dt);
@@ -31,6 +30,5 @@ pub fn symbolic_intrinsic_step<D: Dynamics>(
         registry.insert_var(name.as_str(), *value);
     }
 
-    let solver = NewtonSolver::new();
-    Ok(solver.solve(residual_func, jacobian_func, state, Arc::clone(registry)))
+    solver.solve(state, registry)
 }

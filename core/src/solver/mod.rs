@@ -1,13 +1,15 @@
+pub mod models;
 pub mod newton;
-use crate::numeric_services::symbolic::{SymbolicFn, fasteval::ExprRegistry};
+
+use crate::numeric_services::symbolic::fasteval::{ExprRegistry, registry};
+use crate::physics::ModelError;
 use std::sync::Arc;
 
-pub trait Solver<S> {
-    fn solve(
-        &self,
-        residual: &SymbolicFn,
-        jacobian: &SymbolicFn,
-        initial_guess: &S,
-        registry: Arc<ExprRegistry>,
-    ) -> S;
+/// Returns x for f(x) = 0
+pub trait RootSolver<S> {
+    fn solve(&self, initial_guess: &S, registry: &Arc<ExprRegistry>) -> Result<S, ModelError>;
+}
+
+pub trait Minimizer<S> {
+    fn minimize(&self, initial_guess: &S, registry: &Arc<ExprRegistry>) -> Result<S, ModelError>;
 }

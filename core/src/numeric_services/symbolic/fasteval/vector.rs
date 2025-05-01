@@ -120,7 +120,7 @@ impl ExprVector {
         }
     }
 
-    pub fn dot(&self, other: &Self) -> Result<ExprScalar, &'static str> {
+    pub fn dot(&self, other: &Self) -> Result<ExprScalar, SymbolicError> {
         let terms: Vec<ExprScalar> = self
             .vector
             .iter()
@@ -131,15 +131,15 @@ impl ExprVector {
         terms
             .into_iter()
             .reduce(|a, b| a.add(&b))
-            .ok_or("Error in dot product")
+            .ok_or(SymbolicError::Other("Error in dot product".to_string()))
     }
 
-    pub fn norm2(&self) -> Result<ExprScalar, &'static str> {
+    pub fn norm2(&self) -> Result<ExprScalar, SymbolicError> {
         let squared_terms: Vec<ExprScalar> = self.vector.iter().map(|v| v.mul(v)).collect();
         squared_terms
             .into_iter()
             .reduce(|a, b| a.add(&b))
-            .ok_or("Error calculating norm")
+            .ok_or(SymbolicError::Other("Error calculating norm".to_string()))
     }
 
     pub fn jacobian(&self, vars: &ExprVector) -> Result<ExprMatrix, SymbolicError> {
@@ -264,7 +264,7 @@ impl TryFrom<DerivativeResponse> for ExprVector {
                     vec.into_iter().map(|s| ExprScalar::from_str(&s)).collect();
                 Ok(ExprVector { vector: parsed? })
             }
-            None => Err(SymbolicError::ExprNotFound),
+            None => Err(SymbolicError::ExprNotFound("gradient".to_string())),
         }
     }
 }
