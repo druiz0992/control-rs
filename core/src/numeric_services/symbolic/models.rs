@@ -3,7 +3,7 @@ use nalgebra::{DMatrix, DVector};
 use std::collections::HashMap;
 
 /// Evaluation Result
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum SymbolicEvalResult {
     Scalar(f64),
     Vector(DVector<f64>),

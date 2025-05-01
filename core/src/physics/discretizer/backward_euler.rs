@@ -23,6 +23,7 @@ impl BackwardEuler {
             .map_err(|e| ModelError::Symbolic(e.to_string()))?;
         let next_state = current_state.next_state();
         registry.insert_vector("next_state", next_state.clone());
+        let next_state_vars: Vec<_> = next_state.iter().map(|s| s.as_str()).collect();
 
         let dt_expr = ExprScalar::new("dt");
         let dyn_next_state = model
@@ -30,7 +31,7 @@ impl BackwardEuler {
             .scale(&dt_expr);
 
         let residual = next_state.sub(&current_state).sub(&dyn_next_state);
-        let solver = NewtonSolver::new_root_solver(&residual, &["next_state"], &registry)?;
+        let solver = NewtonSolver::new_root_solver(&residual, &next_state_vars, &registry, None)?;
 
         Ok(BackwardEuler { registry, solver })
     }

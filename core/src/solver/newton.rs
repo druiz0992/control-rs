@@ -1,4 +1,5 @@
 use super::RootSolver;
+use super::line_search::LineSearch;
 use super::models::{OptimizerConfig, ProblemSpec};
 use crate::numeric_services::symbolic::fasteval::ExprRegistry;
 use crate::numeric_services::symbolic::ports::SymbolicExpr;
@@ -8,7 +9,7 @@ use crate::physics::traits::State;
 use std::sync::Arc;
 
 pub struct NewtonSolver {
-    pub options: OptimizerConfig,
+    options: OptimizerConfig,
     problem: ProblemSpec,
 }
 
@@ -17,8 +18,11 @@ impl NewtonSolver {
         residual_expr: &ExprVector,
         unknown_vars: &[&str],
         registry: &Arc<ExprRegistry>,
+        options: Option<OptimizerConfig>,
     ) -> Result<Self, ModelError> {
+        let options = options.unwrap_or_else(OptimizerConfig::default);
         let unknown_expr = ExprVector::new(unknown_vars);
+
         let jacobian = residual_expr
             .jacobian(&unknown_expr)
             .map_err(|e| ModelError::Symbolic(e.to_string()))?;
@@ -34,44 +38,22 @@ impl NewtonSolver {
         problem.jacobian = Some(jacobian_fn);
         problem.unknown_vars = Some(unknown_expr);
 
-        Ok(Self {
-            options: OptimizerConfig::default(),
-            problem,
-        })
+        if let Some(merit_expr) = options.get_line_search_merit() {
+            let merit_fn = merit_expr
+                .to_fn(registry)
+                .map_err(|e| ModelError::Symbolic(e.to_string()))?;
+            problem.merit = Some(merit_fn);
+        }
+
+        Ok(Self { options, problem })
     }
 
-    pub fn new_minimizer(
-        objective_expr: &ExprVector,
-        vars: &ExprVector,
-        registry: &Arc<ExprRegistry>,
-    ) -> Result<Self, ModelError> {
-        registry.insert_vector("vars", vars.clone());
-        let jacobian = objective_expr
-            .jacobian(vars)
-            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
-        let objective_fn = objective_expr
-            .to_fn(registry)
-            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
-        let jacobian_fn = jacobian
-            .to_fn(registry)
-            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
-
-        let mut problem = ProblemSpec::default();
-        problem.objective = Some(objective_fn);
-        problem.jacobian = Some(jacobian_fn);
-
-        Ok(Self {
-            options: OptimizerConfig::default(),
-            problem,
-        })
+    pub fn set_max_iters(&mut self, max_iters: usize) -> Result<(), ModelError> {
+        self.options.set_max_iters(max_iters)
     }
 
-    pub fn set_max_iters(&mut self, max_iters: usize) {
-        self.options.max_iters = max_iters;
-    }
-
-    pub fn set_tolerance(&mut self, tolerance: f64) {
-        self.options.tolerance = tolerance;
+    pub fn set_tolerance(&mut self, tolerance: f64) -> Result<(), ModelError> {
+        self.options.set_tolerance(tolerance)
     }
 }
 
@@ -82,8 +64,10 @@ where
     fn solve(&self, initial_guess: &S, registry: &Arc<ExprRegistry>) -> Result<S, ModelError> {
         let (residual_fn, jacobian_fn, unknown_expr) = self.problem.get_root_finding_params()?;
         let mut unknown_val = initial_guess.as_vec();
+        let max_iters = self.options.get_max_iters();
+        let tolerance = self.options.get_tolerance();
 
-        for _ in 0..self.options.max_iters {
+        for _ in 0..max_iters {
             for (name, value) in unknown_expr.iter().zip(unknown_val.iter()) {
                 registry.insert_var(name.as_str(), *value);
             }
@@ -99,7 +83,7 @@ where
                 }
             };
 
-            if fx.abs().sum() < self.options.tolerance {
+            if fx.abs().sum() < tolerance {
                 break;
             }
 
@@ -120,6 +104,11 @@ where
                     ));
                 }
             };
+
+            if self.options.is_line_search_enabled() {
+                let ls = LineSearch::new();
+                ls.run(merit_fn, delta, registry, opts);
+            }
 
             for (val, delta_val) in unknown_val.iter_mut().zip(delta.iter()) {
                 *val += delta_val;

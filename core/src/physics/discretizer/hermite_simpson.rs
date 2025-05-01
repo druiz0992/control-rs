@@ -32,6 +32,7 @@ impl HermiteSimpson {
             .map_err(|e| ModelError::Symbolic(e.to_string()))?;
         let next_state = current_state.next_state();
         registry.insert_vector("next_state", next_state.clone());
+        let next_state_vars: Vec<_> = next_state.iter().map(|s| s.as_str()).collect();
 
         let dyn_current_state = model
             .dynamics_symbolic(current_state.clone().wrap(), &registry)
@@ -55,7 +56,7 @@ impl HermiteSimpson {
             .wrap()
             .scale(&dt6);
         residual = current_state.add(&residual).sub(&next_state).wrap();
-        let solver = NewtonSolver::new_root_solver(&residual, &["next_state"], &registry)?;
+        let solver = NewtonSolver::new_root_solver(&residual, &next_state_vars, &registry, None)?;
 
         Ok(HermiteSimpson { registry, solver })
     }

@@ -5,4 +5,5 @@ pub enum ModelError {
     Unexpected(String),
     IncompleteConfiguration(String),
     SolverError(String),
+    ConfigError(String),
 }

@@ -20,6 +20,7 @@ impl ImplicitMidpoint {
             .map_err(|e| ModelError::Symbolic(e.to_string()))?;
         let next_state = current_state.next_state();
         registry.insert_vector("next_state", next_state.clone());
+        let next_state_vars: Vec<_> = next_state.iter().map(|s| s.as_str()).collect();
 
         let mid_state = current_state.add(&next_state).wrap().scalef(0.5).wrap();
 
@@ -29,7 +30,7 @@ impl ImplicitMidpoint {
             .scale(&dt_expr);
 
         let residual = next_state.sub(&current_state).sub(&dyn_mid_state).wrap();
-        let solver = NewtonSolver::new_root_solver(&residual, &["next_state"], &registry)?;
+        let solver = NewtonSolver::new_root_solver(&residual, &next_state_vars, &registry, None)?;
 
         Ok(ImplicitMidpoint { registry, solver })
     }

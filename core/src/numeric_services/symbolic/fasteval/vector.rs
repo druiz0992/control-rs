@@ -170,19 +170,23 @@ impl ExprVector {
     }
 
     pub fn next_state(&self) -> Self {
-        ExprVector::new(
+        ExprVector::from_string(
             &self
                 .as_vec()
                 .iter()
                 .map(|e| format!("next_{}", e.as_str()))
-                .collect::<Vec<String>>()
-                .iter()
-                .map(|s| s.as_str())
-                .collect::<Vec<_>>(),
+                .collect::<Vec<String>>(),
         )
     }
 }
 
+impl std::ops::Deref for ExprVector {
+    type Target = [ExprScalar];
+
+    fn deref(&self) -> &Self::Target {
+        &self.vector
+    }
+}
 impl IntoIterator for ExprVector {
     type Item = ExprScalar;
     type IntoIter = std::vec::IntoIter<Self::Item>;

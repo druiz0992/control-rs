@@ -1,3 +1,4 @@
+pub mod line_search;
 pub mod models;
 pub mod newton;
 
