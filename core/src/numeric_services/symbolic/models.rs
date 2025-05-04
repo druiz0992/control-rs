@@ -1,4 +1,4 @@
-use super::error::SymbolicError;
+use super::{ExprScalar, error::SymbolicError};
 use nalgebra::{DMatrix, DVector};
 use std::collections::HashMap;
 
@@ -25,3 +25,32 @@ pub type SymbolicFn = Box<
         + Send
         + Sync,
 >;
+
+pub struct SymbolicFunction {
+    func: SymbolicFn,
+    param_names: Vec<String>,
+}
+
+impl<'a> SymbolicFunction {
+    pub fn new(func: SymbolicFn, params: &[ExprScalar]) -> Self {
+        Self {
+            func,
+            param_names: params.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    pub fn eval(&self, param_vals: &[f64]) -> Result<SymbolicEvalResult, SymbolicError> {
+        if param_vals.is_empty() {
+            return (self.func)(None);
+        }
+
+        let registry: HashMap<String, f64> = self
+            .param_names
+            .iter()
+            .cloned()
+            .zip(param_vals.iter().copied())
+            .collect();
+
+        (self.func)(Some(&registry))
+    }
+}

@@ -1,5 +1,5 @@
 use crate::{
-    numeric_services::symbolic::{ExprScalar, ExprVector, SymbolicFn},
+    numeric_services::symbolic::{ExprScalar, ExprVector, SymbolicFn, SymbolicFunction},
     physics::ModelError,
 };
 
@@ -19,7 +19,7 @@ pub struct ProblemSpec {
     pub hessian: Option<SymbolicFn>,
     pub unknown_vars: Option<ExprVector>,
 
-    pub merit: Option<SymbolicFn>,
+    pub merit: Option<SymbolicFunction>,
 
     pub eq_constraints: Option<SymbolicFn>,
     pub eq_jacobian: Option<SymbolicFn>,
@@ -29,6 +29,20 @@ pub struct ProblemSpec {
 }
 
 impl ProblemSpec {
+    pub fn new_root_finding(
+        residual_fn: SymbolicFn,
+        jacobian_fn: SymbolicFn,
+        merit_fn: SymbolicFn,
+        unknown_expr: &ExprVector,
+    ) -> Self {
+        let mut problem = ProblemSpec::default();
+        problem.residual = Some(residual_fn);
+        problem.jacobian = Some(jacobian_fn);
+        problem.unknown_vars = Some(unknown_expr.clone());
+        problem.merit = Some(SymbolicFunction::new(merit_fn, &unknown_expr.clone()));
+        problem
+    }
+
     pub fn get_root_finding_params(
         &self,
     ) -> Result<(&SymbolicFn, &SymbolicFn, Vec<ExprScalar>), ModelError> {
@@ -46,12 +60,11 @@ impl ProblemSpec {
     }
 }
 
-const INIT_ALPHA: f64 = 1.0;
 const FACTOR_ALPHA: f64 = 0.5;
 const MAX_LINESEARCH_ITERS: usize = 10;
 
+#[derive(Clone)]
 pub struct LineSeachConfig {
-    init: f64,
     factor: f64,
     max_iters: usize,
     merit_expr: Option<ExprScalar>,
@@ -60,7 +73,6 @@ pub struct LineSeachConfig {
 impl Default for LineSeachConfig {
     fn default() -> Self {
         Self {
-            init: INIT_ALPHA,
             factor: FACTOR_ALPHA,
             max_iters: MAX_LINESEARCH_ITERS,
             merit_expr: None,
@@ -78,16 +90,6 @@ const MIN_ALLOWED_LINESEARCH_MAX_ITERS: usize = 1;
 const MAX_ALLOWED_LINESEARCH_MAX_ITERS: usize = 30;
 
 impl LineSeachConfig {
-    pub fn set_init_alpha(&mut self, init_val: f64) -> Result<(), ModelError> {
-        if init_val < MIN_ALLOWED_ALPHA || init_val > MAX_ALLOWED_ALPHA {
-            return Err(ModelError::ConfigError(
-                "Linesearch alpha out of range".to_string(),
-            ));
-        }
-        self.init = init_val;
-        Ok(())
-    }
-
     pub fn set_factor(&mut self, factor: f64) -> Result<(), ModelError> {
         if factor < MIN_ALLOWED_FACTOR || factor > MAX_ALLOWED_FACTOR {
             return Err(ModelError::ConfigError(
@@ -114,9 +116,6 @@ impl LineSeachConfig {
         self.merit_expr = Some(merit_expr);
     }
 
-    pub fn get_init_alpha(&self) -> f64 {
-        self.init
-    }
     pub fn get_max_iters(&self) -> usize {
         self.max_iters
     }
@@ -125,12 +124,13 @@ impl LineSeachConfig {
     }
 }
 
+#[derive(Clone)]
 pub struct OptimizerConfig {
     max_iters: usize,
     tolerance: f64,
     penalty_factor: Option<f64>,
     constraint_tol: Option<f64>,
-    line_search: Option<LineSeachConfig>,
+    line_search: LineSeachConfig,
 }
 
 impl OptimizerConfig {
@@ -161,30 +161,19 @@ impl OptimizerConfig {
         self.tolerance
     }
 
-    pub fn set_line_search(&mut self, opts: LineSeachConfig) -> Result<(), ModelError> {
-        if opts.merit_expr.is_none() {
-            return Err(ModelError::ConfigError(
-                "Merit expression is not configured".to_string(),
-            ));
-        }
-        self.line_search = Some(opts);
-        Ok(())
-    }
-
-    pub fn is_line_search_enabled(&self) -> bool {
-        if let Some(_) = &self.line_search {
-            return true;
-        }
-        false
+    pub fn set_line_search_opts(&mut self, opts: LineSeachConfig) {
+        self.line_search = opts;
     }
 
     pub fn get_line_search_merit(&self) -> Option<ExprScalar> {
-        if let Some(line_search_opts) = &self.line_search {
-            if let Some(merit_expr) = &line_search_opts.merit_expr {
-                return Some(merit_expr.clone());
-            }
+        if let Some(merit_expr) = &self.line_search.merit_expr {
+            return Some(merit_expr.clone());
         }
         None
+    }
+
+    pub fn get_line_search_opts(&self) -> LineSeachConfig {
+        return self.line_search.clone();
     }
 }
 
@@ -195,7 +184,7 @@ impl Default for OptimizerConfig {
             tolerance: DEFAULT_TOLERANCE,
             penalty_factor: None,
             constraint_tol: None,
-            line_search: None,
+            line_search: LineSeachConfig::default(),
         }
     }
 }

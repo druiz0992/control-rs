@@ -64,6 +64,10 @@ impl ExprVector {
         self.vector.clone()
     }
 
+    pub fn as_str_vec(&self) -> Vec<&str> {
+        self.iter().map(|s| s.as_str()).collect()
+    }
+
     pub fn get(&self, index: usize) -> Option<ExprScalar> {
         self.as_vec().get(index).cloned()
     }
@@ -169,7 +173,7 @@ impl ExprVector {
         }
     }
 
-    pub fn next_state(&self) -> Self {
+    pub fn build_next(&self) -> Self {
         ExprVector::from_string(
             &self
                 .as_vec()
@@ -235,7 +239,7 @@ where
         Box::new(self.clone())
     }
 
-    fn to_fn<'a>(&self, registry: &Arc<R>) -> Result<SymbolicFn, SymbolicError> {
+    fn to_fn(&self, registry: &Arc<R>) -> Result<SymbolicFn, SymbolicError> {
         let mut scalar_fns = Vec::new();
 
         for expr in &self.vector {

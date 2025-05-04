@@ -16,15 +16,14 @@ pub struct NewtonSolver {
 impl NewtonSolver {
     pub fn new_root_solver(
         residual_expr: &ExprVector,
-        unknown_vars: &[&str],
+        unknown_expr: &ExprVector,
         registry: &Arc<ExprRegistry>,
         options: Option<OptimizerConfig>,
     ) -> Result<Self, ModelError> {
         let options = options.unwrap_or_else(OptimizerConfig::default);
-        let unknown_expr = ExprVector::new(unknown_vars);
 
         let jacobian = residual_expr
-            .jacobian(&unknown_expr)
+            .jacobian(unknown_expr)
             .map_err(|e| ModelError::Symbolic(e.to_string()))?;
         let residual_fn = residual_expr
             .to_fn(registry)
@@ -32,18 +31,18 @@ impl NewtonSolver {
         let jacobian_fn = jacobian
             .to_fn(registry)
             .map_err(|e| ModelError::Symbolic(e.to_string()))?;
+        let merit_expr = options.get_line_search_merit().unwrap_or(
+            residual_expr
+                .norm2()
+                .map_err(|e| ModelError::Symbolic(e.to_string()))?
+                .wrap(),
+        );
+        let merit_fn = merit_expr
+            .to_fn(registry)
+            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
 
-        let mut problem = ProblemSpec::default();
-        problem.residual = Some(residual_fn);
-        problem.jacobian = Some(jacobian_fn);
-        problem.unknown_vars = Some(unknown_expr);
-
-        if let Some(merit_expr) = options.get_line_search_merit() {
-            let merit_fn = merit_expr
-                .to_fn(registry)
-                .map_err(|e| ModelError::Symbolic(e.to_string()))?;
-            problem.merit = Some(merit_fn);
-        }
+        let problem =
+            ProblemSpec::new_root_finding(residual_fn, jacobian_fn, merit_fn, unknown_expr);
 
         Ok(Self { options, problem })
     }
@@ -63,14 +62,15 @@ where
 {
     fn solve(&self, initial_guess: &S, registry: &Arc<ExprRegistry>) -> Result<S, ModelError> {
         let (residual_fn, jacobian_fn, unknown_expr) = self.problem.get_root_finding_params()?;
-        let mut unknown_val = initial_guess.as_vec();
         let max_iters = self.options.get_max_iters();
         let tolerance = self.options.get_tolerance();
+        let mut unknown_vals = initial_guess.as_vec();
+        let mut alpha = 1.0;
+
+        let ls = LineSearch::new(self.options.get_line_search_opts());
 
         for _ in 0..max_iters {
-            for (name, value) in unknown_expr.iter().zip(unknown_val.iter()) {
-                registry.insert_var(name.as_str(), *value);
-            }
+            registry.insert_vars(&unknown_expr, &unknown_vals);
 
             let fx = match (residual_fn)(None) {
                 Ok(SymbolicEvalResult::Vector(expr)) => {
@@ -105,15 +105,14 @@ where
                 }
             };
 
-            if self.options.is_line_search_enabled() {
-                let ls = LineSearch::new();
-                ls.run(merit_fn, delta, registry, opts);
+            if let Some(merit_fn) = &self.problem.merit {
+                alpha = ls.run(merit_fn, &delta, &unknown_vals).unwrap();
             }
 
-            for (val, delta_val) in unknown_val.iter_mut().zip(delta.iter()) {
-                *val += delta_val;
+            for (val, delta_val) in unknown_vals.iter_mut().zip(delta.iter()) {
+                *val += alpha * delta_val;
             }
         }
-        Ok(S::from_vec(unknown_val))
+        Ok(S::from_vec(unknown_vals))
     }
 }

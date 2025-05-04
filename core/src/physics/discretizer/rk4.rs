@@ -1,4 +1,6 @@
-use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, SymbolicExpr, SymbolicFn};
+use crate::numeric_services::symbolic::{
+    ExprRegistry, ExprScalar, SymbolicExpr, SymbolicFn, SymbolicFunction,
+};
 use crate::physics::ModelError;
 use crate::physics::traits::{Describable, Discretizer, Dynamics, FromSymbolicEvalResult, State};
 use std::sync::Arc;
@@ -32,7 +34,7 @@ impl Describable for RK4 {
     }
 }
 pub struct RK4Symbolic {
-    step_func: SymbolicFn,
+    step_func: SymbolicFunction,
     registry: Arc<ExprRegistry>,
 }
 
@@ -67,6 +69,8 @@ impl RK4Symbolic {
             .to_fn(&registry)
             .map_err(|e| ModelError::Symbolic(e.to_string()))?;
 
+        let step_func = SymbolicFunction::new(step_func, &state.as_vec());
+
         Ok(Self {
             step_func,
             registry,
@@ -80,16 +84,10 @@ where
 {
     fn step(&mut self, _model: &D, state: &D::State, dt: f64) -> Result<D::State, ModelError> {
         self.registry.insert_var("dt", dt);
-        let state_vec = state.as_vec();
-        let state_components = self
-            .registry
-            .get_vector("state")
-            .map_err(|e| ModelError::Symbolic(e.to_string()))?
-            .as_vec();
-        for (name, value) in state_components.iter().zip(state_vec.iter()) {
-            self.registry.insert_var(name.as_str(), *value);
-        }
-        let result = (self.step_func)(None).map_err(|_| ModelError::EvaluationError)?;
+        let result = self
+            .step_func
+            .eval(&state.as_vec())
+            .map_err(|_| ModelError::EvaluationError)?;
         FromSymbolicEvalResult::from_symbolic(result)
     }
 }

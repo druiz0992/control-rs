@@ -1,52 +1,45 @@
-use crate::numeric_services::symbolic::{ExprRegistry, ExprVector, SymbolicFn};
+use crate::numeric_services::symbolic::SymbolicFunction;
 use crate::physics::ModelError;
-use crate::physics::traits::FromSymbolicEvalResult;
 use nalgebra::DVector;
-use std::collections::HashMap;
-use std::sync::Arc;
 
 use super::models::LineSeachConfig;
 
-pub struct LineSearch;
+pub struct LineSearch {
+    max_iters: usize,
+    factor: f64,
+}
 
 impl LineSearch {
-    pub fn new() -> Self {
-        Self
+    pub fn new(opts: LineSeachConfig) -> Self {
+        Self {
+            max_iters: opts.get_max_iters(),
+            factor: opts.get_factor(),
+        }
     }
 
     pub fn run(
         &self,
-        merit_fn: SymbolicFn,
-        delta_z: DVector<f64>,
-        registry: &Arc<ExprRegistry>,
-        opts: LineSeachConfig,
+        merit_fn: &SymbolicFunction,
+        search_direction: &DVector<f64>,
+        start_point: &[f64],
     ) -> Result<f64, ModelError> {
-        let mut alpha = opts.get_init_alpha();
-        let max_iters = opts.get_max_iters();
-        let factor = opts.get_factor();
+        let mut alpha = 1.0;
+        let current_merit = merit_fn
+            .eval(&[])
+            .map_err(|_| ModelError::EvaluationError)?;
 
-        let x1 = registry.get_var("x1").unwrap();
-        let x2 = registry.get_var("x2").unwrap();
+        let mut new_point = compute_new_point(search_direction, start_point, alpha);
 
-        let mut t = &delta_z * alpha;
-        let mut new_point = DVector::from_vec(vec![x1, x2]) + t;
+        for _ in 0..self.max_iters {
+            let trial_merit = merit_fn
+                .eval(new_point.as_slice())
+                .map_err(|_| ModelError::EvaluationError)?;
 
-        let current = (merit_fn)(None).map_err(|_| ModelError::EvaluationError)?;
-
-        let mut tmp_registry = HashMap::<String, f64>::new();
-
-        for _ in 0..max_iters {
-            tmp_registry.insert("x1".to_string(), new_point[0]);
-            tmp_registry.insert("x2".to_string(), new_point[1]);
-
-            let candidate =
-                (merit_fn)(Some(&tmp_registry)).map_err(|_| ModelError::EvaluationError)?;
-            if candidate < current {
+            if trial_merit < current_merit {
                 return Ok(alpha);
             } else {
-                alpha = alpha * factor;
-                t = &delta_z * alpha;
-                new_point = DVector::from_vec(vec![x1, x2]) + t;
+                alpha = alpha * self.factor;
+                new_point = compute_new_point(search_direction, start_point, alpha);
             }
         }
 
@@ -54,4 +47,13 @@ impl LineSearch {
             "Maximum number of iterations reached in linesearch".to_string(),
         ));
     }
+}
+
+fn compute_new_point(
+    search_direction: &DVector<f64>,
+    start_point: &[f64],
+    alpha: f64,
+) -> DVector<f64> {
+    let scaled_direction = search_direction * alpha;
+    DVector::from_column_slice(start_point) + scaled_direction
 }

@@ -173,7 +173,7 @@ where
         Box::new(self.clone())
     }
 
-    fn to_fn<'a>(&self, registry: &Arc<R>) -> Result<SymbolicFn, SymbolicError> {
+    fn to_fn(&self, registry: &Arc<R>) -> Result<SymbolicFn, SymbolicError> {
         let mut fn_matrix = Vec::new();
 
         for row in &self.matrix {

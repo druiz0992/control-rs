@@ -1,8 +1,8 @@
-use super::helpers::symbolic_intrinsic_step;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::ModelError;
-use crate::physics::traits::{Describable, Discretizer, Dynamics};
+use crate::physics::traits::{Describable, Discretizer, Dynamics, State};
 use crate::solver::newton::NewtonSolver;
+use crate::solver::RootSolver;
 use std::sync::Arc;
 
 // Backward Euler residual:
@@ -21,9 +21,8 @@ impl BackwardEuler {
         let current_state = registry
             .get_vector("state")
             .map_err(|e| ModelError::Symbolic(e.to_string()))?;
-        let next_state = current_state.next_state();
+        let next_state = current_state.build_next();
         registry.insert_vector("next_state", next_state.clone());
-        let next_state_vars: Vec<_> = next_state.iter().map(|s| s.as_str()).collect();
 
         let dt_expr = ExprScalar::new("dt");
         let dyn_next_state = model
@@ -31,7 +30,7 @@ impl BackwardEuler {
             .scale(&dt_expr);
 
         let residual = next_state.sub(&current_state).sub(&dyn_next_state);
-        let solver = NewtonSolver::new_root_solver(&residual, &next_state_vars, &registry, None)?;
+        let solver = NewtonSolver::new_root_solver(&residual, &next_state, &registry, None)?;
 
         Ok(BackwardEuler { registry, solver })
     }
@@ -42,7 +41,15 @@ where
     D: Dynamics,
 {
     fn step(&mut self, _model: &D, state: &D::State, dt: f64) -> Result<D::State, ModelError> {
-        symbolic_intrinsic_step::<D>(&self.registry, state, &self.solver, dt)
+        self.registry.insert_var("dt", dt);
+        self.registry
+            .insert_vec_as_vars("state", &state.as_vec())
+            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
+        self.registry
+            .insert_vec_as_vars("next_state", &state.as_vec())
+            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
+
+        self.solver.solve(state, &self.registry)
     }
 }
 

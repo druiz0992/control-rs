@@ -54,6 +54,20 @@ impl ExprRegistry {
         self.insert(name, ExprRecord::Vector(expr));
     }
 
+    pub fn insert_vars(&self, expr: &[ExprScalar], vals: &[f64]) {
+        for (name, value) in expr.iter().zip(vals.iter()) {
+            self.insert(name.as_str(), ExprRecord::Var(*value));
+        }
+    }
+    pub fn insert_vec_as_vars(&self, name: &str, vals: &[f64]) -> Result<(), SymbolicError> {
+        let state_components = self.get_vector(name)?;
+
+        for (name, value) in state_components.iter().zip(vals.iter()) {
+            self.insert_var(name.as_str(), *value);
+        }
+        Ok(())
+    }
+
     ///   Inserts a matrix expression with the given name into the registry.
     pub fn insert_matrix(&self, name: &str, expr: ExprMatrix) {
         self.insert(name, ExprRecord::Matrix(expr));
