@@ -25,7 +25,7 @@ impl LineSearch {
     ) -> Result<f64, ModelError> {
         let mut alpha = 1.0;
         let current_merit = merit_fn
-            .eval(&[])
+            .eval(start_point)
             .map_err(|_| ModelError::EvaluationError)?;
 
         let mut new_point = compute_new_point(search_direction, start_point, alpha);

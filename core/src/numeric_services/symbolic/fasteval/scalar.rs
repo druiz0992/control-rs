@@ -105,6 +105,9 @@ impl ExprScalar {
     pub fn atan(&self) -> Self {
         Self::new(format!("atan({})", self.0))
     }
+    pub fn abs(&self) -> Self {
+        Self::new(format!("abs({})", self.0))
+    }
 
     pub fn gradient(&self, vars: &ExprVector) -> Result<ExprVector, SymbolicError> {
         let resp = compute_derivatives(

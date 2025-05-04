@@ -138,12 +138,20 @@ impl ExprVector {
             .ok_or(SymbolicError::Other("Error in dot product".to_string()))
     }
 
+    pub fn norm1(&self) -> Result<ExprScalar, SymbolicError> {
+        let abs_terms: Vec<ExprScalar> = self.vector.iter().map(|v| v.abs()).collect();
+        abs_terms
+            .into_iter()
+            .reduce(|a, b| a.add(&b))
+            .ok_or(SymbolicError::Other("Error calculating norm1".to_string()))
+    }
+
     pub fn norm2(&self) -> Result<ExprScalar, SymbolicError> {
         let squared_terms: Vec<ExprScalar> = self.vector.iter().map(|v| v.mul(v)).collect();
         squared_terms
             .into_iter()
             .reduce(|a, b| a.add(&b))
-            .ok_or(SymbolicError::Other("Error calculating norm".to_string()))
+            .ok_or(SymbolicError::Other("Error calculating norm2".to_string()))
     }
 
     pub fn jacobian(&self, vars: &ExprVector) -> Result<ExprMatrix, SymbolicError> {

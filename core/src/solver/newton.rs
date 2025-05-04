@@ -6,6 +6,7 @@ use crate::numeric_services::symbolic::ports::SymbolicExpr;
 use crate::numeric_services::symbolic::{ExprVector, SymbolicEvalResult};
 use crate::physics::ModelError;
 use crate::physics::traits::State;
+use nalgebra::DVector;
 use std::sync::Arc;
 
 pub struct NewtonSolver {
@@ -72,9 +73,9 @@ where
         for _ in 0..max_iters {
             registry.insert_vars(&unknown_expr, &unknown_vals);
 
-            let fx = match (residual_fn)(None) {
+            let fx = match residual_fn.eval(&[]) {
                 Ok(SymbolicEvalResult::Vector(expr)) => {
-                    nalgebra::DVector::from_vec(expr.iter().cloned().collect())
+                    DVector::from_vec(expr.iter().cloned().collect())
                 }
                 _ => {
                     return Err(ModelError::SolverError(
@@ -87,7 +88,7 @@ where
                 break;
             }
 
-            let jacobian_mat = match (jacobian_fn)(None) {
+            let jacobian_mat = match jacobian_fn.eval(&[]) {
                 Ok(SymbolicEvalResult::Matrix(matrix)) => matrix,
                 _ => {
                     return Err(ModelError::SolverError(

@@ -13,19 +13,19 @@ const MIN_ALLOWERD_TOLERANCE: f64 = 1e-18;
 
 #[derive(Default)]
 pub struct ProblemSpec {
-    pub objective: Option<SymbolicFn>,
-    pub residual: Option<SymbolicFn>,
-    pub jacobian: Option<SymbolicFn>,
-    pub hessian: Option<SymbolicFn>,
+    pub objective: Option<SymbolicFunction>,
+    pub residual: Option<SymbolicFunction>,
+    pub jacobian: Option<SymbolicFunction>,
+    pub hessian: Option<SymbolicFunction>,
     pub unknown_vars: Option<ExprVector>,
 
     pub merit: Option<SymbolicFunction>,
 
-    pub eq_constraints: Option<SymbolicFn>,
-    pub eq_jacobian: Option<SymbolicFn>,
+    pub eq_constraints: Option<SymbolicFunction>,
+    pub eq_jacobian: Option<SymbolicFunction>,
 
-    pub ineq_constraints: Option<SymbolicFn>,
-    pub ineq_jacobian: Option<SymbolicFn>,
+    pub ineq_constraints: Option<SymbolicFunction>,
+    pub ineq_jacobian: Option<SymbolicFunction>,
 }
 
 impl ProblemSpec {
@@ -36,16 +36,16 @@ impl ProblemSpec {
         unknown_expr: &ExprVector,
     ) -> Self {
         let mut problem = ProblemSpec::default();
-        problem.residual = Some(residual_fn);
-        problem.jacobian = Some(jacobian_fn);
+        problem.residual = Some(SymbolicFunction::new(residual_fn, &unknown_expr));
+        problem.jacobian = Some(SymbolicFunction::new(jacobian_fn, &unknown_expr));
+        problem.merit = Some(SymbolicFunction::new(merit_fn, &unknown_expr));
         problem.unknown_vars = Some(unknown_expr.clone());
-        problem.merit = Some(SymbolicFunction::new(merit_fn, &unknown_expr.clone()));
         problem
     }
 
     pub fn get_root_finding_params(
         &self,
-    ) -> Result<(&SymbolicFn, &SymbolicFn, Vec<ExprScalar>), ModelError> {
+    ) -> Result<(&SymbolicFunction, &SymbolicFunction, Vec<ExprScalar>), ModelError> {
         let residual_fn = self.residual.as_ref().ok_or_else(|| {
             ModelError::IncompleteConfiguration("Residual not configured".to_string())
         })?;
