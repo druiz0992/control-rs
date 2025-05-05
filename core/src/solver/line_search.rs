@@ -1,4 +1,4 @@
-use crate::numeric_services::symbolic::SymbolicFunction;
+use crate::numeric_services::symbolic::{SymbolicEvalResult, SymbolicFunction};
 use crate::physics::ModelError;
 use nalgebra::DVector;
 
@@ -38,11 +38,13 @@ impl LineSearch {
             if trial_merit < current_merit {
                 return Ok(alpha);
             } else {
+                //return Ok(alpha);
                 alpha = alpha * self.factor;
                 new_point = compute_new_point(search_direction, start_point, alpha);
             }
         }
 
+        //return Ok(alpha);
         return Err(ModelError::SolverError(
             "Maximum number of iterations reached in linesearch".to_string(),
         ));

@@ -1,6 +1,4 @@
-use crate::numeric_services::symbolic::{
-    ExprRegistry, ExprScalar, SymbolicExpr, SymbolicFn, SymbolicFunction,
-};
+use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, SymbolicExpr, SymbolicFunction};
 use crate::physics::ModelError;
 use crate::physics::traits::{Describable, Discretizer, Dynamics, FromSymbolicEvalResult, State};
 use std::sync::Arc;

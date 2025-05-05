@@ -2,7 +2,7 @@ pub mod line_search;
 pub mod models;
 pub mod newton;
 
-use crate::numeric_services::symbolic::fasteval::{ExprRegistry, registry};
+use crate::numeric_services::symbolic::fasteval::ExprRegistry;
 use crate::physics::ModelError;
 use std::sync::Arc;
 

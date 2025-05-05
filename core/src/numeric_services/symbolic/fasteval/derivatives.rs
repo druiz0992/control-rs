@@ -1,3 +1,5 @@
+use plotters::prelude::DerivedColorMap;
+
 use crate::numeric_services::differentiation::engine::DerivativeEngine;
 use crate::numeric_services::differentiation::error::DerivativeError;
 use crate::numeric_services::differentiation::models::{

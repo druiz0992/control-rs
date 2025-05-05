@@ -59,6 +59,9 @@ impl ExprVector {
         let expr: Vec<_> = vector.iter().map(ExprScalar::new).collect();
         Self { vector: expr }
     }
+    pub fn len(&self) -> usize {
+        self.vector.len()
+    }
 
     pub fn as_vec(&self) -> Vec<ExprScalar> {
         self.vector.clone()
@@ -125,11 +128,34 @@ impl ExprVector {
     }
 
     pub fn dot(&self, other: &Self) -> Result<ExprScalar, SymbolicError> {
+        if self.len() == 0 {
+            return Ok(ExprScalar::new(""));
+        }
         let terms: Vec<ExprScalar> = self
             .vector
             .iter()
             .zip(&other.vector)
             .map(|(a, b)| a.mul(b))
+            .collect();
+
+        terms
+            .into_iter()
+            .reduce(|a, b| a.add(&b))
+            .ok_or(SymbolicError::Other("Error in dot product".to_string()))
+    }
+
+    pub fn dotf(&self, vecf: &[f64]) -> Result<ExprScalar, SymbolicError> {
+        if self.len() != vecf.len() {
+            return Err(SymbolicError::Other(
+                "Vectors must have the same length for dot product".to_string(),
+            ));
+        }
+
+        let terms: Vec<ExprScalar> = self
+            .vector
+            .iter()
+            .zip(vecf.iter())
+            .map(|(a, b)| a.scalef(*b))
             .collect();
 
         terms
@@ -152,6 +178,7 @@ impl ExprVector {
             .into_iter()
             .reduce(|a, b| a.add(&b))
             .ok_or(SymbolicError::Other("Error calculating norm2".to_string()))
+            .map(|sum| sum.pow(0.5))
     }
 
     pub fn jacobian(&self, vars: &ExprVector) -> Result<ExprMatrix, SymbolicError> {
@@ -167,19 +194,6 @@ impl ExprVector {
             Err(SymbolicError::UnexpectedResultType)
         }
     }
-    pub fn hessian(&self, vars: &ExprVector) -> Result<ExprMatrix, SymbolicError> {
-        let resp = compute_derivatives(
-            &ExprRecord::Vector(self.clone()),
-            vars,
-            vec![DerivativeType::Jacobian],
-        )
-        .map_err(|e| SymbolicError::Other(e.to_string()))?;
-        if let Some(hessian) = &resp.hessian {
-            Ok(ExprMatrix::from_string(hessian))
-        } else {
-            Err(SymbolicError::UnexpectedResultType)
-        }
-    }
 
     pub fn build_next(&self) -> Self {
         ExprVector::from_string(
@@ -189,6 +203,34 @@ impl ExprVector {
                 .map(|e| format!("next_{}", e.as_str()))
                 .collect::<Vec<String>>(),
         )
+    }
+
+    pub fn vecmul_mat(&self, mat: &ExprMatrix) -> Self {
+        mat.matmul_vec(&self)
+    }
+
+    pub fn vecmul_matf(&self, mat: &[Vec<f64>]) -> Self {
+        let result_vector = mat
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .zip(&self.vector)
+                    .map(|(a, b)| b.scalef(*a))
+                    .reduce(|acc, item| acc.add(&item))
+                    .unwrap_or_else(|| ExprScalar::from_f64(0.0))
+            })
+            .collect();
+        Self {
+            vector: result_vector,
+        }
+    }
+
+    pub fn extend(&self, expr: &ExprVector) -> Self {
+        let mut extended_vector = self.as_vec();
+        extended_vector.extend(expr.as_vec());
+        Self {
+            vector: extended_vector,
+        }
     }
 }
 

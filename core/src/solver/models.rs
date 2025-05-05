@@ -9,7 +9,7 @@ const DEFAULT_TOLERANCE: f64 = 1e-6;
 const MIN_ALLOWED_MAX_ITERS: usize = 1;
 const MAX_ALLOWED_MAX_ITERS: usize = 1000;
 
-const MIN_ALLOWERD_TOLERANCE: f64 = 1e-18;
+const MIN_ALLOWED_TOLERANCE: f64 = 1e-18;
 
 #[derive(Default)]
 pub struct ProblemSpec {
@@ -131,6 +131,7 @@ pub struct OptimizerConfig {
     penalty_factor: Option<f64>,
     constraint_tol: Option<f64>,
     line_search: LineSeachConfig,
+    gauss_newton: bool,
 }
 
 impl OptimizerConfig {
@@ -144,7 +145,7 @@ impl OptimizerConfig {
         Ok(())
     }
     pub fn set_tolerance(&mut self, tolerance: f64) -> Result<(), ModelError> {
-        if tolerance < MIN_ALLOWERD_TOLERANCE {
+        if tolerance < MIN_ALLOWED_TOLERANCE {
             return Err(ModelError::ConfigError(
                 "Tolerance out of range".to_string(),
             ));
@@ -175,6 +176,14 @@ impl OptimizerConfig {
     pub fn get_line_search_opts(&self) -> LineSeachConfig {
         return self.line_search.clone();
     }
+
+    pub fn get_gauss_newton(&self) -> bool {
+        self.gauss_newton
+    }
+
+    pub fn set_gauss_newton(&mut self, flag: bool) {
+        self.gauss_newton = flag;
+    }
 }
 
 impl Default for OptimizerConfig {
@@ -185,6 +194,7 @@ impl Default for OptimizerConfig {
             penalty_factor: None,
             constraint_tol: None,
             line_search: LineSeachConfig::default(),
+            gauss_newton: true,
         }
     }
 }

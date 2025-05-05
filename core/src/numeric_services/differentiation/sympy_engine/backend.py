@@ -25,7 +25,7 @@ def compute_gradient(function, variables):
 def compute_hessian(function, variables, gradient = None):
     if gradient is None:
         # Compute the gradient (partial derivatives)
-        gradient = [sp.diff(function, var) for var in variables]
+        gradient = [sp.diff(function[0], var) for var in variables]
 
     hessian_matrix = [
         [sp.diff(gradient[i], var) for var in variables] for i in range(len(gradient))
@@ -84,7 +84,7 @@ else:
 if 'Gradient' not in request or len(function_exprs) > 1:
     gradient = None
 
-if 'Jacobian' not in request or len(function_exprs) == 1:
+if 'Jacobian' not in request:
     jacobian = [[]]
 
 # Return the results as JSON to Rust

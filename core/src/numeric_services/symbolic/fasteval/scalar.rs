@@ -1,7 +1,7 @@
 use super::derivatives::compute_derivatives;
 use crate::numeric_services::differentiation::models::DerivativeType;
 use crate::numeric_services::symbolic::error::SymbolicError;
-use crate::numeric_services::symbolic::fasteval::{ExprRecord, ExprVector};
+use crate::numeric_services::symbolic::fasteval::{ExprMatrix, ExprRecord, ExprVector};
 use crate::numeric_services::symbolic::models::{SymbolicEvalResult, SymbolicFn};
 use crate::numeric_services::symbolic::ports::{SymbolicExpr, SymbolicRegistry};
 use fasteval::parser::{DEFAULT_EXPR_DEPTH_LIMIT, DEFAULT_EXPR_LEN_LIMIT};
@@ -36,7 +36,7 @@ use std::sync::Arc;
 /// evaluation of mathematical expressions. It also integrates with a symbolic
 /// registry to resolve variables and nested expressions.
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ExprScalar(String);
 
 impl std::str::FromStr for ExprScalar {
@@ -46,7 +46,11 @@ impl std::str::FromStr for ExprScalar {
         Ok(ExprScalar::new(s))
     }
 }
-
+impl Default for ExprScalar {
+    fn default() -> Self {
+        ExprScalar::new("0")
+    }
+}
 impl ExprScalar {
     pub fn new<S: Into<String>>(s: S) -> Self {
         Self(s.into())
@@ -82,7 +86,7 @@ impl ExprScalar {
         Self::new(format!("{} * {}", self.0, factor))
     }
     pub fn pow(&self, exponent: f64) -> Self {
-        Self::new(format!("{} ^ {}", self.0, exponent))
+        Self::new(format!("(({}) ^ ({}))", self.0, exponent))
     }
     pub fn log(&self, base: f64) -> Self {
         Self::new(format!("log_{}({})", base, self.0))
@@ -108,12 +112,15 @@ impl ExprScalar {
     pub fn abs(&self) -> Self {
         Self::new(format!("abs({})", self.0))
     }
+    pub fn exp(&self) -> Self {
+        Self::new(format!("{}^({})", std::f64::consts::E, self.0))
+    }
 
     pub fn gradient(&self, vars: &ExprVector) -> Result<ExprVector, SymbolicError> {
         let resp = compute_derivatives(
             &ExprRecord::Scalar(self.clone()),
             vars,
-            vec![DerivativeType::Jacobian],
+            vec![DerivativeType::Gradient],
         )
         .map_err(|e| SymbolicError::Other(e.to_string()))?;
 
@@ -122,6 +129,37 @@ impl ExprScalar {
         } else {
             Err(SymbolicError::UnexpectedResultType)
         }
+    }
+
+    pub fn hessian(&self, vars: &ExprVector) -> Result<ExprMatrix, SymbolicError> {
+        let resp = compute_derivatives(
+            &ExprRecord::Scalar(self.clone()),
+            vars,
+            vec![DerivativeType::Hessian],
+        )
+        .map_err(|e| SymbolicError::Other(e.to_string()))?;
+        if let Some(hessian) = &resp.hessian {
+            Ok(ExprMatrix::from_string(hessian))
+        } else {
+            Err(SymbolicError::UnexpectedResultType)
+        }
+    }
+
+    pub fn new_lagrangian(
+        &self,
+        eq_constraints_expr: &ExprVector,
+    ) -> Result<(Self, ExprVector), SymbolicError> {
+        let n_constraints = eq_constraints_expr.len();
+        let lambdas: Vec<String> = (0..n_constraints)
+            .map(|i| format!("lambda_{}", i))
+            .collect();
+        let lambdas_refs: Vec<&str> = lambdas.iter().map(|s| s.as_str()).collect();
+        let lambdas = ExprVector::new(&lambdas_refs);
+        if n_constraints == 0 {
+            return Ok((self.clone(), lambdas));
+        }
+
+        Ok((self.add(&eq_constraints_expr.dot(&lambdas)?), lambdas))
     }
 }
 

@@ -3,7 +3,9 @@ use super::line_search::LineSearch;
 use super::models::{OptimizerConfig, ProblemSpec};
 use crate::numeric_services::symbolic::fasteval::ExprRegistry;
 use crate::numeric_services::symbolic::ports::SymbolicExpr;
-use crate::numeric_services::symbolic::{ExprVector, SymbolicEvalResult};
+use crate::numeric_services::symbolic::{
+    ExprMatrix, ExprScalar, ExprVector, SymbolicEvalResult, SymbolicFn, SymbolicRegistry,
+};
 use crate::physics::ModelError;
 use crate::physics::traits::State;
 use nalgebra::DVector;
@@ -15,6 +17,61 @@ pub struct NewtonSolver {
 }
 
 impl NewtonSolver {
+    pub fn new_minimization(
+        objective_expr: &ExprScalar,
+        eq_constraints_expr: Option<ExprVector>,
+        unknown_expr: &ExprVector,
+        registry: &Arc<ExprRegistry>,
+        options: Option<OptimizerConfig>,
+    ) -> Result<Self, ModelError> {
+        let options = options.unwrap_or_else(OptimizerConfig::default);
+
+        // retrieve equality constraints
+        let eq_constraints_expr = eq_constraints_expr
+            .as_ref()
+            .cloned()
+            .unwrap_or(ExprVector::new(&[]));
+
+        // compute lagrangian
+        let (lagrangian, lambdas) = objective_expr
+            .new_lagrangian(&eq_constraints_expr)
+            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
+
+        let gradient = lagrangian
+            .gradient(unknown_expr)
+            .map_err(|e| ModelError::Symbolic(e.to_string()))?
+            .wrap();
+
+        let residual_expr = gradient.extend(&eq_constraints_expr);
+
+        let jacobian = eq_constraints_expr
+            .jacobian(unknown_expr)
+            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
+
+        let fn_expr = match options.get_gauss_newton() {
+            false => &lagrangian,
+            true => objective_expr,
+        };
+        let hessian = fn_expr
+            .hessian(unknown_expr)
+            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
+        let unknown_expr = unknown_expr.extend(&lambdas);
+        let ktt_jacobian = ExprMatrix::build_ktt_jacobian(&hessian, &jacobian, 1e-3);
+
+        let residual_fn = residual_expr
+            .to_fn(registry)
+            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
+        let jacobian_fn = ktt_jacobian
+            .to_fn(registry)
+            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
+        let merit_fn = get_merit_fn(&gradient, registry, &options)?;
+
+        let problem =
+            ProblemSpec::new_root_finding(residual_fn, jacobian_fn, merit_fn, &unknown_expr);
+
+        Ok(Self { options, problem })
+    }
+
     pub fn new_root_solver(
         residual_expr: &ExprVector,
         unknown_expr: &ExprVector,
@@ -32,15 +89,7 @@ impl NewtonSolver {
         let jacobian_fn = jacobian
             .to_fn(registry)
             .map_err(|e| ModelError::Symbolic(e.to_string()))?;
-        let merit_expr = options.get_line_search_merit().unwrap_or(
-            residual_expr
-                .norm2()
-                .map_err(|e| ModelError::Symbolic(e.to_string()))?
-                .wrap(),
-        );
-        let merit_fn = merit_expr
-            .to_fn(registry)
-            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
+        let merit_fn = get_merit_fn(residual_expr, registry, &options)?;
 
         let problem =
             ProblemSpec::new_root_finding(residual_fn, jacobian_fn, merit_fn, unknown_expr);
@@ -55,6 +104,22 @@ impl NewtonSolver {
     pub fn set_tolerance(&mut self, tolerance: f64) -> Result<(), ModelError> {
         self.options.set_tolerance(tolerance)
     }
+}
+
+fn get_merit_fn(
+    residual_expr: &ExprVector,
+    registry: &Arc<ExprRegistry>,
+    options: &OptimizerConfig,
+) -> Result<SymbolicFn, ModelError> {
+    let merit_expr = options.get_line_search_merit().unwrap_or(
+        residual_expr
+            .norm2()
+            .map_err(|e| ModelError::Symbolic(e.to_string()))?
+            .wrap(),
+    );
+    merit_expr
+        .to_fn(registry)
+        .map_err(|e| ModelError::Symbolic(e.to_string()))
 }
 
 impl<S> RootSolver<S> for NewtonSolver
@@ -83,8 +148,7 @@ where
                     ));
                 }
             };
-
-            if fx.abs().sum() < tolerance {
+            if fx.norm() < tolerance {
                 break;
             }
 
