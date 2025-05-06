@@ -1,3 +1,4 @@
+use super::ExprVector;
 use super::scalar::ExprScalar;
 use crate::numeric_services::symbolic::error::SymbolicError;
 use crate::numeric_services::symbolic::fasteval::ExprRecord;
@@ -44,9 +45,9 @@ use std::sync::Arc;
 /// - The `to_fn` method generates a callable function that evaluates the
 ///   symbolic expressions in the matrix using a provided variable registry.
 /// - The `matmul` method assumes that the dimensions of the matrices are
-///   compatible for multiplication.
+///   compatible for multiplication and will not check.
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExprMatrix {
     matrix: Vec<Vec<ExprScalar>>,
 }
@@ -62,6 +63,21 @@ impl ExprMatrix {
         }
     }
 
+    pub fn from_vec(matrix: &Vec<Vec<ExprScalar>>) -> Self {
+        ExprMatrix {
+            matrix: matrix.to_owned(),
+        }
+    }
+
+    /// returns dimensions of symbolic matrix.
+    /// NOTE: a matrix [[]] will have (0,0) dimensions
+    pub fn n_dims(&self) -> (usize, usize) {
+        match self.matrix.first() {
+            Some(row) if !row.is_empty() => (self.matrix.len(), row.len()),
+            _ => (0, 0),
+        }
+    }
+
     pub fn from_string(matrix: &[Vec<String>]) -> Self {
         let converted_matrix = matrix
             .iter()
@@ -71,7 +87,37 @@ impl ExprMatrix {
             matrix: converted_matrix,
         }
     }
+    pub fn zeros(dims: (usize, usize)) -> Self {
+        let (rows, cols) = dims;
+        let zero_matrix = vec![vec![ExprScalar::new("0"); cols]; rows];
+        ExprMatrix {
+            matrix: zero_matrix,
+        }
+    }
 
+    pub fn hstack(mat: &[ExprMatrix]) -> Self {
+        let mut result = Vec::new();
+        let n_rows = mat.first().map_or(0, |m| m.n_dims().0);
+
+        for row_idx in 0..n_rows {
+            let mut new_row = Vec::new();
+            for matrix in mat {
+                if row_idx < matrix.matrix.len() {
+                    new_row.extend(matrix.matrix[row_idx].clone());
+                }
+            }
+            result.push(new_row);
+        }
+
+        ExprMatrix { matrix: result }
+    }
+    pub fn vstack(mat: &[ExprMatrix]) -> Self {
+        let mut result = Vec::new();
+        for matrix in mat {
+            result.extend(matrix.matrix.clone());
+        }
+        ExprMatrix { matrix: result }
+    }
     pub fn add(&self, other: &Self) -> Self {
         let result_matrix = self
             .matrix
@@ -114,6 +160,171 @@ impl ExprMatrix {
 
         ExprMatrix {
             matrix: result_matrix,
+        }
+    }
+
+    /// mutliplies matrix by vector, and returns vector
+    pub fn matmul_vec(&self, other: &ExprVector) -> ExprVector {
+        let result_vector = self
+            .matrix
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .zip(&other.as_vec())
+                    .map(|(matrix_elem, vector_elem)| matrix_elem.mul(vector_elem))
+                    .fold(ExprScalar::default(), |acc, val| acc.add(&val))
+            })
+            .collect();
+        ExprVector::from_vec(result_vector)
+    }
+
+    pub fn identity(dims: usize) -> Self {
+        let mut identity_matrix = vec![vec![ExprScalar::default(); dims]; dims];
+
+        for (i, row) in identity_matrix.iter_mut().enumerate().take(dims) {
+            row[i] = ExprScalar::new("1");
+        }
+
+        ExprMatrix {
+            matrix: identity_matrix,
+        }
+    }
+
+    /// scale matrix my scalar expression
+    pub fn scale(&self, var: &ExprScalar) -> ExprMatrix {
+        let scaled_matrix = self
+            .matrix
+            .iter()
+            .map(|row| row.iter().map(|elem| elem.scale(var)).collect())
+            .collect();
+        ExprMatrix {
+            matrix: scaled_matrix,
+        }
+    }
+
+    /// scale matrix by f64
+    pub fn scalef(&self, var: f64) -> ExprMatrix {
+        let scaled_matrix = self
+            .matrix
+            .iter()
+            .map(|row| row.iter().map(|elem| elem.scalef(var)).collect())
+            .collect();
+        ExprMatrix {
+            matrix: scaled_matrix,
+        }
+    }
+
+    /// Builds the Karush-Kuhn-Tucker (KKT) Jacobian matrix from the Lagrangian Hessian
+    /// and the equality constraint Jacobian. This matrix is used in optimization problems
+    /// to solve systems of equations that arise in constrained optimization.
+    ///
+    /// # Arguments
+    ///
+    /// * `hessian` - A reference to the Lagrangian Hessian matrix, which represents the
+    ///   second-order partial derivatives of the Lagrangian function with respect to the
+    ///   optimization variables.
+    /// * `jacobian` - A reference to the equality constraint Jacobian matrix, which
+    ///   represents the first-order partial derivatives of the equality constraints with
+    ///   respect to the optimization variables.
+    /// * `regularization_factor` - A floating-point value used to scale the regularization
+    ///   matrix. This factor is added to the diagonal of the Hessian to ensure numerical
+    ///   stability and to regularize the system.
+    ///
+    /// # Returns
+    ///
+    /// An `ExprMatrix` representing the KKT Jacobian matrix. The structure of the matrix is as follows:
+    /// - The top-left block contains the regularized Hessian matrix.
+    /// - The top-right block contains the transpose of the Jacobian matrix.
+    /// - The bottom-left block contains the Jacobian matrix.
+    /// - The bottom-right block contains a scaled identity matrix with a negative sign.
+    ///
+    /// If there are no constraints (`n_constraints == 0`), the function returns a clone of the Hessian matrix.
+    ///
+    /// # Notes
+    ///
+    /// - The function assumes that the dimensions of the Hessian and Jacobian matrices are
+    ///   compatible for constructing the KKT Jacobian matrix.
+    /// - The regularization factor is applied to the diagonal of the Hessian to improve
+    ///   numerical stability, especially in cases where the Hessian is ill-conditioned.
+    pub fn build_ktt_jacobian(
+        hessian: &ExprMatrix,
+        jacobian: &ExprMatrix,
+        regularization_factor: f64,
+    ) -> ExprMatrix {
+        let (n_constraints, _) = jacobian.n_dims();
+        let (n_unknowns, _) = hessian.n_dims();
+
+        // Top-left: H + εI
+        let reg_hessian =
+            hessian.add(&ExprMatrix::identity(n_unknowns).scalef(regularization_factor));
+
+        // Shortcut if unconstrained
+        if n_constraints == 0 {
+            return reg_hessian.clone();
+        }
+
+        // Top-right: Jᵀ
+        let jt = jacobian.transpose();
+
+        // Bottom-left: J
+        let j = jacobian.clone();
+
+        // Bottom-right: -εI (for stabilization)
+        let minus_reg = ExprMatrix::identity(n_constraints).scalef(-regularization_factor);
+
+        // Horizontally stack top and bottom blocks
+        let top = ExprMatrix::hstack(&[reg_hessian, jt]);
+        let bottom = ExprMatrix::hstack(&[j, minus_reg]);
+
+        // Final vertical stack
+        ExprMatrix::vstack(&[top, bottom])
+    }
+
+    pub fn build_ip_ktt_jacobian(
+        hessian: &ExprMatrix,
+        eq_jacobian: &ExprMatrix,
+        ineq_jacobian: &ExprMatrix,
+        scaling: &ExprMatrix,
+        regularization_factor: f64,
+    ) -> ExprMatrix {
+        let (n_vars, _) = hessian.n_dims();
+        let (n_eq, _) = eq_jacobian.n_dims();
+        let (n_ineq, _) = ineq_jacobian.n_dims();
+
+        let reg_hessian = hessian.add(&ExprMatrix::identity(n_vars).scalef(regularization_factor));
+        let g_scaled = ineq_jacobian.transpose().matmul(scaling);
+        let minus_scaling = scaling.scalef(-1.0);
+
+        let top = if n_eq > 0 {
+            ExprMatrix::hstack(&[reg_hessian, eq_jacobian.transpose(), g_scaled])
+        } else {
+            ExprMatrix::hstack(&[reg_hessian, g_scaled])
+        };
+
+        let middle = if n_eq > 0 {
+            Some(ExprMatrix::hstack(&[
+                eq_jacobian.clone(),
+                ExprMatrix::zeros((n_eq, n_eq)),
+                ExprMatrix::zeros((n_eq, n_ineq)),
+            ]))
+        } else {
+            None
+        };
+
+        let bottom = if n_eq > 0 {
+            ExprMatrix::hstack(&[
+                ineq_jacobian.clone(),
+                ExprMatrix::zeros((n_ineq, n_eq)),
+                minus_scaling,
+            ])
+        } else {
+            ExprMatrix::hstack(&[ineq_jacobian.clone(), minus_scaling])
+        };
+
+        if n_eq > 0 {
+            ExprMatrix::vstack(&[top, middle.unwrap(), bottom])
+        } else {
+            ExprMatrix::vstack(&[top, bottom])
         }
     }
 }
@@ -173,7 +384,7 @@ where
         Box::new(self.clone())
     }
 
-    fn to_fn<'a>(&self, registry: &Arc<R>) -> Result<SymbolicFn, SymbolicError> {
+    fn to_fn(&self, registry: &Arc<R>) -> Result<SymbolicFn, SymbolicError> {
         let mut fn_matrix = Vec::new();
 
         for row in &self.matrix {
@@ -192,7 +403,7 @@ where
 
             for row in &fn_matrix {
                 for f in row {
-                    match f(vars_opt).map_err(|_| SymbolicError::EvaluationError)? {
+                    match f(vars_opt)? {
                         SymbolicEvalResult::Scalar(val) => values.push(val),
                         _ => return Err(SymbolicError::UnexpectedResultType),
                     }
@@ -246,10 +457,10 @@ mod tests {
         let matrix1 = ExprMatrix::new(&vec![&["1", "2"], &["3", "4"]]);
         let matrix2 = ExprMatrix::new(&vec![&["5", "6"], &["7", "8"]]);
         let result = matrix1.matmul(&matrix2);
-        assert_eq!(result.matrix[0][0].to_string(), " + 1 * 5 + 2 * 7");
-        assert_eq!(result.matrix[0][1].to_string(), " + 1 * 6 + 2 * 8");
-        assert_eq!(result.matrix[1][0].to_string(), " + 3 * 5 + 4 * 7");
-        assert_eq!(result.matrix[1][1].to_string(), " + 3 * 6 + 4 * 8");
+        assert_eq!(result.matrix[0][0].to_string(), "0 + 1 * 5 + 2 * 7");
+        assert_eq!(result.matrix[0][1].to_string(), "0 + 1 * 6 + 2 * 8");
+        assert_eq!(result.matrix[1][0].to_string(), "0 + 3 * 5 + 4 * 7");
+        assert_eq!(result.matrix[1][1].to_string(), "0 + 3 * 6 + 4 * 8");
     }
 
     #[test]
@@ -284,5 +495,42 @@ mod tests {
         } else {
             panic!("Expected EvalResult::Matrix");
         }
+    }
+
+    #[test]
+    fn test_from_string() {
+        let input = vec![
+            vec!["1".to_string(), "2".to_string()],
+            vec!["3".to_string(), "4".to_string()],
+        ];
+        let expr_matrix = ExprMatrix::from_string(&input);
+        assert_eq!(expr_matrix.matrix.len(), 2);
+        assert_eq!(expr_matrix.matrix[0].len(), 2);
+        assert_eq!(expr_matrix.matrix[0][0].to_string(), "1");
+        assert_eq!(expr_matrix.matrix[1][1].to_string(), "4");
+    }
+
+    #[test]
+    fn test_matmul_vec() {
+        let matrix = ExprMatrix::new(&vec![&["1", "2"], &["3", "4"]]);
+        let vector = ExprVector::from_vec(vec![ExprScalar::new("5"), ExprScalar::new("6")]);
+        let result = matrix.matmul_vec(&vector);
+        let result_vec = result.as_vec();
+        assert_eq!(result_vec[0].to_string(), "0 + 1 * 5 + 2 * 6");
+        assert_eq!(result_vec[1].to_string(), "0 + 3 * 5 + 4 * 6");
+    }
+
+    #[test]
+    fn test_display() {
+        let matrix = ExprMatrix::new(&vec![&["1", "2"], &["3", "4"]]);
+        let display_output = format!("{}", matrix);
+        assert_eq!(display_output, "[[1, 2], [3, 4]]");
+    }
+
+    #[test]
+    fn test_empty_matrix() {
+        let empty_matrix: Vec<&[&str]> = vec![];
+        let expr_matrix = ExprMatrix::new(&empty_matrix);
+        assert_eq!(expr_matrix.matrix.len(), 0);
     }
 }

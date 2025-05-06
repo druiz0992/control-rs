@@ -13,10 +13,7 @@ pub trait PhysicsSim {
         dt: f64,
         steps: usize,
     ) -> Vec<(f64, <Self::Model as Dynamics>::State, Energy)>;
-
     fn step(&mut self, dt: f64) -> Result<&<Self::Model as Dynamics>::State, ModelError>;
-
     fn model(&self) -> &Self::Model;
-
     fn state(&self) -> &<Self::Model as Dynamics>::State;
 }

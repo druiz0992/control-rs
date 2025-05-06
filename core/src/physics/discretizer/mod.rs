@@ -1,6 +1,5 @@
 pub mod backward_euler;
 pub mod forward_euler;
-pub mod helpers;
 pub mod hermite_simpson;
 pub mod implicit_midpoint;
 pub mod mid_point;

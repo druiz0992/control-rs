@@ -1,7 +1,7 @@
-use super::helpers::symbolic_intrinsic_step;
-use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, SymbolicExpr, SymbolicFn};
+use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::ModelError;
-use crate::physics::traits::{Describable, Discretizer, Dynamics};
+use crate::physics::traits::{Describable, Discretizer, Dynamics, State};
+use crate::solver::newton::NewtonSolver;
 use std::sync::Arc;
 
 // Backward Euler residual:
@@ -12,40 +12,26 @@ use std::sync::Arc;
 
 pub struct BackwardEuler {
     registry: Arc<ExprRegistry>,
-    residual_func: SymbolicFn,
-    jacobian_func: SymbolicFn,
+    solver: NewtonSolver,
 }
 
 impl BackwardEuler {
     pub fn new<D: Dynamics>(model: &D, registry: Arc<ExprRegistry>) -> Result<Self, ModelError> {
-        let dt_expr = ExprScalar::new("dt");
         let current_state = registry
             .get_vector("state")
             .map_err(|e| ModelError::Symbolic(e.to_string()))?;
-        let next_state = current_state.next_state();
+        let next_state = current_state.build_next();
         registry.insert_vector("next_state", next_state.clone());
 
+        let dt_expr = ExprScalar::new("dt");
         let dyn_next_state = model
             .dynamics_symbolic(next_state.clone().wrap(), &registry)
             .scale(&dt_expr);
 
         let residual = next_state.sub(&current_state).sub(&dyn_next_state);
-        let jacobian = residual
-            .jacobian(&next_state)
-            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
+        let solver = NewtonSolver::new_root_solver(&residual, &next_state, &registry, None)?;
 
-        let residual_func = residual
-            .to_fn(&registry)
-            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
-        let jacobian_func = jacobian
-            .to_fn(&registry)
-            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
-
-        Ok(BackwardEuler {
-            registry,
-            residual_func,
-            jacobian_func,
-        })
+        Ok(BackwardEuler { registry, solver })
     }
 }
 
@@ -54,13 +40,21 @@ where
     D: Dynamics,
 {
     fn step(&mut self, _model: &D, state: &D::State, dt: f64) -> Result<D::State, ModelError> {
-        symbolic_intrinsic_step::<D>(
-            &self.registry,
-            &self.residual_func,
-            &self.jacobian_func,
-            state,
-            dt,
-        )
+        self.registry.insert_var("dt", dt);
+        self.registry
+            .insert_vec_as_vars("state", &state.as_vec())
+            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
+        self.registry
+            .insert_vec_as_vars("next_state", &state.as_vec())
+            .map_err(|e| ModelError::Symbolic(e.to_string()))?;
+
+        let history = self.solver.solve(&state.as_vec(), &self.registry)?;
+        Ok(D::State::from_vec(
+            history
+                .last()
+                .cloned()
+                .ok_or_else(|| ModelError::SolverError(String::from("Solver failed")))?,
+        ))
     }
 }
 

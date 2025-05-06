@@ -1,6 +1,6 @@
 use crate::numeric_services::symbolic::error::SymbolicError;
-use crate::numeric_services::symbolic::{ExprMatrix, ExprRecord, ExprScalar, ExprVector};
 use crate::numeric_services::symbolic::ports::SymbolicRegistry;
+use crate::numeric_services::symbolic::{ExprMatrix, ExprRecord, ExprScalar, ExprVector};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
@@ -54,6 +54,22 @@ impl ExprRegistry {
         self.insert(name, ExprRecord::Vector(expr));
     }
 
+    pub fn insert_vars(&self, expr: &[ExprScalar], vals: &[f64]) {
+        for (i, name) in expr.iter().enumerate() {
+            let value = if i < vals.len() { vals[i] } else { 0.0 };
+            self.insert(name.as_str(), ExprRecord::Var(value));
+        }
+    }
+
+    pub fn insert_vec_as_vars(&self, name: &str, vals: &[f64]) -> Result<(), SymbolicError> {
+        let state_components = self.get_vector(name)?;
+
+        for (name, value) in state_components.iter().zip(vals.iter()) {
+            self.insert_var(name.as_str(), *value);
+        }
+        Ok(())
+    }
+
     ///   Inserts a matrix expression with the given name into the registry.
     pub fn insert_matrix(&self, name: &str, expr: ExprMatrix) {
         self.insert(name, ExprRecord::Matrix(expr));
@@ -62,25 +78,25 @@ impl ExprRegistry {
     pub fn get_var(&self, name: &str) -> Result<f64, SymbolicError> {
         match self.get(name)? {
             ExprRecord::Var(var) => Ok(var),
-            _ => Err(SymbolicError::UnexpectedResultType),
+            _ => Err(SymbolicError::ExprNotFound(name.to_string())),
         }
     }
     pub fn get_scalar(&self, name: &str) -> Result<ExprScalar, SymbolicError> {
         match self.get(name)? {
             ExprRecord::Scalar(expr) => Ok(expr),
-            _ => Err(SymbolicError::UnexpectedResultType),
+            _ => Err(SymbolicError::ExprNotFound(name.to_string())),
         }
     }
     pub fn get_vector(&self, name: &str) -> Result<ExprVector, SymbolicError> {
         match self.get(name)? {
             ExprRecord::Vector(expr) => Ok(expr),
-            _ => Err(SymbolicError::UnexpectedResultType),
+            _ => Err(SymbolicError::ExprNotFound(name.to_string())),
         }
     }
     pub fn get_matrix(&self, name: &str) -> Result<ExprMatrix, SymbolicError> {
         match self.get(name)? {
             ExprRecord::Matrix(expr) => Ok(expr),
-            _ => Err(SymbolicError::UnexpectedResultType),
+            _ => Err(SymbolicError::ExprNotFound(name.to_string())),
         }
     }
 }
@@ -93,7 +109,7 @@ impl SymbolicRegistry for ExprRegistry {
         entries
             .get(name)
             .cloned()
-            .ok_or(SymbolicError::ExprNotFound)
+            .ok_or(SymbolicError::ExprNotFound(name.to_string()))
     }
 
     fn insert(&self, name: &str, value: ExprRecord) {
@@ -150,7 +166,7 @@ mod tests {
         let registry = ExprRegistry::new();
         assert!(matches!(
             registry.get("y"),
-            Err(SymbolicError::ExprNotFound)
+            Err(SymbolicError::ExprNotFound(_))
         ));
     }
 
@@ -159,7 +175,7 @@ mod tests {
         let registry = ExprRegistry::new();
         assert!(matches!(
             registry.get("z"),
-            Err(SymbolicError::ExprNotFound)
+            Err(SymbolicError::ExprNotFound(_))
         ));
     }
 

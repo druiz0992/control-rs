@@ -2,6 +2,40 @@ use proc_macro::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, parse_macro_input};
 
+/// This procedural macro derives the `StateOps` trait for a struct with named fields.
+///
+/// The macro generates the following implementations and methods:
+///
+/// 1. **Constructor Method**:
+///    - `pub fn new(...) -> Self`
+///    - Creates a new instance of the struct by accepting one `f64` argument for each field.
+///
+/// 2. **State Method**:
+///    - `pub fn state(&self) -> (f64, f64, ...)`
+///    - Returns a tuple containing the values of all fields in the struct.
+///
+/// 3. **State Trait Implementation**:
+///    - Implements the `State` trait with the following methods:
+///      - `fn as_vec(&self) -> Vec<f64>`: Converts the struct's fields into a `Vec<f64>`.
+///      - `fn from_vec(v: Vec<f64>) -> Self`: Constructs the struct from a `Vec<f64>`.
+///        Ensures the vector has the correct number of elements.
+///      - `fn labels() -> &'static [&'static str]`: Returns the names of the struct's fields as a slice of strings.
+///
+/// 4. **Arithmetic Operations**:
+///    - Implements the following operator traits for the struct:
+///      - `std::ops::Add`: Adds corresponding fields of two instances.
+///      - `std::ops::Sub`: Subtracts corresponding fields of two instances.
+///      - `std::ops::Mul<f64>`: Multiplies each field by a scalar value.
+///      - `std::ops::Div<f64>`: Divides each field by a scalar value.
+///
+/// 5. **Equality Comparison**:
+///    - Implements `PartialEq` for the struct:
+///      - Compares two instances by checking if all corresponding fields are equal.
+///
+/// ## Restrictions:
+/// - The macro only supports structs with named fields.
+/// - All fields must be of type `f64`.
+///
 #[proc_macro_derive(StateOps)]
 pub fn derive_state_ops(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);

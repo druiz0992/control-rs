@@ -1,7 +1,7 @@
 use super::derivatives::compute_derivatives;
 use crate::numeric_services::differentiation::models::DerivativeType;
 use crate::numeric_services::symbolic::error::SymbolicError;
-use crate::numeric_services::symbolic::fasteval::{ExprRecord, ExprVector};
+use crate::numeric_services::symbolic::fasteval::{ExprMatrix, ExprRecord, ExprVector};
 use crate::numeric_services::symbolic::models::{SymbolicEvalResult, SymbolicFn};
 use crate::numeric_services::symbolic::ports::{SymbolicExpr, SymbolicRegistry};
 use fasteval::parser::{DEFAULT_EXPR_DEPTH_LIMIT, DEFAULT_EXPR_LEN_LIMIT};
@@ -36,7 +36,7 @@ use std::sync::Arc;
 /// evaluation of mathematical expressions. It also integrates with a symbolic
 /// registry to resolve variables and nested expressions.
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ExprScalar(String);
 
 impl std::str::FromStr for ExprScalar {
@@ -46,7 +46,11 @@ impl std::str::FromStr for ExprScalar {
         Ok(ExprScalar::new(s))
     }
 }
-
+impl Default for ExprScalar {
+    fn default() -> Self {
+        ExprScalar::new("0")
+    }
+}
 impl ExprScalar {
     pub fn new<S: Into<String>>(s: S) -> Self {
         Self(s.into())
@@ -82,7 +86,7 @@ impl ExprScalar {
         Self::new(format!("{} * {}", self.0, factor))
     }
     pub fn pow(&self, exponent: f64) -> Self {
-        Self::new(format!("{} ^ {}", self.0, exponent))
+        Self::new(format!("(({}) ^ ({}))", self.0, exponent))
     }
     pub fn log(&self, base: f64) -> Self {
         Self::new(format!("log_{}({})", base, self.0))
@@ -105,12 +109,24 @@ impl ExprScalar {
     pub fn atan(&self) -> Self {
         Self::new(format!("atan({})", self.0))
     }
+    pub fn abs(&self) -> Self {
+        Self::new(format!("abs({})", self.0))
+    }
+    pub fn exp(&self) -> Self {
+        Self::new(format!("{}^({})", std::f64::consts::E, self.0))
+    }
+    pub fn min(&self, other: &Self) -> Self {
+        Self::new(format!("min({},{})", self.0, other.0))
+    }
+    pub fn max(&self, other: &Self) -> Self {
+        Self::new(format!("max({},{})", self.0, other.0))
+    }
 
     pub fn gradient(&self, vars: &ExprVector) -> Result<ExprVector, SymbolicError> {
         let resp = compute_derivatives(
             &ExprRecord::Scalar(self.clone()),
             vars,
-            vec![DerivativeType::Jacobian],
+            vec![DerivativeType::Gradient],
         )
         .map_err(|e| SymbolicError::Other(e.to_string()))?;
 
@@ -119,6 +135,46 @@ impl ExprScalar {
         } else {
             Err(SymbolicError::UnexpectedResultType)
         }
+    }
+
+    pub fn hessian(&self, vars: &ExprVector) -> Result<ExprMatrix, SymbolicError> {
+        let resp = compute_derivatives(
+            &ExprRecord::Scalar(self.clone()),
+            vars,
+            vec![DerivativeType::Hessian],
+        )
+        .map_err(|e| SymbolicError::Other(e.to_string()))?;
+        if let Some(hessian) = &resp.hessian {
+            Ok(ExprMatrix::from_string(hessian))
+        } else {
+            Err(SymbolicError::UnexpectedResultType)
+        }
+    }
+
+    pub fn lagrangian(
+        &self,
+        eq_constraints_expr: &ExprVector,
+        ineq_constraints_expr: &ExprVector,
+    ) -> Result<(Self, ExprVector, ExprVector), SymbolicError> {
+        fn make_multipliers(prefix: &str, count: usize) -> ExprVector {
+            let names: Vec<String> = (0..count).map(|i| format!("{}_{}", prefix, i)).collect();
+            let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
+            ExprVector::new(&refs)
+        }
+
+        let mus = make_multipliers("lagrangian_mu", eq_constraints_expr.len());
+        let lambdas = make_multipliers("lagrangian_lambda", ineq_constraints_expr.len());
+
+        let mut lagrangian = self.clone();
+
+        if !eq_constraints_expr.is_empty() {
+            lagrangian = lagrangian.add(&eq_constraints_expr.dot(&mus)?.wrap());
+        }
+        if !ineq_constraints_expr.is_empty() {
+            lagrangian = lagrangian.sub(&ineq_constraints_expr.dot(&lambdas)?.wrap());
+        }
+
+        Ok((lagrangian, mus, lambdas))
     }
 }
 
@@ -181,7 +237,7 @@ where
                     }
                 })
                 .map(SymbolicEvalResult::Scalar)
-                .map_err(|_| SymbolicError::EvaluationError)
+                .map_err(|e| SymbolicError::Other(e.to_string()))
         }))
     }
 }
@@ -260,7 +316,7 @@ mod tests {
     fn test_pow() {
         let expr = ExprScalar::new("x");
         let result = expr.pow(3.0);
-        assert_eq!(result.as_str(), "x ^ 3");
+        assert_eq!(result.as_str(), "((x) ^ (3))");
     }
 
     #[test]
@@ -343,5 +399,33 @@ mod tests {
         let result = func(None);
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), SymbolicEvalResult::Scalar(7.0));
+    }
+
+    #[test]
+    fn test_min() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("2");
+        let expr2 = ExprScalar::new("4");
+        let expr3 = ExprScalar::new("1");
+        let expr4 = ExprScalar::new("10");
+        let r = expr1.min(&expr2).min(&expr3).min(&expr4);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(1.0));
+    }
+
+    #[test]
+    fn test_max() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("2");
+        let expr2 = ExprScalar::new("4");
+        let expr3 = ExprScalar::new("1");
+        let expr4 = ExprScalar::new("10");
+        let r = expr1.max(&expr2).max(&expr3).max(&expr4);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(10.0));
     }
 }

@@ -1,11 +1,16 @@
 use std::marker::PhantomData;
-
 use crate::physics::traits::{Dynamics, PhysicsSim, Renderable};
-
 use super::Animation;
 use async_trait::async_trait;
 use macroquad::prelude::*;
 
+/// A struct that implements the `Animation` trait using the `macroquad` library for rendering.
+/// 
+/// This struct is generic over a type `S` that implements the `PhysicsSim` trait. It uses a 
+/// `PhantomData` marker to associate itself with the `S` type without actually storing any value of that type.
+/// 
+/// # Type Parameters
+/// - `S`: A type that implements the `PhysicsSim` trait, representing the physics simulation to be animated.
 #[derive(Clone, Debug, Default)]
 pub struct Macroquad<S: PhysicsSim> {
     _phantom: std::marker::PhantomData<S>,
@@ -15,6 +20,7 @@ impl<S> Macroquad<S>
 where
     S: PhysicsSim,
 {
+    /// Creates a new instance of the `Macroquad` struct.
     pub fn new() -> Self {
         Self {
             _phantom: PhantomData,
@@ -28,8 +34,24 @@ where
     S: PhysicsSim + Send,
     S::Model: Renderable<State = <S::Model as Dynamics>::State>,
 {
+    /// The associated simulator type, which must implement the `PhysicsSim` trait.
     type Simulator = S;
 
+    /// Runs the animation loop using the `macroquad` library.
+    ///
+    /// This method continuously updates the physics simulation, renders the joints of the model,
+    /// and draws lines and circles to represent the joints and their connections on the screen.
+    ///
+    /// # Parameters
+    /// - `simulator`: A mutable reference to the physics simulator.
+    /// - `screen_dims`: A tuple representing the dimensions of the screen (width, height).
+    ///
+    /// # Behavior
+    /// - Clears the screen with a black background.
+    /// - Steps the physics simulation forward by the frame time.
+    /// - Renders the joints of the model based on the current state and screen dimensions.
+    /// - Draws lines connecting the joints and circles at each joint position.
+    /// - Waits for the next frame before repeating the loop.
     async fn run_animation(self, simulator: &mut Self::Simulator, screen_dims: (f32, f32)) {
         loop {
             clear_background(BLACK);
@@ -52,3 +74,4 @@ where
         }
     }
 }
+
