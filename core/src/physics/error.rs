@@ -6,4 +6,5 @@ pub enum ModelError {
     IncompleteConfiguration(String),
     SolverError(String),
     ConfigError(String),
+    Other(String),
 }

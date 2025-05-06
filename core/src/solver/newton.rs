@@ -349,6 +349,7 @@ impl NewtonSolver {
             }
         }
 
+        history_results.push(unknown_vals.clone());
         Ok(history_results)
     }
 
@@ -423,6 +424,7 @@ impl NewtonSolver {
                 *val += alpha * delta_val;
             }
         }
+        history_results.push(unknown_vals.clone());
         Ok(history_results)
     }
 }
