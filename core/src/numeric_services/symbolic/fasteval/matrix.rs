@@ -45,7 +45,7 @@ use std::sync::Arc;
 /// - The `to_fn` method generates a callable function that evaluates the
 ///   symbolic expressions in the matrix using a provided variable registry.
 /// - The `matmul` method assumes that the dimensions of the matrices are
-///   compatible for multiplication.
+///   compatible for multiplication and will not check.
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExprMatrix {
@@ -63,13 +63,13 @@ impl ExprMatrix {
         }
     }
 
+    /// returns dimensions of symbolic matrix.
+    /// NOTE: a matrix [[]] will have (0,0) dimensions
     pub fn n_dims(&self) -> (usize, usize) {
-        let is_completely_empty =
-            self.matrix.is_empty() || self.matrix.iter().all(|row| row.is_empty());
-
-        let n_rows = if !is_completely_empty {self.matrix.len()} else {0};
-        let n_cols = if n_rows > 0 { self.matrix[0].len() } else { 0 };
-        (n_rows, n_cols)
+        match self.matrix.first() {
+            Some(row) if !row.is_empty() => (self.matrix.len(), row.len()),
+            _ => (0, 0),
+        }
     }
 
     pub fn from_string(matrix: &[Vec<String>]) -> Self {
@@ -127,6 +127,7 @@ impl ExprMatrix {
         }
     }
 
+    /// mutliplies matrix by vector, and returns vector
     pub fn matmul_vec(&self, other: &ExprVector) -> ExprVector {
         let result_vector = self
             .matrix
@@ -144,8 +145,8 @@ impl ExprMatrix {
     pub fn identity(dims: usize) -> Self {
         let mut identity_matrix = vec![vec![ExprScalar::default(); dims]; dims];
 
-        for i in 0..dims {
-            identity_matrix[i][i] = ExprScalar::new("1");
+        for (i, row) in identity_matrix.iter_mut().enumerate().take(dims) {
+            row[i] = ExprScalar::new("1");
         }
 
         ExprMatrix {
@@ -153,6 +154,7 @@ impl ExprMatrix {
         }
     }
 
+    /// scale matrix my scalar expression
     pub fn scale(&self, var: &ExprScalar) -> ExprMatrix {
         let scaled_matrix = self
             .matrix
@@ -164,6 +166,7 @@ impl ExprMatrix {
         }
     }
 
+    /// scale matrix by f64
     pub fn scalef(&self, var: f64) -> ExprMatrix {
         let scaled_matrix = self
             .matrix
@@ -175,6 +178,38 @@ impl ExprMatrix {
         }
     }
 
+    /// Builds the Karush-Kuhn-Tucker (KKT) Jacobian matrix from the Lagrangian Hessian
+    /// and the equality constraint Jacobian. This matrix is used in optimization problems
+    /// to solve systems of equations that arise in constrained optimization.
+    ///
+    /// # Arguments
+    ///
+    /// * `hessian` - A reference to the Lagrangian Hessian matrix, which represents the
+    ///   second-order partial derivatives of the Lagrangian function with respect to the
+    ///   optimization variables.
+    /// * `jacobian` - A reference to the equality constraint Jacobian matrix, which
+    ///   represents the first-order partial derivatives of the equality constraints with
+    ///   respect to the optimization variables.
+    /// * `regularization_factor` - A floating-point value used to scale the regularization
+    ///   matrix. This factor is added to the diagonal of the Hessian to ensure numerical
+    ///   stability and to regularize the system.
+    ///
+    /// # Returns
+    ///
+    /// An `ExprMatrix` representing the KKT Jacobian matrix. The structure of the matrix is as follows:
+    /// - The top-left block contains the regularized Hessian matrix.
+    /// - The top-right block contains the transpose of the Jacobian matrix.
+    /// - The bottom-left block contains the Jacobian matrix.
+    /// - The bottom-right block contains a scaled identity matrix with a negative sign.
+    ///
+    /// If there are no constraints (`n_constraints == 0`), the function returns a clone of the Hessian matrix.
+    ///
+    /// # Notes
+    ///
+    /// - The function assumes that the dimensions of the Hessian and Jacobian matrices are
+    ///   compatible for constructing the KKT Jacobian matrix.
+    /// - The regularization factor is applied to the diagonal of the Hessian to improve
+    ///   numerical stability, especially in cases where the Hessian is ill-conditioned.
     pub fn build_ktt_jacobian(
         hessian: &ExprMatrix,
         jacobian: &ExprMatrix,
@@ -193,16 +228,14 @@ impl ExprMatrix {
         }
 
         // Top-left: regularized_hessian
-        for i in 0..n_unknowns {
-            for j in 0..n_unknowns {
-                result_matrix[i][j] = regularized_hessian.matrix[i][j].clone();
-            }
+        for (i, row) in result_matrix.iter_mut().enumerate().take(n_unknowns) {
+            row[..n_unknowns].clone_from_slice(&regularized_hessian.matrix[i][..n_unknowns]);
         }
 
         // Top-right: transpose of jacobian
-        for i in 0..n_unknowns {
+        for (i, row) in result_matrix.iter_mut().enumerate().take(n_unknowns) {
             for j in 0..n_constraints {
-                result_matrix[i][n_unknowns + j] = jacobian.matrix[j][i].clone();
+                row[n_unknowns + j] = jacobian.matrix[j][i].clone();
             }
         }
 
@@ -355,10 +388,10 @@ mod tests {
         let matrix1 = ExprMatrix::new(&vec![&["1", "2"], &["3", "4"]]);
         let matrix2 = ExprMatrix::new(&vec![&["5", "6"], &["7", "8"]]);
         let result = matrix1.matmul(&matrix2);
-        assert_eq!(result.matrix[0][0].to_string(), " + 1 * 5 + 2 * 7");
-        assert_eq!(result.matrix[0][1].to_string(), " + 1 * 6 + 2 * 8");
-        assert_eq!(result.matrix[1][0].to_string(), " + 3 * 5 + 4 * 7");
-        assert_eq!(result.matrix[1][1].to_string(), " + 3 * 6 + 4 * 8");
+        assert_eq!(result.matrix[0][0].to_string(), "0 + 1 * 5 + 2 * 7");
+        assert_eq!(result.matrix[0][1].to_string(), "0 + 1 * 6 + 2 * 8");
+        assert_eq!(result.matrix[1][0].to_string(), "0 + 3 * 5 + 4 * 7");
+        assert_eq!(result.matrix[1][1].to_string(), "0 + 3 * 6 + 4 * 8");
     }
 
     #[test]
@@ -414,8 +447,8 @@ mod tests {
         let vector = ExprVector::from_vec(vec![ExprScalar::new("5"), ExprScalar::new("6")]);
         let result = matrix.matmul_vec(&vector);
         let result_vec = result.as_vec();
-        assert_eq!(result_vec[0].to_string(), " + 1 * 5 + 2 * 6");
-        assert_eq!(result_vec[1].to_string(), " + 3 * 5 + 4 * 6");
+        assert_eq!(result_vec[0].to_string(), "0 + 1 * 5 + 2 * 6");
+        assert_eq!(result_vec[1].to_string(), "0 + 3 * 5 + 4 * 6");
     }
 
     #[test]

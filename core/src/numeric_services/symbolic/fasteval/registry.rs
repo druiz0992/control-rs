@@ -59,6 +59,7 @@ impl ExprRegistry {
             self.insert(name.as_str(), ExprRecord::Var(*value));
         }
     }
+
     pub fn insert_vec_as_vars(&self, name: &str, vals: &[f64]) -> Result<(), SymbolicError> {
         let state_components = self.get_vector(name)?;
 

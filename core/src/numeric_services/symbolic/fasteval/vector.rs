@@ -63,6 +63,10 @@ impl ExprVector {
         self.vector.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.vector.is_empty()
+    }
+
     pub fn as_vec(&self) -> Vec<ExprScalar> {
         self.vector.clone()
     }
@@ -128,7 +132,7 @@ impl ExprVector {
     }
 
     pub fn dot(&self, other: &Self) -> Result<ExprScalar, SymbolicError> {
-        if self.len() == 0 {
+        if self.is_empty() {
             return Ok(ExprScalar::new(""));
         }
         let terms: Vec<ExprScalar> = self
@@ -206,7 +210,7 @@ impl ExprVector {
     }
 
     pub fn vecmul_mat(&self, mat: &ExprMatrix) -> Self {
-        mat.matmul_vec(&self)
+        mat.matmul_vec(self)
     }
 
     pub fn vecmul_matf(&self, mat: &[Vec<f64>]) -> Self {
@@ -407,13 +411,7 @@ mod tests {
     fn test_norm2() {
         let vec = ExprVector::new(&["x", "y", "z"]);
         let result = vec.norm2().unwrap();
-        assert_eq!(
-            result,
-            ExprScalar::new("x")
-                .mul(&ExprScalar::new("x"))
-                .add(&ExprScalar::new("y").mul(&ExprScalar::new("y")))
-                .add(&ExprScalar::new("z").mul(&ExprScalar::new("z")))
-        );
+        assert_eq!(result, ExprScalar::new("((x * x + y * y + z * z) ^ (0.5))"));
     }
 
     #[test]

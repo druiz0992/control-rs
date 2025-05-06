@@ -7,10 +7,10 @@ use crate::physics::ModelError;
 use std::sync::Arc;
 
 /// Returns x for f(x) = 0
-pub trait RootSolver<S> {
-    fn solve(&self, initial_guess: &S, registry: &Arc<ExprRegistry>) -> Result<S, ModelError>;
+pub trait RootSolver {
+    fn solve(&self, initial_guess: &[f64], registry: &Arc<ExprRegistry>) -> Result<Vec<f64>, ModelError>;
 }
 
-pub trait Minimizer<S> {
-    fn minimize(&self, initial_guess: &S, registry: &Arc<ExprRegistry>) -> Result<S, ModelError>;
+pub trait Minimizer {
+    fn minimize(&self, initial_guess: &[f64], registry: &Arc<ExprRegistry>) -> Result<Vec<f64>, ModelError>;
 }

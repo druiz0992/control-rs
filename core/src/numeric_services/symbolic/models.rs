@@ -31,7 +31,7 @@ pub struct SymbolicFunction {
     param_names: Vec<String>,
 }
 
-impl<'a> SymbolicFunction {
+impl SymbolicFunction {
     pub fn new(func: SymbolicFn, params: &[ExprScalar]) -> Self {
         Self {
             func,

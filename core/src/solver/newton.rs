@@ -4,10 +4,9 @@ use super::models::{OptimizerConfig, ProblemSpec};
 use crate::numeric_services::symbolic::fasteval::ExprRegistry;
 use crate::numeric_services::symbolic::ports::SymbolicExpr;
 use crate::numeric_services::symbolic::{
-    ExprMatrix, ExprScalar, ExprVector, SymbolicEvalResult, SymbolicFn, SymbolicRegistry,
+    ExprMatrix, ExprScalar, ExprVector, SymbolicEvalResult, SymbolicFn,
 };
 use crate::physics::ModelError;
-use crate::physics::traits::State;
 use nalgebra::DVector;
 use std::sync::Arc;
 
@@ -24,7 +23,7 @@ impl NewtonSolver {
         registry: &Arc<ExprRegistry>,
         options: Option<OptimizerConfig>,
     ) -> Result<Self, ModelError> {
-        let options = options.unwrap_or_else(OptimizerConfig::default);
+        let options = options.unwrap_or_default();
 
         // retrieve equality constraints
         let eq_constraints_expr = eq_constraints_expr
@@ -34,7 +33,7 @@ impl NewtonSolver {
 
         // compute lagrangian
         let (lagrangian, lambdas) = objective_expr
-            .new_lagrangian(&eq_constraints_expr)
+            .lagrangian(&eq_constraints_expr)
             .map_err(|e| ModelError::Symbolic(e.to_string()))?;
 
         let gradient = lagrangian
@@ -66,8 +65,7 @@ impl NewtonSolver {
             .map_err(|e| ModelError::Symbolic(e.to_string()))?;
         let merit_fn = get_merit_fn(&gradient, registry, &options)?;
 
-        let problem =
-            ProblemSpec::new_root_finding(residual_fn, jacobian_fn, merit_fn, &unknown_expr);
+        let problem = ProblemSpec::new(residual_fn, jacobian_fn, merit_fn, &unknown_expr);
 
         Ok(Self { options, problem })
     }
@@ -78,7 +76,7 @@ impl NewtonSolver {
         registry: &Arc<ExprRegistry>,
         options: Option<OptimizerConfig>,
     ) -> Result<Self, ModelError> {
-        let options = options.unwrap_or_else(OptimizerConfig::default);
+        let options = options.unwrap_or_default();
 
         let jacobian = residual_expr
             .jacobian(unknown_expr)
@@ -91,18 +89,9 @@ impl NewtonSolver {
             .map_err(|e| ModelError::Symbolic(e.to_string()))?;
         let merit_fn = get_merit_fn(residual_expr, registry, &options)?;
 
-        let problem =
-            ProblemSpec::new_root_finding(residual_fn, jacobian_fn, merit_fn, unknown_expr);
+        let problem = ProblemSpec::new(residual_fn, jacobian_fn, merit_fn, unknown_expr);
 
         Ok(Self { options, problem })
-    }
-
-    pub fn set_max_iters(&mut self, max_iters: usize) -> Result<(), ModelError> {
-        self.options.set_max_iters(max_iters)
-    }
-
-    pub fn set_tolerance(&mut self, tolerance: f64) -> Result<(), ModelError> {
-        self.options.set_tolerance(tolerance)
     }
 }
 
@@ -122,15 +111,16 @@ fn get_merit_fn(
         .map_err(|e| ModelError::Symbolic(e.to_string()))
 }
 
-impl<S> RootSolver<S> for NewtonSolver
-where
-    S: State,
-{
-    fn solve(&self, initial_guess: &S, registry: &Arc<ExprRegistry>) -> Result<S, ModelError> {
-        let (residual_fn, jacobian_fn, unknown_expr) = self.problem.get_root_finding_params()?;
+impl RootSolver for NewtonSolver {
+    fn solve(
+        &self,
+        initial_guess: &[f64],
+        registry: &Arc<ExprRegistry>,
+    ) -> Result<Vec<f64>, ModelError> {
+        let (residual_fn, jacobian_fn, unknown_expr) = self.problem.get_params()?;
         let max_iters = self.options.get_max_iters();
         let tolerance = self.options.get_tolerance();
-        let mut unknown_vals = initial_guess.as_vec();
+        let mut unknown_vals = initial_guess.to_vec();
         let mut alpha = 1.0;
 
         let ls = LineSearch::new(self.options.get_line_search_opts());
@@ -178,6 +168,6 @@ where
                 *val += alpha * delta_val;
             }
         }
-        Ok(S::from_vec(unknown_vals))
+        Ok(unknown_vals.to_vec())
     }
 }

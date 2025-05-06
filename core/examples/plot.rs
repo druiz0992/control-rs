@@ -68,7 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     chart
         .draw_series(LineSeries::new(circle_points, &BLACK))?
         .label("constraint")
-        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 10, y)], &BLACK));
+        .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 10, y)], BLACK));
 
     chart.configure_series_labels().draw()?;
     plotter::display("/tmp/output.png").unwrap();

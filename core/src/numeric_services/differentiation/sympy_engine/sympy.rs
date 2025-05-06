@@ -135,7 +135,7 @@ mod tests {
 
         let response = response.unwrap();
         assert_eq!(response.gradient.unwrap(), vec!["2*x", "2*y"]);
-        assert_eq!(response.jacobian.unwrap(), vec![Vec::<String>::new()]);
+        assert_eq!(response.jacobian.unwrap(), vec![["2*x", "2*y"]]);
         assert_eq!(
             response.hessian.unwrap(),
             vec![
@@ -163,7 +163,7 @@ mod tests {
 
         let response = response.unwrap();
         assert_eq!(response.gradient.unwrap(), vec!["2*x", "2*u*y"]);
-        assert_eq!(response.jacobian.unwrap(), vec![Vec::<String>::new()]);
+        assert_eq!(response.jacobian.unwrap(), vec![["2*x", "2*u*y"]]);
         assert_eq!(
             response.hessian.unwrap(),
             vec![

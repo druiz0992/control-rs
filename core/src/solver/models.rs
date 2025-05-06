@@ -29,21 +29,22 @@ pub struct ProblemSpec {
 }
 
 impl ProblemSpec {
-    pub fn new_root_finding(
+    pub fn new(
         residual_fn: SymbolicFn,
         jacobian_fn: SymbolicFn,
         merit_fn: SymbolicFn,
         unknown_expr: &ExprVector,
     ) -> Self {
-        let mut problem = ProblemSpec::default();
-        problem.residual = Some(SymbolicFunction::new(residual_fn, &unknown_expr));
-        problem.jacobian = Some(SymbolicFunction::new(jacobian_fn, &unknown_expr));
-        problem.merit = Some(SymbolicFunction::new(merit_fn, &unknown_expr));
-        problem.unknown_vars = Some(unknown_expr.clone());
-        problem
+        ProblemSpec {
+            residual: Some(SymbolicFunction::new(residual_fn, unknown_expr)),
+            jacobian: Some(SymbolicFunction::new(jacobian_fn, unknown_expr)),
+            merit: Some(SymbolicFunction::new(merit_fn, unknown_expr)),
+            unknown_vars: Some(unknown_expr.clone()),
+            ..Default::default()
+        }
     }
 
-    pub fn get_root_finding_params(
+    pub fn get_params(
         &self,
     ) -> Result<(&SymbolicFunction, &SymbolicFunction, Vec<ExprScalar>), ModelError> {
         let residual_fn = self.residual.as_ref().ok_or_else(|| {
@@ -90,8 +91,22 @@ const MIN_ALLOWED_LINESEARCH_MAX_ITERS: usize = 1;
 const MAX_ALLOWED_LINESEARCH_MAX_ITERS: usize = 30;
 
 impl LineSeachConfig {
+    pub fn new(
+        max_iters: usize,
+        factor: f64,
+        merit_expr: Option<ExprScalar>,
+    ) -> Result<Self, ModelError> {
+        let mut ls = LineSeachConfig::default();
+        ls.set_factor(factor)?;
+        ls.set_max_iters(max_iters)?;
+        if let Some(merit_expr) = merit_expr {
+            ls.set_merit(merit_expr);
+        }
+        Ok(ls)
+    }
+
     pub fn set_factor(&mut self, factor: f64) -> Result<(), ModelError> {
-        if factor < MIN_ALLOWED_FACTOR || factor > MAX_ALLOWED_FACTOR {
+        if !(MIN_ALLOWED_FACTOR..=MAX_ALLOWED_FACTOR).contains(&factor) {
             return Err(ModelError::ConfigError(
                 "Linesearch alpha factor out of range".to_string(),
             ));
@@ -101,8 +116,8 @@ impl LineSeachConfig {
     }
 
     pub fn set_max_iters(&mut self, max_iters: usize) -> Result<(), ModelError> {
-        if max_iters < MIN_ALLOWED_LINESEARCH_MAX_ITERS
-            || max_iters > MAX_ALLOWED_LINESEARCH_MAX_ITERS
+        if !(MIN_ALLOWED_LINESEARCH_MAX_ITERS..=MAX_ALLOWED_LINESEARCH_MAX_ITERS)
+            .contains(&max_iters)
         {
             return Err(ModelError::ConfigError(
                 "Linesearch max iterations out of range".to_string(),
@@ -128,15 +143,13 @@ impl LineSeachConfig {
 pub struct OptimizerConfig {
     max_iters: usize,
     tolerance: f64,
-    penalty_factor: Option<f64>,
-    constraint_tol: Option<f64>,
     line_search: LineSeachConfig,
     gauss_newton: bool,
 }
 
 impl OptimizerConfig {
     pub fn set_max_iters(&mut self, max_iters: usize) -> Result<(), ModelError> {
-        if max_iters < MIN_ALLOWED_MAX_ITERS || max_iters > MAX_ALLOWED_MAX_ITERS {
+        if !(MIN_ALLOWED_MAX_ITERS..=MAX_ALLOWED_MAX_ITERS).contains(&max_iters) {
             return Err(ModelError::ConfigError(
                 "Maximum number of iterations out of range".to_string(),
             ));
@@ -174,7 +187,7 @@ impl OptimizerConfig {
     }
 
     pub fn get_line_search_opts(&self) -> LineSeachConfig {
-        return self.line_search.clone();
+        self.line_search.clone()
     }
 
     pub fn get_gauss_newton(&self) -> bool {
@@ -191,8 +204,6 @@ impl Default for OptimizerConfig {
         Self {
             max_iters: DEFAULT_MAX_ITERS,
             tolerance: DEFAULT_TOLERANCE,
-            penalty_factor: None,
-            constraint_tol: None,
             line_search: LineSeachConfig::default(),
             gauss_newton: true,
         }

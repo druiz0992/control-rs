@@ -145,7 +145,7 @@ impl ExprScalar {
         }
     }
 
-    pub fn new_lagrangian(
+    pub fn lagrangian(
         &self,
         eq_constraints_expr: &ExprVector,
     ) -> Result<(Self, ExprVector), SymbolicError> {
@@ -301,7 +301,7 @@ mod tests {
     fn test_pow() {
         let expr = ExprScalar::new("x");
         let result = expr.pow(3.0);
-        assert_eq!(result.as_str(), "x ^ 3");
+        assert_eq!(result.as_str(), "((x) ^ (3))");
     }
 
     #[test]
