@@ -59,6 +59,11 @@ impl ExprVector {
         let expr: Vec<_> = vector.iter().map(ExprScalar::new).collect();
         Self { vector: expr }
     }
+
+    pub fn zeros(len: usize) -> ExprVector {
+        ExprVector::from_f64(vec![0.0; len])
+    }
+
     pub fn len(&self) -> usize {
         self.vector.len()
     }
@@ -168,6 +173,58 @@ impl ExprVector {
             .ok_or(SymbolicError::Other("Error in dot product".to_string()))
     }
 
+    pub fn hadamard_product(&self, other: &Self) -> Self {
+        let result_vector = self
+            .vector
+            .iter()
+            .zip(&other.vector)
+            .map(|(a, b)| a.mul(b))
+            .collect();
+        Self {
+            vector: result_vector,
+        }
+    }
+
+    pub fn min_element(&self) -> ExprScalar {
+        self.vector
+            .iter()
+            .cloned()
+            .reduce(|a, b| a.min(&b))
+            .unwrap_or_else(|| ExprScalar::from_f64(f64::INFINITY))
+    }
+
+    pub fn max_element(&self) -> ExprScalar {
+        self.vector
+            .iter()
+            .cloned()
+            .reduce(|a, b| a.max(&b))
+            .unwrap_or_else(|| ExprScalar::from_f64(f64::NEG_INFINITY))
+    }
+
+    pub fn min(&self, other: &Self) -> ExprVector {
+        let result_vector = self
+            .vector
+            .iter()
+            .zip(&other.vector)
+            .map(|(a, b)| a.min(b))
+            .collect();
+        Self {
+            vector: result_vector,
+        }
+    }
+
+    pub fn max(&self, other: &Self) -> ExprVector {
+        let result_vector = self
+            .vector
+            .iter()
+            .zip(&other.vector)
+            .map(|(a, b)| a.max(b))
+            .collect();
+        Self {
+            vector: result_vector,
+        }
+    }
+
     pub fn norm1(&self) -> Result<ExprScalar, SymbolicError> {
         let abs_terms: Vec<ExprScalar> = self.vector.iter().map(|v| v.abs()).collect();
         abs_terms
@@ -183,6 +240,16 @@ impl ExprVector {
             .reduce(|a, b| a.add(&b))
             .ok_or(SymbolicError::Other("Error calculating norm2".to_string()))
             .map(|sum| sum.pow(0.5))
+    }
+
+    pub fn norm_inf(&self) -> Result<ExprScalar, SymbolicError> {
+        let max_abs = self
+            .vector
+            .iter()
+            .map(|v| v.abs())
+            .reduce(|a, b| a.max(&b))
+            .ok_or(SymbolicError::Other("Error calculating norm_inf".to_string()))?;
+        Ok(max_abs)
     }
 
     pub fn jacobian(&self, vars: &ExprVector) -> Result<ExprMatrix, SymbolicError> {
@@ -234,6 +301,24 @@ impl ExprVector {
         extended_vector.extend(expr.as_vec());
         Self {
             vector: extended_vector,
+        }
+    }
+
+    /// returns diagonal matrix from vector
+    pub fn diagm(&self) -> ExprMatrix {
+        let mut matrix = Vec::new();
+        for (i, scalar) in self.vector.iter().enumerate() {
+            let mut row = vec![ExprScalar::from_f64(0.0); self.len()];
+            row[i] = scalar.clone();
+            matrix.push(row);
+        }
+        ExprMatrix::from_vec(&matrix)
+    }
+
+    pub fn exp(&self) -> ExprVector {
+        let result_vector = self.vector.iter().map(|v| v.exp()).collect();
+        Self {
+            vector: result_vector,
         }
     }
 }
@@ -472,6 +557,73 @@ mod tests {
 
         if let SymbolicEvalResult::Vector(result) = func(Some(&vars)).unwrap() {
             assert_eq!(result, DVector::from_vec(vec![3.0, 5.0, 3.0]));
+        } else {
+            panic!("Expected EvalResult::Vector");
+        }
+    }
+
+    #[test]
+    fn test_min_element() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr = ExprVector::new(&["2", "4", "1", "10"]);
+        let r = expr.min_element();
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(1.0));
+    }
+
+    #[test]
+    fn test_max_element() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr = ExprVector::new(&["2", "4", "1", "10"]);
+        let r = expr.max_element();
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(10.0));
+    }
+
+    #[test]
+    fn test_min() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprVector::new(&["2", "4", "1", "10"]);
+        let expr2 = ExprVector::new(&["1", "5", "1", "-10"]);
+        let r = expr1.min(&expr2);
+        let func = r.to_fn(&registry).unwrap();
+
+        if let SymbolicEvalResult::Vector(result) = func(None).unwrap() {
+            assert_eq!(result, DVector::from_vec(vec![1.0, 4.0, 1.0, -10.0]));
+        } else {
+            panic!("Expected EvalResult::Vector");
+        }
+    }
+
+    #[test]
+    fn test_max() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprVector::new(&["2", "4", "1", "10"]);
+        let expr2 = ExprVector::new(&["1", "5", "1", "-10"]);
+        let r = expr1.max(&expr2);
+        let func = r.to_fn(&registry).unwrap();
+
+        if let SymbolicEvalResult::Vector(result) = func(None).unwrap() {
+            assert_eq!(result, DVector::from_vec(vec![2.0, 5.0, 1.0, 10.0]));
+        } else {
+            panic!("Expected EvalResult::Vector");
+        }
+    }
+
+    #[test]
+    fn test_hadamard_product() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprVector::new(&["2", "4", "1", "10"]);
+        let expr2 = ExprVector::new(&["2", "4", "1", "10"]);
+        let r = expr1.hadamard_product(&expr2);
+        let func = r.to_fn(&registry).unwrap();
+
+        if let SymbolicEvalResult::Vector(result) = func(None).unwrap() {
+            assert_eq!(result, DVector::from_vec(vec![4.0, 16.0, 1.0, 100.0]));
         } else {
             panic!("Expected EvalResult::Vector");
         }

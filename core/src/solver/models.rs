@@ -15,11 +15,14 @@ const MIN_ALLOWED_TOLERANCE: f64 = 1e-18;
 pub struct ProblemSpec {
     pub objective: Option<SymbolicFunction>,
     pub residual: Option<SymbolicFunction>,
+    pub ip_residual: Option<SymbolicFunction>,
     pub jacobian: Option<SymbolicFunction>,
+    pub ip_jacobian: Option<SymbolicFunction>,
     pub hessian: Option<SymbolicFunction>,
     pub unknown_vars: Option<ExprVector>,
 
     pub merit: Option<SymbolicFunction>,
+    pub ip_merit: Option<SymbolicFunction>,
 
     pub eq_constraints: Option<SymbolicFunction>,
     pub eq_jacobian: Option<SymbolicFunction>,
@@ -43,6 +46,22 @@ impl ProblemSpec {
             ..Default::default()
         }
     }
+    pub fn new_ip(
+        residual_fn: SymbolicFn,
+        ip_residual_fn: SymbolicFn,
+        ip_jacobian_fn: SymbolicFn,
+        ip_merit_fn: SymbolicFn,
+        unknown_expr: &ExprVector,
+    ) -> Self {
+        ProblemSpec {
+            residual: Some(SymbolicFunction::new(residual_fn, unknown_expr)),
+            ip_residual: Some(SymbolicFunction::new(ip_residual_fn, unknown_expr)),
+            ip_jacobian: Some(SymbolicFunction::new(ip_jacobian_fn, unknown_expr)),
+            ip_merit: Some(SymbolicFunction::new(ip_merit_fn, unknown_expr)),
+            unknown_vars: Some(unknown_expr.clone()),
+            ..Default::default()
+        }
+    }
 
     pub fn get_params(
         &self,
@@ -58,6 +77,42 @@ impl ProblemSpec {
         })?;
 
         Ok((residual_fn, jacobian_fn, unknown_vars.as_vec()))
+    }
+
+    pub fn get_ip_params(
+        &self,
+    ) -> Result<
+        (
+            &SymbolicFunction,
+            &SymbolicFunction,
+            &SymbolicFunction,
+            Vec<ExprScalar>,
+        ),
+        ModelError,
+    > {
+        let residual_fn = self.residual.as_ref().ok_or_else(|| {
+            ModelError::IncompleteConfiguration("Residual not configured".to_string())
+        })?;
+        let ip_residual_fn = self.ip_residual.as_ref().ok_or_else(|| {
+            ModelError::IncompleteConfiguration(
+                "Interior Point Residual not configured".to_string(),
+            )
+        })?;
+        let ip_jacobian_fn = self.ip_jacobian.as_ref().ok_or_else(|| {
+            ModelError::IncompleteConfiguration(
+                "Interior Point Jacobian not configured".to_string(),
+            )
+        })?;
+        let unknown_vars = self.unknown_vars.as_ref().ok_or_else(|| {
+            ModelError::IncompleteConfiguration("Unknown variables not configured".to_string())
+        })?;
+
+        Ok((
+            residual_fn,
+            ip_residual_fn,
+            ip_jacobian_fn,
+            unknown_vars.as_vec(),
+        ))
     }
 }
 

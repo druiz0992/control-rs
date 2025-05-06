@@ -63,6 +63,12 @@ impl ExprMatrix {
         }
     }
 
+    pub fn from_vec(matrix: &Vec<Vec<ExprScalar>>) -> Self {
+        ExprMatrix {
+            matrix: matrix.to_owned(),
+        }
+    }
+
     /// returns dimensions of symbolic matrix.
     /// NOTE: a matrix [[]] will have (0,0) dimensions
     pub fn n_dims(&self) -> (usize, usize) {
@@ -81,7 +87,37 @@ impl ExprMatrix {
             matrix: converted_matrix,
         }
     }
+    pub fn zeros(dims: (usize, usize)) -> Self {
+        let (rows, cols) = dims;
+        let zero_matrix = vec![vec![ExprScalar::new("0"); cols]; rows];
+        ExprMatrix {
+            matrix: zero_matrix,
+        }
+    }
 
+    pub fn hstack(mat: &[ExprMatrix]) -> Self {
+        let mut result = Vec::new();
+        let n_rows = mat.first().map_or(0, |m| m.n_dims().0);
+
+        for row_idx in 0..n_rows {
+            let mut new_row = Vec::new();
+            for matrix in mat {
+                if row_idx < matrix.matrix.len() {
+                    new_row.extend(matrix.matrix[row_idx].clone());
+                }
+            }
+            result.push(new_row);
+        }
+
+        ExprMatrix { matrix: result }
+    }
+    pub fn vstack(mat: &[ExprMatrix]) -> Self {
+        let mut result = Vec::new();
+        for matrix in mat {
+            result.extend(matrix.matrix.clone());
+        }
+        ExprMatrix { matrix: result }
+    }
     pub fn add(&self, other: &Self) -> Self {
         let result_matrix = self
             .matrix
@@ -217,45 +253,78 @@ impl ExprMatrix {
     ) -> ExprMatrix {
         let (n_constraints, _) = jacobian.n_dims();
         let (n_unknowns, _) = hessian.n_dims();
-        let regularization_matrix = ExprMatrix::identity(n_unknowns).scalef(regularization_factor);
-        let regularized_hessian = hessian.add(&regularization_matrix);
-        let mut result_matrix = vec![
-            vec![ExprScalar::default(); n_unknowns + n_constraints];
-            n_unknowns + n_constraints
-        ];
+
+        // Top-left: H + εI
+        let reg_hessian =
+            hessian.add(&ExprMatrix::identity(n_unknowns).scalef(regularization_factor));
+
+        // Shortcut if unconstrained
         if n_constraints == 0 {
-            return hessian.clone();
+            return reg_hessian.clone();
         }
 
-        // Top-left: regularized_hessian
-        for (i, row) in result_matrix.iter_mut().enumerate().take(n_unknowns) {
-            row[..n_unknowns].clone_from_slice(&regularized_hessian.matrix[i][..n_unknowns]);
-        }
+        // Top-right: Jᵀ
+        let jt = jacobian.transpose();
 
-        // Top-right: transpose of jacobian
-        for (i, row) in result_matrix.iter_mut().enumerate().take(n_unknowns) {
-            for j in 0..n_constraints {
-                row[n_unknowns + j] = jacobian.matrix[j][i].clone();
-            }
-        }
+        // Bottom-left: J
+        let j = jacobian.clone();
 
-        // Bottom-left: jacobian
-        for i in 0..n_constraints {
-            for j in 0..n_unknowns {
-                result_matrix[n_unknowns + i][j] = jacobian.matrix[i][j].clone();
-            }
-        }
+        // Bottom-right: -εI (for stabilization)
+        let minus_reg = ExprMatrix::identity(n_constraints).scalef(-regularization_factor);
 
-        // Bottom-right: regularization matrix
-        for i in 0..n_constraints {
-            for j in 0..n_constraints {
-                result_matrix[n_unknowns + i][n_unknowns + j] =
-                    regularization_matrix.matrix[i][j].scalef(-1.0).clone();
-            }
-        }
+        // Horizontally stack top and bottom blocks
+        let top = ExprMatrix::hstack(&[reg_hessian, jt]);
+        let bottom = ExprMatrix::hstack(&[j, minus_reg]);
 
-        ExprMatrix {
-            matrix: result_matrix,
+        // Final vertical stack
+        ExprMatrix::vstack(&[top, bottom])
+    }
+
+    pub fn build_ip_ktt_jacobian(
+        hessian: &ExprMatrix,
+        eq_jacobian: &ExprMatrix,
+        ineq_jacobian: &ExprMatrix,
+        scaling: &ExprMatrix,
+        regularization_factor: f64,
+    ) -> ExprMatrix {
+        let (n_vars, _) = hessian.n_dims();
+        let (n_eq, _) = eq_jacobian.n_dims();
+        let (n_ineq, _) = ineq_jacobian.n_dims();
+
+        let reg_hessian = hessian.add(&ExprMatrix::identity(n_vars).scalef(regularization_factor));
+        let g_scaled = ineq_jacobian.transpose().matmul(scaling);
+        let minus_scaling = scaling.scalef(-1.0);
+
+        let top = if n_eq > 0 {
+            ExprMatrix::hstack(&[reg_hessian, eq_jacobian.transpose(), g_scaled])
+        } else {
+            ExprMatrix::hstack(&[reg_hessian, g_scaled])
+        };
+
+        let middle = if n_eq > 0 {
+            Some(ExprMatrix::hstack(&[
+                eq_jacobian.clone(),
+                ExprMatrix::zeros((n_eq, n_eq)),
+                ExprMatrix::zeros((n_eq, n_ineq)),
+            ]))
+        } else {
+            None
+        };
+
+        let bottom = if n_eq > 0 {
+            ExprMatrix::hstack(&[
+                ineq_jacobian.clone(),
+                ExprMatrix::zeros((n_ineq, n_eq)),
+                minus_scaling,
+            ])
+        } else {
+            ExprMatrix::hstack(&[ineq_jacobian.clone(), minus_scaling])
+        };
+
+        if n_eq > 0 {
+            ExprMatrix::vstack(&[top, middle.unwrap(), bottom])
+        } else {
+            ExprMatrix::vstack(&[top, bottom])
         }
     }
 }

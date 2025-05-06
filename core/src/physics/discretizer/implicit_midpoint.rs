@@ -1,7 +1,6 @@
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::ModelError;
 use crate::physics::traits::{Describable, Discretizer, Dynamics, State};
-use crate::solver::RootSolver;
 use crate::solver::newton::NewtonSolver;
 use std::sync::Arc;
 
@@ -48,9 +47,10 @@ where
             .insert_vec_as_vars("next_state", &state.as_vec())
             .map_err(|e| ModelError::Symbolic(e.to_string()))?;
 
-        Ok(D::State::from_vec(
-            self.solver.solve(&state.as_vec(), &self.registry)?,
-        ))
+        let history = self.solver.solve(&state.as_vec(), &self.registry)?;
+        Ok(D::State::from_vec(history.last().cloned().ok_or_else(
+            || ModelError::SolverError(String::from("Solver failed")),
+        )?))
     }
 }
 

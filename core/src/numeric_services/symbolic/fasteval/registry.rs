@@ -55,8 +55,9 @@ impl ExprRegistry {
     }
 
     pub fn insert_vars(&self, expr: &[ExprScalar], vals: &[f64]) {
-        for (name, value) in expr.iter().zip(vals.iter()) {
-            self.insert(name.as_str(), ExprRecord::Var(*value));
+        for (i, name) in expr.iter().enumerate() {
+            let value = if i < vals.len() { vals[i] } else { 0.0 };
+            self.insert(name.as_str(), ExprRecord::Var(value));
         }
     }
 
