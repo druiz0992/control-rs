@@ -1,5 +1,4 @@
-use crate::numeric_services::symbolic::SymbolicEvalResult;
-use crate::physics::ModelError;
+use crate::numeric_services::symbolic::{SymbolicError, SymbolicEvalResult, TryIntoEvalResult};
 use std::ops::{Add, Div, Mul, Sub};
 
 /// A trait representing a state in a physical system, providing methods for
@@ -40,22 +39,15 @@ pub trait State:
     fn labels() -> &'static [&'static str];
 }
 
-pub trait FromSymbolicEvalResult: Sized {
-    fn from_symbolic(result: SymbolicEvalResult) -> Result<Self, ModelError>;
-}
-
-impl<S: State> FromSymbolicEvalResult for S {
-    fn from_symbolic(value: SymbolicEvalResult) -> Result<Self, ModelError> {
-        match value {
-            SymbolicEvalResult::Vector(expr) => {
+impl<S: State> TryIntoEvalResult<S> for Result<SymbolicEvalResult, SymbolicError> {
+    fn try_into_eval_result(self) -> Result<S, SymbolicError> {
+        match self {
+            Ok(SymbolicEvalResult::Vector(expr)) => {
                 let vec: Vec<f64> = expr.iter().cloned().collect();
                 Ok(S::from_vec(vec))
             }
-            SymbolicEvalResult::Matrix(m) => Err(ModelError::Unexpected(format!(
-                "Expecting a vector, received matrix {}",
-                m
-            ))),
-            SymbolicEvalResult::Scalar(s) => Err(ModelError::Unexpected(format!("Expecting a vector, received a scalar {}", s)))
+            Ok(_) => Err(SymbolicError::Other("Expected vector".into())),
+            Err(e) => Err(SymbolicError::Other(e.to_string())),
         }
     }
 }

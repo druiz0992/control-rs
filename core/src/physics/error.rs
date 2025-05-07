@@ -1,3 +1,5 @@
+use crate::numeric_services::symbolic::SymbolicError;
+
 #[derive(Debug)]
 pub enum ModelError {
     Symbolic(String),
@@ -7,4 +9,18 @@ pub enum ModelError {
     SolverError(String),
     ConfigError(String),
     Other(String),
+}
+
+impl From<SymbolicError> for ModelError {
+    fn from(value: SymbolicError) -> Self {
+        match value {
+            SymbolicError::ParseError => ModelError::Symbolic("Parse error".into()),
+            SymbolicError::ExprNotFound(e) => ModelError::Symbolic(e),
+            SymbolicError::EvaluationError => ModelError::EvaluationError,
+            SymbolicError::UnexpectedResultType => {
+                ModelError::Unexpected("Unexpected result type".into())
+            }
+            SymbolicError::Other(e) => ModelError::Other(e),
+        }
+    }
 }

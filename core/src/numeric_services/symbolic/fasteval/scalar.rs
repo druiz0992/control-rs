@@ -67,6 +67,10 @@ impl ExprScalar {
         Self::new(format!("({})", self.0))
     }
 
+    pub fn as_vec(&self) -> ExprVector {
+        ExprVector::from_vec(vec![self.clone()])
+    }
+
     pub fn add(&self, other: &Self) -> Self {
         Self::new(format!("{} + {}", self.0, other.0))
     }

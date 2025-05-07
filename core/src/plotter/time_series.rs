@@ -1,8 +1,9 @@
 use crate::numeric_services::symbolic::{
-    ExprRegistry, ExprScalar, ExprVector, SymbolicEvalResult, SymbolicExpr, SymbolicFunction,
+    ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
 };
 use crate::physics::traits::State;
 use crate::physics::{Energy, ModelError};
+use nalgebra::DVector;
 use plotters::prelude::*;
 use std::sync::Arc;
 
@@ -142,26 +143,15 @@ pub fn plot_minimization(
     let y_range: Vec<f64> = (0..=60).map(|i| i as f64 * step).collect();
 
     let mut cost_matrix = Vec::new();
-    let cost_fn = SymbolicFunction::new(
-        cost_function_expr
-            .to_fn(registry)
-            .map_err(|e| ModelError::Symbolic(e.to_string()))?,
-        unknown_expr,
-    );
+    let cost_fn = SymbolicFunction::new(cost_function_expr.to_fn(registry)?, unknown_expr);
 
     for &x1 in &x_range {
         let mut row = Vec::new();
         for &x2 in &y_range {
-            match cost_fn.eval(&[x1, x2]) {
-                Ok(SymbolicEvalResult::Scalar(val)) => {
-                    row.push(val);
-                }
-                _ => {
-                    return Err(ModelError::SolverError(
-                        "Failed to evaluate cost function".to_string(),
-                    ));
-                }
-            }
+            cost_fn
+                .eval(&[x1, x2])
+                .try_into_eval_result()
+                .map(|val: f64| row.push(val))?;
         }
         cost_matrix.push(row);
     }
@@ -196,27 +186,8 @@ pub fn plot_minimization(
     }
 
     if let Some(eq_expr) = eq_constraints_expr {
-        let eq_fn = SymbolicFunction::new(
-            eq_expr // Assume first constraint for now
-                .to_fn(registry)
-                .map_err(|e| ModelError::Symbolic(e.to_string()))?,
-            unknown_expr,
-        );
-        let n_eq = eq_expr.len();
-        let mut constraint_points: Vec<Vec<(f64, f64)>> = vec![Vec::new(); n_eq];
-        for &x1 in &x_range {
-            for &x2 in &y_range {
-                if let Ok(SymbolicEvalResult::Vector(val)) = eq_fn.eval(&[x1, x2]) {
-                    let res = val.data.as_vec();
-                    for i in 0..n_eq {
-                        if res[i].abs() < 0.005 {
-                            // Tolerance for "zero"
-                            constraint_points[i].push((x1, x2));
-                        }
-                    }
-                }
-            }
-        }
+        let constraint_points =
+            build_constraints(&eq_expr, unknown_expr, registry, (-60, 60, step))?;
 
         for (i, points) in constraint_points.iter().enumerate() {
             chart
@@ -232,29 +203,8 @@ pub fn plot_minimization(
     }
 
     if let Some(ineq_expr) = ineq_constraints_expr {
-        let ineq_fn = SymbolicFunction::new(
-            ineq_expr // Assume first constraint for now
-                .to_fn(registry)
-                .map_err(|e| ModelError::Symbolic(e.to_string()))?,
-            unknown_expr,
-        );
-
-        let n_ineq = ineq_expr.len();
-        let mut constraint_points: Vec<Vec<(f64, f64)>> = vec![Vec::new(); n_ineq];
-        for &x1 in &x_range {
-            for &x2 in &y_range {
-                if let Ok(SymbolicEvalResult::Vector(val)) = ineq_fn.eval(&[x1, x2]) {
-                    let res = val.data.as_vec();
-                    for i in 0..n_ineq {
-                        if res[i].abs() < 0.005 {
-                            // Tolerance for "zero"
-                            constraint_points[i].push((x1, x2));
-                        }
-                    }
-                }
-            }
-        }
-
+        let constraint_points =
+            build_constraints(&ineq_expr, unknown_expr, registry, (-60, 60, step))?;
         for (i, points) in constraint_points.iter().enumerate() {
             chart
                 .draw_series(points.iter().map(|&(x, y)| {
@@ -264,7 +214,7 @@ pub fn plot_minimization(
                             (x + 0.005, y + 0.01), // Top-right point of triangle
                             (x - 0.005, y + 0.01), // Top-left point of triangle
                         ],
-                        &BLACK, // Fill color for the triangle
+                        BLACK, // Fill color for the triangle
                     )
                 }))
                 .map_err(|e| ModelError::Other(e.to_string()))?
@@ -339,4 +289,32 @@ pub fn plot_minimization(
         .map_err(|e| ModelError::Other(e.to_string()))?;
 
     Ok(())
+}
+
+fn build_constraints(
+    constraint_expr: &ExprVector,
+    unknown_expr: &ExprVector,
+    registry: &Arc<ExprRegistry>,
+    range: (i32, i32, f64),
+) -> Result<Vec<Vec<(f64, f64)>>, ModelError> {
+    let constraint_fn = SymbolicFunction::new(
+        constraint_expr // Assume first constraint for now
+            .to_fn(registry)?,
+        unknown_expr,
+    );
+    let n_constraints = constraint_expr.len();
+    let mut constraint_points: Vec<Vec<(f64, f64)>> = vec![Vec::new(); n_constraints];
+    let (min_range, max_range, step) = range;
+    let x_range: Vec<f64> = (min_range..=0).map(|i| i as f64 * step).collect();
+    let y_range: Vec<f64> = (0..=max_range).map(|i| i as f64 * step).collect();
+    for &x1 in &x_range {
+        for &x2 in &y_range {
+            let res: DVector<f64> = constraint_fn.eval(&[x1, x2]).try_into_eval_result()?;
+            res.iter()
+                .zip(constraint_points.iter_mut())
+                .filter(|(val, _)| val.abs() < 0.005)
+                .for_each(|(_, points)| points.push((x1, x2)));
+        }
+    }
+    Ok(constraint_points)
 }

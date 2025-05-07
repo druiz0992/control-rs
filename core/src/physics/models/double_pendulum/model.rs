@@ -37,10 +37,9 @@ impl DoublePendulum {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::numeric_services::symbolic::{ExprRegistry, SymbolicExpr};
+    use crate::numeric_services::symbolic::{ExprRegistry, SymbolicExpr, TryIntoEvalResult};
     use crate::physics::models::DoublePendulumState;
     use crate::physics::models::dynamics::Dynamics;
-    use crate::physics::models::state::FromSymbolicEvalResult;
     use proptest::prelude::*;
     use std::f64::consts::PI;
     use std::sync::Arc;
@@ -105,7 +104,7 @@ mod tests {
                 .dynamics_symbolic(state_symbol, &registry)
                 .to_fn(&registry)
                 .unwrap();
-            let new_state_symbol: DoublePendulumState = FromSymbolicEvalResult::from_symbolic(dynamics_func(None).unwrap()).unwrap();
+            let new_state_symbol: DoublePendulumState = dynamics_func(None).try_into_eval_result().unwrap();
 
             // Compare numeric and symbolic outputs approximately
             let tol = 1e-6; // tolerance for floating point comparison
