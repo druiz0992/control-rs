@@ -1,4 +1,4 @@
-use super::{ExprScalar, error::SymbolicError};
+use super::{ExprScalar, error::SymbolicError, ports::TryIntoEvalResult};
 use nalgebra::{DMatrix, DVector};
 use std::collections::HashMap;
 
@@ -16,6 +16,36 @@ impl std::fmt::Display for SymbolicEvalResult {
             SymbolicEvalResult::Scalar(value) => write!(f, "{:?}", value),
             SymbolicEvalResult::Vector(values) => write!(f, "{:?}", values),
             SymbolicEvalResult::Matrix(values) => write!(f, "{:?}", values),
+        }
+    }
+}
+
+impl TryIntoEvalResult<f64> for Result<SymbolicEvalResult, SymbolicError> {
+    fn try_into_eval_result(self) -> Result<f64, SymbolicError> {
+        match self {
+            Ok(SymbolicEvalResult::Scalar(x)) => Ok(x),
+            Ok(_) => Err(SymbolicError::Other("Expected scalar".into())),
+            Err(e) => Err(SymbolicError::Other(e.to_string())),
+        }
+    }
+}
+
+impl TryIntoEvalResult<DVector<f64>> for Result<SymbolicEvalResult, SymbolicError> {
+    fn try_into_eval_result(self) -> Result<DVector<f64>, SymbolicError> {
+        match self {
+            Ok(SymbolicEvalResult::Vector(v)) => Ok(v),
+            Ok(_) => Err(SymbolicError::Other("Expected vector".into())),
+            Err(e) => Err(SymbolicError::Other(e.to_string())),
+        }
+    }
+}
+
+impl TryIntoEvalResult<DMatrix<f64>> for Result<SymbolicEvalResult, SymbolicError> {
+    fn try_into_eval_result(self) -> Result<DMatrix<f64>, SymbolicError> {
+        match self {
+            Ok(SymbolicEvalResult::Matrix(m)) => Ok(m),
+            Ok(_) => Err(SymbolicError::Other("Expected matrix".into())),
+            Err(e) => Err(SymbolicError::Other(e.to_string())),
         }
     }
 }

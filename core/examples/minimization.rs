@@ -25,6 +25,8 @@ fn get_cost_expr(unknown_expr: &ExprVector) -> ExprScalar {
     cost.add(&nonlinear).wrap()
 }
 
+/// c1: norm(x) - 0.5 = 0
+/// c2: x1 + x2 = 0
 fn get_eq_constraints_expr(unknown_expr: &ExprVector) -> ExprVector {
     let constraint1 = unknown_expr
         .norm2()
@@ -36,6 +38,7 @@ fn get_eq_constraints_expr(unknown_expr: &ExprVector) -> ExprVector {
     ExprVector::from_vec(vec![constraint1, constraint2])
 }
 
+/// c1: x1^2 + 2 * x2^2 - 0.5 >= 0
 fn get_ineq_constraints_expr(unknown_expr: &ExprVector) -> ExprVector {
     let x1_sq = unknown_expr.get(0).unwrap().pow(2.0);
     let x2_sq = unknown_expr.get(1).unwrap().pow(2.0);
@@ -54,6 +57,7 @@ fn main() {
     let mut initial_guess = vec![-0.1, 0.5];
     let eq_constraints_expr = get_eq_constraints_expr(&unknown_expr);
     let ineq_constraints_expr = get_ineq_constraints_expr(&unknown_expr);
+    // set optimization to 1 iterations so that we can draw convergence
     let mut options = OptimizerConfig::default();
     options.set_max_iters(1).unwrap();
 

@@ -34,16 +34,12 @@ impl LineSearch {
         start_point: &[f64],
     ) -> Result<f64, ModelError> {
         let mut alpha = 1.0;
-        let current_merit = merit_fn
-            .eval(start_point)
-            .map_err(|_| ModelError::EvaluationError)?;
+        let current_merit = merit_fn.eval(start_point)?;
 
         let mut new_point = step_from(search_direction, start_point, alpha);
 
         for _ in 0..self.max_iters {
-            let trial_merit = merit_fn
-                .eval(new_point.as_slice())
-                .map_err(|_| ModelError::EvaluationError)?;
+            let trial_merit = merit_fn.eval(new_point.as_slice())?;
 
             if trial_merit < current_merit {
                 return Ok(alpha);

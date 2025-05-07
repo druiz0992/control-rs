@@ -12,3 +12,4 @@ pub use fasteval::record::ExprRecord;
 pub use fasteval::registry::ExprRegistry;
 pub use fasteval::scalar::ExprScalar;
 pub use fasteval::vector::ExprVector;
+pub use ports::TryIntoEvalResult;

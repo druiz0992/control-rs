@@ -1,5 +1,7 @@
 use crate::{
-    numeric_services::symbolic::{ExprScalar, ExprVector, SymbolicFn, SymbolicFunction},
+    numeric_services::symbolic::{
+        ExprMatrix, ExprScalar, ExprVector, SymbolicFn, SymbolicFunction,
+    },
     physics::ModelError,
 };
 
@@ -13,16 +15,13 @@ const MIN_ALLOWED_TOLERANCE: f64 = 1e-18;
 
 #[derive(Default)]
 pub struct ProblemSpec {
-    pub objective: Option<SymbolicFunction>,
     pub residual: Option<SymbolicFunction>,
     pub ip_residual: Option<SymbolicFunction>,
     pub jacobian: Option<SymbolicFunction>,
-    pub ip_jacobian: Option<SymbolicFunction>,
     pub hessian: Option<SymbolicFunction>,
     pub unknown_vars: Option<ExprVector>,
 
     pub merit: Option<SymbolicFunction>,
-    pub ip_merit: Option<SymbolicFunction>,
 
     pub eq_constraints: Option<SymbolicFunction>,
     pub eq_jacobian: Option<SymbolicFunction>,
@@ -56,8 +55,8 @@ impl ProblemSpec {
         ProblemSpec {
             residual: Some(SymbolicFunction::new(residual_fn, unknown_expr)),
             ip_residual: Some(SymbolicFunction::new(ip_residual_fn, unknown_expr)),
-            ip_jacobian: Some(SymbolicFunction::new(ip_jacobian_fn, unknown_expr)),
-            ip_merit: Some(SymbolicFunction::new(ip_merit_fn, unknown_expr)),
+            jacobian: Some(SymbolicFunction::new(ip_jacobian_fn, unknown_expr)),
+            merit: Some(SymbolicFunction::new(ip_merit_fn, unknown_expr)),
             unknown_vars: Some(unknown_expr.clone()),
             ..Default::default()
         }
@@ -98,7 +97,7 @@ impl ProblemSpec {
                 "Interior Point Residual not configured".to_string(),
             )
         })?;
-        let ip_jacobian_fn = self.ip_jacobian.as_ref().ok_or_else(|| {
+        let ip_jacobian_fn = self.jacobian.as_ref().ok_or_else(|| {
             ModelError::IncompleteConfiguration(
                 "Interior Point Jacobian not configured".to_string(),
             )
@@ -263,4 +262,14 @@ impl Default for OptimizerConfig {
             gauss_newton: true,
         }
     }
+}
+
+pub struct OptimizerParams {
+    pub gradient: ExprVector,
+    pub eq_jacobian: ExprMatrix,
+    pub hessian: ExprMatrix,
+    pub eq_constraints: ExprVector,
+    pub ineq_constraints: ExprVector,
+    pub mus: ExprVector,
+    pub lambdas: ExprVector,
 }

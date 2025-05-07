@@ -1,9 +1,8 @@
-
 use super::error::SymbolicError;
 use super::models::SymbolicFn;
 use std::sync::Arc;
 
-/// A trait that defines a registry for managing symbolic expressions. 
+/// A trait that defines a registry for managing symbolic expressions.
 /// This registry is responsible for storing and retrieving symbolic expressions.
 ///
 /// # Associated Types
@@ -56,4 +55,6 @@ where
     }
 }
 
-
+pub trait TryIntoEvalResult<T> {
+    fn try_into_eval_result(self) -> Result<T, SymbolicError>;
+}
