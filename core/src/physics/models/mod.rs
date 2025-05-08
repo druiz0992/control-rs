@@ -1,7 +1,10 @@
+pub mod cart_pole;
 pub mod double_pendulum;
 pub mod dynamics;
 pub mod state;
 
+pub use cart_pole::CartPole;
+pub use cart_pole::state::CartPoleState;
 pub use double_pendulum::DoublePendulum;
 pub use double_pendulum::state::DoublePendulumState;
 pub use dynamics::Dynamics;

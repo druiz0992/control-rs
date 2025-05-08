@@ -13,8 +13,14 @@ impl<D> Discretizer<D> for ForwardEuler
 where
     D: Dynamics,
 {
-    fn step(&mut self, model: &D, state: &D::State, dt: f64) -> Result<D::State, ModelError> {
-        Ok(state.clone() + model.dynamics(state) * dt)
+    fn step(
+        &mut self,
+        model: &D,
+        state: &D::State,
+        input: Option<&[f64]>,
+        dt: f64,
+    ) -> Result<D::State, ModelError> {
+        Ok(state.clone() + model.dynamics(state, input) * dt)
     }
 }
 

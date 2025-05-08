@@ -23,7 +23,7 @@ impl BackwardEuler {
 
         let dt_expr = ExprScalar::new("dt");
         let dyn_next_state = model
-            .dynamics_symbolic(next_state.clone().wrap(), &registry)
+            .dynamics_symbolic(&next_state.wrap(), &registry)
             .scale(&dt_expr);
 
         let residual = next_state.sub(&current_state).sub(&dyn_next_state);
@@ -37,7 +37,13 @@ impl<D> Discretizer<D> for BackwardEuler
 where
     D: Dynamics,
 {
-    fn step(&mut self, _model: &D, state: &D::State, dt: f64) -> Result<D::State, ModelError> {
+    fn step(
+        &mut self,
+        _model: &D,
+        state: &D::State,
+        _input: Option<&[f64]>,
+        dt: f64,
+    ) -> Result<D::State, ModelError> {
         self.registry.insert_var("dt", dt);
         self.registry.insert_vec_as_vars("state", &state.as_vec())?;
         self.registry

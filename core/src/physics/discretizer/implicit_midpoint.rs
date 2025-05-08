@@ -14,15 +14,14 @@ pub struct ImplicitMidpoint {
 impl ImplicitMidpoint {
     pub fn new<D: Dynamics>(model: &D, registry: Arc<ExprRegistry>) -> Result<Self, ModelError> {
         let dt_expr = ExprScalar::new("dt");
-        let current_state = registry
-            .get_vector("state")?;
+        let current_state = registry.get_vector("state")?;
         let next_state = current_state.build_next();
         registry.insert_vector("next_state", next_state.clone());
 
         let mid_state = current_state.add(&next_state).wrap().scalef(0.5).wrap();
 
         let dyn_mid_state = model
-            .dynamics_symbolic(mid_state.clone(), &registry)
+            .dynamics_symbolic(&mid_state,  &registry)
             .wrap()
             .scale(&dt_expr);
 
@@ -37,10 +36,15 @@ impl<D> Discretizer<D> for ImplicitMidpoint
 where
     D: Dynamics,
 {
-    fn step(&mut self, _model: &D, state: &D::State, dt: f64) -> Result<D::State, ModelError> {
+    fn step(
+        &mut self,
+        _model: &D,
+        state: &D::State,
+        _input: Option<&[f64]>,
+        dt: f64,
+    ) -> Result<D::State, ModelError> {
         self.registry.insert_var("dt", dt);
-        self.registry
-            .insert_vec_as_vars("state", &state.as_vec())?;
+        self.registry.insert_vec_as_vars("state", &state.as_vec())?;
         self.registry
             .insert_vec_as_vars("next_state", &state.as_vec())?;
 

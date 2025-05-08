@@ -9,7 +9,13 @@ use crate::physics::ModelError;
 use crate::physics::traits::Dynamics;
 
 pub trait Discretizer<D: Dynamics> {
-    fn step(&mut self, dynamics: &D, state: &D::State, dt: f64) -> Result<D::State, ModelError>;
+    fn step(
+        &mut self,
+        dynamics: &D,
+        state: &D::State,
+        input: Option<&[f64]>,
+        dt: f64,
+    ) -> Result<D::State, ModelError>;
 }
 
 pub use backward_euler::BackwardEuler;
