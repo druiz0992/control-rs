@@ -18,11 +18,17 @@ impl<D> Discretizer<D> for RK4
 where
     D: Dynamics,
 {
-    fn step(&mut self, model: &D, state: &D::State, dt: f64) -> Result<D::State, ModelError> {
-        let k1 = model.dynamics(state);
-        let k2 = model.dynamics(&(state.clone() + k1.clone() * (dt * 0.5)));
-        let k3 = model.dynamics(&(state.clone() + k2.clone() * (dt * 0.5)));
-        let k4 = model.dynamics(&(state.clone() + k3.clone() * dt));
+    fn step(
+        &mut self,
+        model: &D,
+        state: &D::State,
+        input: Option<&[f64]>,
+        dt: f64,
+    ) -> Result<D::State, ModelError> {
+        let k1 = model.dynamics(state, input);
+        let k2 = model.dynamics(&(state.clone() + k1.clone() * (dt * 0.5)), input);
+        let k3 = model.dynamics(&(state.clone() + k2.clone() * (dt * 0.5)), input);
+        let k4 = model.dynamics(&(state.clone() + k3.clone() * dt), input);
 
         Ok(state.clone() + (k1 + k2 * 2.0 + k3 * 2.0 + k4) * (dt / 6.0))
     }
@@ -46,15 +52,15 @@ impl RK4Symbolic {
         let dt2 = dt.scalef(0.5).wrap();
         let dt6 = dt.scalef(1.0 / 6.0).wrap();
 
-        let k1_s = model.dynamics_symbolic(state.clone(), &registry).wrap();
+        let k1_s = model.dynamics_symbolic(&state, &registry).wrap();
         let k2_s = model
-            .dynamics_symbolic(k1_s.scale(&dt2).add(&state).wrap(), &registry)
+            .dynamics_symbolic(&k1_s.scale(&dt2).add(&state).wrap(), &registry)
             .wrap();
         let k3_s = model
-            .dynamics_symbolic(k2_s.scale(&dt2).add(&state).wrap(), &registry)
+            .dynamics_symbolic(&k2_s.scale(&dt2).add(&state).wrap(), &registry)
             .wrap();
         let k4_s = model
-            .dynamics_symbolic(k3_s.scale(&dt).add(&state).wrap(), &registry)
+            .dynamics_symbolic(&k3_s.scale(&dt).add(&state).wrap(), &registry)
             .wrap();
         let mut result_s = k1_s
             .add(&k4_s)
@@ -65,7 +71,12 @@ impl RK4Symbolic {
         result_s = result_s.add(&state);
         let step_func = result_s.to_fn(&registry)?;
 
-        let step_func = SymbolicFunction::new(step_func, &state.as_vec());
+        // if model allows inputs, redefine vars to include inputs
+        let mut vars = state.as_vec();
+        if let Ok(input) = registry.get_vector("input") {
+            vars.extend_from_slice(&input.as_vec());
+        }
+        let step_func = SymbolicFunction::new(step_func, &vars);
 
         Ok(Self {
             step_func,
@@ -78,12 +89,21 @@ impl<D> Discretizer<D> for RK4Symbolic
 where
     D: Dynamics,
 {
-    fn step(&mut self, _model: &D, state: &D::State, dt: f64) -> Result<D::State, ModelError> {
+    fn step(
+        &mut self,
+        _model: &D,
+        state: &D::State,
+        input: Option<&[f64]>,
+        dt: f64,
+    ) -> Result<D::State, ModelError> {
         self.registry.insert_var("dt", dt);
-        Ok(self
-            .step_func
-            .eval(&state.as_vec())
-            .try_into_eval_result()?)
+
+        let mut vals = state.as_vec();
+        if let Some(u) = input {
+            vals.extend_from_slice(u);
+        }
+
+        Ok(self.step_func.eval(&vals).try_into_eval_result()?)
     }
 }
 
@@ -97,17 +117,18 @@ impl Describable for RK4Symbolic {
 mod tests {
     use super::*;
     use crate::physics::models::{DoublePendulum, DoublePendulumState};
+    use crate::utils::within_tolerance;
     use proptest::prelude::*;
     use std::f64::consts::PI;
 
     #[test]
     fn test_rk4_step() {
         let mut rk4 = RK4::new();
-        let dynamics = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, None);
+        let dynamics = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, 0.0, None);
         let initial_state = DoublePendulumState::new(0.0, 0.0, 0.0, 0.0);
         let dt = 0.1;
 
-        let next_state = rk4.step(&dynamics, &initial_state, dt).unwrap();
+        let next_state = rk4.step(&dynamics, &initial_state, None, dt).unwrap();
 
         assert!((next_state.omega1 - 0.0).abs() < 1e-6);
     }
@@ -115,7 +136,7 @@ mod tests {
     #[test]
     fn test_rk4_symbolic_step() {
         let registry = Arc::new(ExprRegistry::new());
-        let dynamics = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, Some(&registry));
+        let dynamics = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, 0.0, Some(&registry));
 
         let theta1 = 0.0;
         let omega1 = 0.0;
@@ -126,7 +147,7 @@ mod tests {
         let mut rk4_symbolic = RK4Symbolic::new(&dynamics, Arc::clone(&registry)).unwrap();
         let dt = 0.1;
 
-        let next_state = rk4_symbolic.step(&dynamics, &state, dt).unwrap();
+        let next_state = rk4_symbolic.step(&dynamics, &state, None, dt).unwrap();
 
         assert!((next_state.omega1 - 0.0).abs() < 1e-6);
     }
@@ -141,10 +162,11 @@ mod tests {
             m1 in 0.1f64..10.0,
             m2 in 0.1f64..10.0,
             l1 in 0.1f64..5.0,
-            l2 in 0.1f64..5.0
+            l2 in 0.1f64..5.0,
+            air_resistance_coeff in 0.0f64..5.0
         ) {
             let registry = Arc::new(ExprRegistry::new());
-            let dynamics = DoublePendulum::new(m1, m2, l1, l2, Some(&registry));
+            let dynamics = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry));
             let state = DoublePendulumState::new(theta1, omega1, theta2, omega2);
             let mut rk4_symbolic = RK4Symbolic::new(&dynamics, Arc::clone(&registry)).unwrap();
             let mut rk4 = RK4::new();
@@ -154,13 +176,13 @@ mod tests {
             // Compare numeric and symbolic outputs approximately
             let tol = 1e-6; // tolerance for floating point comparison
 
-            let next_state_symbolic = rk4_symbolic.step(&dynamics, &state, dt).unwrap();
-            let next_state = rk4.step(&dynamics, &state, dt).unwrap();
+            let next_state_symbolic = rk4_symbolic.step(&dynamics, &state, None, dt).unwrap();
+            let next_state = rk4.step(&dynamics, &state, None, dt).unwrap();
 
-            assert!((next_state.theta1 - next_state_symbolic.theta1).abs() < tol, "theta1 mismatch");
-            assert!((next_state.omega1 - next_state_symbolic.omega1).abs() < tol, "omega1 mismatch");
-            assert!((next_state.theta2 - next_state_symbolic.theta2).abs() < tol, "theta2 mismatch");
-            assert!((next_state.omega2 - next_state_symbolic.omega2).abs() < tol, "omega2 mismatch");
+            assert!(within_tolerance(next_state.theta1, next_state_symbolic.theta1, tol), "theta1 mismatch");
+            assert!(within_tolerance(next_state.omega1, next_state_symbolic.omega1, tol), "omega1 mismatch");
+            assert!(within_tolerance(next_state.theta2, next_state_symbolic.theta2, tol), "theta2 mismatch");
+            assert!(within_tolerance(next_state.omega2, next_state_symbolic.omega2, tol), "omega2 mismatch");
         }
     }
 }

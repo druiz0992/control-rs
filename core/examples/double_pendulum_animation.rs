@@ -11,13 +11,14 @@ async fn main() {
     let m2 = 1.0;
     let l1 = 1.0;
     let l2 = 1.0;
+    let air_resistance_coeff = 0.2;
 
     let theta1 = PI;
     let omega1 = 0.0;
-    let theta2 = PI / 1.8;
+    let theta2 = PI - 0.1;
     let omega2 = 0.0;
 
-    let model = DoublePendulum::new(m1, m2, l1, l2, None);
+    let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, None);
     let state0 = DoublePendulumState::new(theta1, omega1, theta2, omega2);
 
     let integrator = RK4::new();

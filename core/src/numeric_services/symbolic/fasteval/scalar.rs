@@ -5,9 +5,12 @@ use crate::numeric_services::symbolic::fasteval::{ExprMatrix, ExprRecord, ExprVe
 use crate::numeric_services::symbolic::models::{SymbolicEvalResult, SymbolicFn};
 use crate::numeric_services::symbolic::ports::{SymbolicExpr, SymbolicRegistry};
 use fasteval::parser::{DEFAULT_EXPR_DEPTH_LIMIT, DEFAULT_EXPR_LEN_LIMIT};
-use fasteval::{Compiler, Evaler, Parser, Slab};
+use fasteval::{Compiler, Error, Evaler, Instruction, Parser, Slab};
 use std::collections::HashMap;
 use std::sync::Arc;
+
+const SLAB_DEFAULT_CAPACITY: usize = 4096;
+const SLAB_MAX_CAPACITY: usize = 65536;
 
 /// A symbolic scalar expression represented as a string. This struct provides
 /// methods to construct, manipulate, and evaluate symbolic expressions.
@@ -188,6 +191,33 @@ impl std::fmt::Display for ExprScalar {
     }
 }
 
+fn compile_with_retry(expr_str: &str) -> Result<(Instruction, Slab), SymbolicError> {
+    let parser = Parser {
+        expr_depth_limit: DEFAULT_EXPR_DEPTH_LIMIT,
+        expr_len_limit: DEFAULT_EXPR_LEN_LIMIT * 100,
+    };
+    let mut capacity = SLAB_DEFAULT_CAPACITY;
+    let mut slab = Slab::with_capacity(capacity);
+
+    loop {
+        if capacity > SLAB_MAX_CAPACITY {
+            return Err(SymbolicError::Other("Slab reached maximum capacity".into()));
+        }
+        match parser.parse(expr_str, &mut slab.ps) {
+            Ok(p) => {
+                let instruction = p.from(&slab.ps).compile(&slab.ps, &mut slab.cs);
+                break Ok((instruction, slab));
+            }
+            Err(Error::SlabOverflow) => {
+                capacity *= 2;
+                slab = Slab::with_capacity(capacity);
+                continue;
+            }
+            Err(e) => return Err(SymbolicError::Other(e.to_string())),
+        };
+    }
+}
+
 impl<R> SymbolicExpr<R> for ExprScalar
 where
     R: SymbolicRegistry<Record = ExprRecord> + 'static,
@@ -200,18 +230,7 @@ where
         let expr_str = self.to_string();
         let registry = Arc::clone(registry);
 
-        let mut slab = Slab::with_capacity(4096);
-        let parser = Parser {
-            expr_depth_limit: DEFAULT_EXPR_DEPTH_LIMIT,
-            expr_len_limit: DEFAULT_EXPR_LEN_LIMIT * 100,
-        };
-
-        let compiled = parser
-            .parse(&expr_str, &mut slab.ps)
-            .map_err(|e| SymbolicError::Other(e.to_string()))?
-            .from(&slab.ps)
-            .compile(&slab.ps, &mut slab.cs);
-
+        let (compiled, slab) = compile_with_retry(&expr_str)?;
         Ok(Box::new(move |vars_opt: Option<&HashMap<String, f64>>| {
             compiled
                 .eval(&slab, &mut {

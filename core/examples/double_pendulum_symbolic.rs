@@ -14,6 +14,7 @@ fn main() {
     let m2 = 1.0;
     let l1 = 1.0;
     let l2 = 1.0;
+    let air_resistance_coeff = 0.0;
 
     let theta1 = PI / 1.6;
     let omega1 = 0.0;
@@ -26,14 +27,14 @@ fn main() {
     let dt = 0.01;
     let steps = 1000;
 
-    let model = DoublePendulum::new(m1, m2, l1, l2, Some(&registry));
+    let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry));
     //let integrator = RK4Symbolic::new(&model, Arc::clone(&registry)).unwrap();
     let integrator = BackwardEuler::new(&model, Arc::clone(&registry)).unwrap();
     //let integrator = HermiteSimpson::new(&model, Arc::clone(&registry)).unwrap();
     //let integrator = ImplicitMidpoint::new(&model, Arc::clone(&registry)).unwrap();
     let mut sim = BasicSim::new(model, integrator, state0);
 
-    let history = sim.simulate_steps(dt, steps);
+    let history = sim.simulate_steps( dt, steps);
 
     let (times, states, energies) = utils::unzip3(history);
 

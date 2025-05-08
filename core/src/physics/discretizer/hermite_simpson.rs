@@ -31,11 +31,11 @@ impl HermiteSimpson {
         registry.insert_vector("next_state", next_state.clone());
 
         let dyn_current_state = model
-            .dynamics_symbolic(current_state.clone().wrap(), &registry)
+            .dynamics_symbolic(&current_state.wrap(),  &registry)
             .wrap();
 
         let dyn_next_state = model
-            .dynamics_symbolic(next_state.clone().wrap(), &registry)
+            .dynamics_symbolic(&next_state.wrap(),  &registry)
             .wrap();
 
         let mid_state = dyn_current_state
@@ -44,7 +44,9 @@ impl HermiteSimpson {
             .scale(&dt8)
             .add(&current_state.add(&next_state).wrap().scalef(0.5));
 
-        let dyn_mid_state = model.dynamics_symbolic(mid_state.wrap(), &registry).wrap();
+        let dyn_mid_state = model
+            .dynamics_symbolic(&mid_state.wrap(), &registry)
+            .wrap();
 
         let mut residual = dyn_current_state
             .add(&dyn_mid_state.scalef(4.0))
@@ -62,7 +64,13 @@ impl<D> Discretizer<D> for HermiteSimpson
 where
     D: Dynamics,
 {
-    fn step(&mut self, _model: &D, state: &D::State, dt: f64) -> Result<D::State, ModelError> {
+    fn step(
+        &mut self,
+        _model: &D,
+        state: &D::State,
+        _input: Option<&[f64]>,
+        dt: f64,
+    ) -> Result<D::State, ModelError> {
         self.registry.insert_var("dt", dt);
         self.registry.insert_vec_as_vars("state", &state.as_vec())?;
         self.registry

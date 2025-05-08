@@ -9,6 +9,7 @@ fn main() {
     let m2 = 1.0;
     let l1 = 1.0;
     let l2 = 1.0;
+    let air_resistance_coeff = 0.0;
 
     let theta1 = PI / 1.6;
     let omega1 = 0.0;
@@ -20,7 +21,7 @@ fn main() {
     let dt = 0.01;
     let steps = 1000;
 
-    let model = DoublePendulum::new(m1, m2, l1, l2, None);
+    let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, None);
     let integrator = RK4::new();
     let mut sim = BasicSim::new(model, integrator, state0);
 

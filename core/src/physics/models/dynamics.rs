@@ -6,8 +6,8 @@ use std::sync::Arc;
 pub trait Dynamics {
     type State: Clone + super::state::State;
 
-    fn dynamics(&self, state: &Self::State) -> Self::State;
-    fn dynamics_symbolic(&self, state: ExprVector, registry: &Arc<ExprRegistry>) -> ExprVector;
+    fn dynamics(&self, state: &Self::State, input: Option<&[f64]>) -> Self::State;
+    fn dynamics_symbolic(&self, state: &ExprVector, registry: &Arc<ExprRegistry>) -> ExprVector;
     fn energy(&self, state: &Self::State) -> Energy;
 }
 

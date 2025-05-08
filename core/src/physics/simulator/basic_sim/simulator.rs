@@ -41,15 +41,16 @@ where
         let mut t = 0.0;
         for _ in 0..steps {
             let energy = self.energy(&self.state);
+
             history.push((t, self.state.clone(), energy));
-            let _ = self.step(dt);
+            let _ = self.step(None, dt);
             t += dt;
         }
         history
     }
 
-    fn step(&mut self, dt: f64) -> Result<&M::State, ModelError> {
-        self.state = self.discretizer.step(&self.model, &self.state, dt)?;
+    fn step(&mut self, input: Option<&[f64]>, dt: f64) -> Result<&M::State, ModelError> {
+        self.state = self.discretizer.step(&self.model, &self.state, input, dt)?;
         Ok(&self.state)
     }
 
