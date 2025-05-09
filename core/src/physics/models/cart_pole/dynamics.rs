@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 use super::model::CartPole;
 use super::state::CartPoleState;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
