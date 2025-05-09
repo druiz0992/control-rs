@@ -20,6 +20,25 @@ pub struct NewtonSolver {
 }
 
 impl NewtonSolver {
+    /// find x of residual_expr f(x) = 0;
+    pub fn new_root_solver(
+        residual_expr: &ExprVector,
+        unknown_expr: &ExprVector,
+        registry: &Arc<ExprRegistry>,
+        options: Option<OptimizerConfig>,
+    ) -> Result<Self, ModelError> {
+        let options = options.unwrap_or_default();
+
+        let jacobian = residual_expr.jacobian(unknown_expr)?;
+        let residual_fn = residual_expr.to_fn(registry)?;
+        let jacobian_fn = jacobian.to_fn(registry)?;
+        let merit_fn = get_merit_fn(residual_expr, registry, &options)?;
+
+        let problem = ProblemSpec::new(residual_fn, jacobian_fn, merit_fn, unknown_expr);
+
+        Ok(Self { options, problem })
+    }
+
     pub fn new_minimization(
         objective_expr: &ExprScalar,
         eq_constraints_expr: Option<ExprVector>,
@@ -63,6 +82,54 @@ impl NewtonSolver {
             }
             _ => Self::new_ip_minimization(optimizer_params, unknown_expr, registry, options),
         }
+    }
+
+    /// solve problem
+    pub fn solve(
+        &self,
+        initial_guess: &[f64],
+        registry: &Arc<ExprRegistry>,
+    ) -> Result<Vec<Vec<f64>>, ModelError> {
+        // check if interior point minimization problem
+        if self.problem.ip_residual.is_some() {
+            return self.solve_ip(initial_guess, registry);
+        }
+        let (residual_fn, jacobian_fn, unknown_expr) = self.problem.get_params()?;
+        let max_iters = self.options.get_max_iters();
+        let tolerance = self.options.get_tolerance();
+        let mut history_results = Vec::with_capacity(max_iters);
+        let mut unknown_vals = extend_initial_guess(initial_guess, &unknown_expr);
+        let mut alpha = 1.0;
+
+        let ls = LineSearch::new(self.options.get_line_search_opts());
+
+        for _ in 0..max_iters {
+            registry.insert_vars(&unknown_expr, &unknown_vals);
+            history_results.push(unknown_vals.clone());
+
+            let fx: DVector<f64> = residual_fn.eval(&[]).try_into_eval_result()?;
+            if fx.norm() < tolerance {
+                break;
+            }
+
+            let jacobian_mat: DMatrix<f64> = jacobian_fn.eval(&[]).try_into_eval_result()?;
+            let delta = jacobian_mat
+                .lu()
+                .solve(&(-&fx))
+                .ok_or(ModelError::SolverError(
+                    "Failed to solve linear problem".into(),
+                ))?;
+
+            if let Some(merit_fn) = &self.problem.merit {
+                alpha = ls.run(merit_fn, &delta, &unknown_vals).unwrap();
+            }
+
+            for (val, delta_val) in unknown_vals.iter_mut().zip(delta.iter()) {
+                *val += alpha * delta_val;
+            }
+        }
+        history_results.push(unknown_vals.clone());
+        Ok(history_results)
     }
 
     /// interior point minimization
@@ -160,25 +227,6 @@ impl NewtonSolver {
         Ok(Self { options, problem })
     }
 
-    /// find x of residual_expr f(x) = 0;
-    pub fn new_root_solver(
-        residual_expr: &ExprVector,
-        unknown_expr: &ExprVector,
-        registry: &Arc<ExprRegistry>,
-        options: Option<OptimizerConfig>,
-    ) -> Result<Self, ModelError> {
-        let options = options.unwrap_or_default();
-
-        let jacobian = residual_expr.jacobian(unknown_expr)?;
-        let residual_fn = residual_expr.to_fn(registry)?;
-        let jacobian_fn = jacobian.to_fn(registry)?;
-        let merit_fn = get_merit_fn(residual_expr, registry, &options)?;
-
-        let problem = ProblemSpec::new(residual_fn, jacobian_fn, merit_fn, unknown_expr);
-
-        Ok(Self { options, problem })
-    }
-
     /// solve interior point minimization problem
     fn solve_ip(
         &self,
@@ -233,54 +281,6 @@ impl NewtonSolver {
         history_results.push(unknown_vals.clone());
         Ok(history_results)
     }
-
-    /// solve minimization problem
-    pub fn solve(
-        &self,
-        initial_guess: &[f64],
-        registry: &Arc<ExprRegistry>,
-    ) -> Result<Vec<Vec<f64>>, ModelError> {
-        // check if interior point minimization problem
-        if self.problem.ip_residual.is_some() {
-            return self.solve_ip(initial_guess, registry);
-        }
-        let (residual_fn, jacobian_fn, unknown_expr) = self.problem.get_params()?;
-        let max_iters = self.options.get_max_iters();
-        let tolerance = self.options.get_tolerance();
-        let mut history_results = Vec::with_capacity(max_iters);
-        let mut unknown_vals = extend_initial_guess(initial_guess, &unknown_expr);
-        let mut alpha = 1.0;
-
-        let ls = LineSearch::new(self.options.get_line_search_opts());
-
-        for _ in 0..max_iters {
-            registry.insert_vars(&unknown_expr, &unknown_vals);
-            history_results.push(unknown_vals.clone());
-
-            let fx: DVector<f64> = residual_fn.eval(&[]).try_into_eval_result()?;
-            if fx.norm() < tolerance {
-                break;
-            }
-
-            let jacobian_mat: DMatrix<f64> = jacobian_fn.eval(&[]).try_into_eval_result()?;
-            let delta = jacobian_mat
-                .lu()
-                .solve(&(-&fx))
-                .ok_or(ModelError::SolverError(
-                    "Failed to solve linear problem".into(),
-                ))?;
-
-            if let Some(merit_fn) = &self.problem.merit {
-                alpha = ls.run(merit_fn, &delta, &unknown_vals).unwrap();
-            }
-
-            for (val, delta_val) in unknown_vals.iter_mut().zip(delta.iter()) {
-                *val += alpha * delta_val;
-            }
-        }
-        history_results.push(unknown_vals.clone());
-        Ok(history_results)
-    }
 }
 
 fn get_merit_fn(
@@ -309,10 +309,10 @@ fn create_interior_point_symbols(
     // s = sqrt(rho) * exp(sigma);
     let s_expr = sqrt_rho.mul(&sigma_expr.exp());
     let s_name = format!("{}{}", SLACK_S, var_index);
-    registry.insert_scalar(&s_name, s_expr.clone());
+    registry.insert_scalar_expr(&s_name, s_expr.clone());
     let lambda_name = format!("{}{}", LAMBDA, var_index);
     let lambda_expr = sqrt_rho.mul(&sigma_expr.scalef(-1.0).exp());
-    registry.insert_scalar(&lambda_name, lambda_expr);
+    registry.insert_scalar_expr(&lambda_name, lambda_expr);
     sigma_expr
 }
 

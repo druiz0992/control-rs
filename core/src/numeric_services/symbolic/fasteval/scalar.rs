@@ -11,9 +11,6 @@ use std::sync::Arc;
 
 const SLAB_DEFAULT_CAPACITY: usize = 4096;
 const SLAB_MAX_CAPACITY: usize = 65536;
-const DEFAULT_SIGMOID_K: f64 = -30.0;
-const DEFAULT_TANH_K: f64 = 10.0;
-const DEFAULT_ABS_EPS: f64 = 1e-6;
 
 /// A symbolic scalar expression represented as a string. This struct provides
 /// methods to construct, manipulate, and evaluate symbolic expressions.
@@ -64,6 +61,13 @@ impl ExprScalar {
 
     pub fn from_f64(value: f64) -> Self {
         Self::new(value.to_string())
+    }
+
+    pub fn zero() -> Self {
+        Self::new("0")
+    }
+    pub fn one() -> Self {
+        Self::new("1")
     }
 
     pub fn as_str(&self) -> &str {
@@ -472,7 +476,7 @@ mod tests {
         let registry = Arc::new(ExprRegistry::default());
 
         let expr_y = ExprScalar::new("2 * x");
-        registry.insert_scalar("y", expr_y);
+        registry.insert_scalar_expr("y", expr_y);
         registry.insert_var("x", 3.0);
         let expr = ExprScalar::new("y + 1");
         let func = expr.to_fn(&registry).unwrap();

@@ -2,7 +2,7 @@ use super::model::DoublePendulum;
 use super::state::DoublePendulumState;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
 use crate::physics::traits::{Describable, Dynamics};
-use crate::physics::{GRAVITY as G, energy::Energy};
+use crate::physics::{constants as c, energy::Energy};
 use nalgebra::Vector3;
 use std::sync::Arc;
 
@@ -13,6 +13,7 @@ impl Dynamics for DoublePendulum {
         let (m1, m2, l1, l2, air_resistance_coeff) = self.parameters();
         let (theta1, omega1, theta2, omega2) = s.state();
         let u = input.unwrap_or(&[0.0, 0.0]);
+        let g = c::GRAVITY;
 
         let c = (theta1 - theta2).cos();
         let s = (theta1 - theta2).sin();
@@ -21,13 +22,13 @@ impl Dynamics for DoublePendulum {
         let damping2 = -air_resistance_coeff * omega2 * omega2.abs();
 
         let dθ1 = omega1;
-        let dω1 = (m2 * G * theta2.sin() * c
+        let dω1 = (m2 * g * theta2.sin() * c
             - m2 * s * (l1 * c * omega1.powi(2) + l2 * omega2.powi(2))
-            - (m1 + m2) * G * theta1.sin()
+            - (m1 + m2) * g * theta1.sin()
             + (u[0] + damping1))
             / (l1 * (m1 + m2 * s * s));
         let dθ2 = omega2;
-        let dω2 = ((m1 + m2) * (l1 * omega1.powi(2) * s - G * theta2.sin() + G * theta1.sin() * c)
+        let dω2 = ((m1 + m2) * (l1 * omega1.powi(2) * s - g * theta2.sin() + g * theta1.sin() * c)
             + m2 * l2 * omega2.powi(2) * s * c
             + (u[1] + damping2))
             / (l2 * (m1 + m2 * s * s));
@@ -50,7 +51,7 @@ impl Dynamics for DoublePendulum {
         let v2 = Vector3::new(v1.x + l2 * θ̇2 * θ2.cos(), 0.0, v1.z + l2 * θ̇2 * θ2.sin());
 
         let kinetic = 0.5 * (m1 * v1.dot(&v1) + m2 * v2.dot(&v2));
-        let potential = m1 * G * r1[2] + m2 * G * r2[2];
+        let potential = m1 * c::GRAVITY * r1[2] + m2 * c::GRAVITY * r2[2];
 
         Energy::new(kinetic, potential)
     }
@@ -61,14 +62,16 @@ impl Dynamics for DoublePendulum {
         let omega1 = state.get(1).unwrap();
         let theta2 = state.get(2).unwrap();
         let omega2 = state.get(3).unwrap();
-        let u = registry.get_vector("input").unwrap();
+        let u = registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
 
         let m1 = registry.get_scalar("m1").unwrap();
         let m2 = registry.get_scalar("m2").unwrap();
         let l1 = registry.get_scalar("l1").unwrap();
         let l2 = registry.get_scalar("l2").unwrap();
-        let air_resistance_coeff = registry.get_scalar("air_resistance_coeff").unwrap();
-        let g = registry.get_scalar("g").unwrap();
+        let air_resistance_coeff = registry
+            .get_scalar(c::AIR_RESISTANCE_COEFF_SYMBOLIC)
+            .unwrap();
+        let g = registry.get_scalar(c::GRAVITY_SYMBOLIC).unwrap();
 
         // Common terms
         let c = theta1.sub(&theta2).cos();
@@ -154,7 +157,7 @@ mod tests {
     fn test_dynamics_symbolic() {
         let registry = Arc::new(ExprRegistry::new());
         let double_pendulum = DoublePendulum::new(1.0, 2.0, 0.0, 0.0, 1.0, Some(&registry));
-        let state_symbol = registry.get_vector("state").unwrap();
+        let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
         let dynamics_func = double_pendulum.dynamics_symbolic(&state_symbol, &registry);
         dbg!(&dynamics_func);
     }
@@ -181,7 +184,7 @@ mod tests {
             let pendulum = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry));
 
             let state = DoublePendulumState::new(theta1, omega1, theta2, omega2);
-            let state_symbol = registry.get_vector("state").unwrap();
+            let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
 
             let new_state = pendulum.dynamics(&state, None);
             let dynamics_func = pendulum

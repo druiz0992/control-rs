@@ -1,4 +1,5 @@
 pub mod derivatives;
+pub mod macros;
 pub mod matrix;
 pub mod record;
 pub mod registry;

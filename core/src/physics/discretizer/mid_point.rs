@@ -2,29 +2,30 @@ use crate::physics::ModelError;
 use crate::physics::traits::{Describable, Discretizer, Dynamics};
 
 #[derive(Default)]
-pub struct MidPoint;
+pub struct MidPoint<D: Dynamics> {
+    model: D,
+}
 
-impl MidPoint {
-    pub fn new() -> Self {
-        Self
+impl<D: Dynamics> MidPoint<D> {
+    pub fn new(model: D) -> Self {
+        Self { model }
     }
 }
-impl<D> Discretizer<D> for MidPoint
-where
-    D: Dynamics,
-{
+impl<D: Dynamics> Discretizer<D> for MidPoint<D> {
     fn step(
         &mut self,
-        model: &D,
         state: &D::State,
         input: Option<&[f64]>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
-        let x_m = state.clone() + model.dynamics(state, input) * (dt * 0.5);
-        Ok(state.clone() + model.dynamics(&x_m, input) * dt)
+        let x_m = state.clone() + self.model.dynamics(state, input) * (dt * 0.5);
+        Ok(state.clone() + self.model.dynamics(&x_m, input) * dt)
+    }
+    fn get_model(&self) -> &D {
+        &self.model
     }
 }
-impl Describable for MidPoint {
+impl<D: Dynamics> Describable for MidPoint<D> {
     fn name(&self) -> &'static str {
         "Midpoint"
     }

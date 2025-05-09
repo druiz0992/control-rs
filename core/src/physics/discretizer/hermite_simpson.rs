@@ -1,8 +1,10 @@
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
-use crate::physics::ModelError;
-use crate::physics::traits::{Describable, Discretizer, Dynamics, State};
+use crate::physics::traits::{Describable, Discretizer, Dynamics};
+use crate::physics::{ModelError, constants as c};
 use crate::solver::newton::NewtonSolver;
 use std::sync::Arc;
+
+use super::utils::{get_states, step_intrinsic};
 
 // Hermite–Simpson residual:
 //
@@ -16,26 +18,25 @@ use std::sync::Arc;
 //
 // The root of R(x_{k+1}) gives the next state satisfying the Hermite–Simpson integration scheme.
 
-pub struct HermiteSimpson {
+pub struct HermiteSimpson<D: Dynamics> {
     registry: Arc<ExprRegistry>,
     solver: NewtonSolver,
+    model: D,
 }
 
-impl HermiteSimpson {
-    pub fn new<D: Dynamics>(model: &D, registry: Arc<ExprRegistry>) -> Result<Self, ModelError> {
-        let dt_expr = ExprScalar::new("dt");
+impl<D: Dynamics> HermiteSimpson<D> {
+    pub fn new(model: &D, registry: Arc<ExprRegistry>) -> Result<Self, ModelError> {
+        let dt_expr = ExprScalar::new(c::TIME_DELTA_SYMBOLIC);
         let dt6 = dt_expr.scalef(1.0 / 6.0);
         let dt8 = dt_expr.scalef(1.0 / 8.0);
-        let current_state = registry.get_vector("state")?;
-        let next_state = current_state.build_next();
-        registry.insert_vector("next_state", next_state.clone());
+        let (current_state, next_state) = get_states(&registry)?;
 
         let dyn_current_state = model
-            .dynamics_symbolic(&current_state.wrap(),  &registry)
+            .dynamics_symbolic(&current_state.wrap(), &registry)
             .wrap();
 
         let dyn_next_state = model
-            .dynamics_symbolic(&next_state.wrap(),  &registry)
+            .dynamics_symbolic(&next_state.wrap(), &registry)
             .wrap();
 
         let mid_state = dyn_current_state
@@ -44,9 +45,7 @@ impl HermiteSimpson {
             .scale(&dt8)
             .add(&current_state.add(&next_state).wrap().scalef(0.5));
 
-        let dyn_mid_state = model
-            .dynamics_symbolic(&mid_state.wrap(), &registry)
-            .wrap();
+        let dyn_mid_state = model.dynamics_symbolic(&mid_state.wrap(), &registry).wrap();
 
         let mut residual = dyn_current_state
             .add(&dyn_mid_state.scalef(4.0))
@@ -56,34 +55,29 @@ impl HermiteSimpson {
         residual = current_state.add(&residual).sub(&next_state).wrap();
         let solver = NewtonSolver::new_root_solver(&residual, &next_state, &registry, None)?;
 
-        Ok(HermiteSimpson { registry, solver })
+        Ok(HermiteSimpson {
+            registry,
+            solver,
+            model: model.clone(),
+        })
     }
 }
 
-impl<D> Discretizer<D> for HermiteSimpson
-where
-    D: Dynamics,
-{
+impl<D: Dynamics> Discretizer<D> for HermiteSimpson<D> {
     fn step(
         &mut self,
-        _model: &D,
         state: &D::State,
         _input: Option<&[f64]>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
-        self.registry.insert_var("dt", dt);
-        self.registry.insert_vec_as_vars("state", &state.as_vec())?;
-        self.registry
-            .insert_vec_as_vars("next_state", &state.as_vec())?;
-
-        let history = self.solver.solve(&state.as_vec(), &self.registry)?;
-        Ok(D::State::from_vec(history.last().cloned().ok_or_else(
-            || ModelError::SolverError(String::from("Solver failed")),
-        )?))
+        step_intrinsic(state, dt, &self.solver, &self.registry)
+    }
+    fn get_model(&self) -> &D {
+        &self.model
     }
 }
 
-impl Describable for HermiteSimpson {
+impl<D: Dynamics> Describable for HermiteSimpson<D> {
     fn name(&self) -> &'static str {
         "Hermite-Simpson"
     }

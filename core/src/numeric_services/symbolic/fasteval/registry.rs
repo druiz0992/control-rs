@@ -45,12 +45,19 @@ impl ExprRegistry {
     }
 
     ///   Inserts a scalar expression with the given name into the registry.
-    pub fn insert_scalar(&self, name: &str, expr: ExprScalar) {
+    pub fn insert_scalar(&self, name: &str, var: f64) {
+        self.insert(name, ExprRecord::Scalar(ExprScalar::new(var.to_string())));
+    }
+
+    pub fn insert_scalar_expr(&self, name: &str, expr: ExprScalar) {
         self.insert(name, ExprRecord::Scalar(expr));
     }
 
     ///   Inserts a vector expression with the given name into the registry.
-    pub fn insert_vector(&self, name: &str, expr: ExprVector) {
+    pub fn insert_vector(&self, name: &str, vars: &[&str]) {
+        self.insert(name, ExprRecord::Vector(ExprVector::new(vars)));
+    }
+    pub fn insert_vector_expr(&self, name: &str, expr: ExprVector) {
         self.insert(name, ExprRecord::Vector(expr));
     }
 
@@ -71,7 +78,11 @@ impl ExprRegistry {
     }
 
     ///   Inserts a matrix expression with the given name into the registry.
-    pub fn insert_matrix(&self, name: &str, expr: ExprMatrix) {
+    pub fn insert_matrix(&self, name: &str, vars: &Vec<&[&str]>) {
+        let expr = ExprMatrix::new(vars);
+        self.insert(name, ExprRecord::Matrix(expr));
+    }
+    pub fn insert_matrix_expr(&self, name: &str, expr: ExprMatrix) {
         self.insert(name, ExprRecord::Matrix(expr));
     }
 
@@ -134,7 +145,7 @@ mod tests {
     fn test_insert_scalar() {
         let registry = ExprRegistry::new();
         let expr = ExprScalar::new("x + 1".to_string());
-        registry.insert_scalar("y", expr.clone());
+        registry.insert_scalar_expr("y", expr.clone());
         assert_eq!(registry.get("y").unwrap(), ExprRecord::Scalar(expr));
     }
 
@@ -142,7 +153,7 @@ mod tests {
     fn test_insert_vector() {
         let registry = ExprRegistry::new();
         let expr = ExprVector::new(&["x + 1", "x+2"]);
-        registry.insert_vector("y", expr.clone());
+        registry.insert_vector_expr("y", expr.clone());
         assert_eq!(registry.get("y").unwrap(), ExprRecord::Vector(expr));
     }
 
@@ -150,7 +161,7 @@ mod tests {
     fn test_insert_matrix() {
         let registry = ExprRegistry::new();
         let expr = ExprMatrix::new(&vec![&["x + 1", "x+2"], &["x+3", "x+4"]]);
-        registry.insert_matrix("y", expr.clone());
+        registry.insert_matrix_expr("y", expr.clone());
         assert_eq!(registry.get("y").unwrap(), ExprRecord::Matrix(expr));
     }
 
@@ -192,8 +203,8 @@ mod tests {
         let registry = ExprRegistry::new();
         let expr1 = ExprScalar::new("x + 1".to_string());
         let expr2 = ExprScalar::new("x + 2".to_string());
-        registry.insert_scalar("y", expr1);
-        registry.insert_scalar("y", expr2.clone());
+        registry.insert_scalar_expr("y", expr1);
+        registry.insert_scalar_expr("y", expr2.clone());
         let retrieved_expr = registry.get("y").unwrap();
         assert_eq!(retrieved_expr, ExprRecord::Scalar(expr2));
     }

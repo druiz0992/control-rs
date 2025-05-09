@@ -36,7 +36,7 @@ use syn::{DeriveInput, parse_macro_input};
 /// - The macro only supports structs with named fields.
 /// - All fields must be of type `f64`.
 ///
-#[proc_macro_derive(StateOps)]
+#[proc_macro_derive(StateOps, attributes(constrained))]
 pub fn derive_state_ops(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
@@ -52,6 +52,15 @@ pub fn derive_state_ops(input: TokenStream) -> TokenStream {
     let field_names: Vec<_> = fields.iter().map(|f| f.ident.as_ref().unwrap()).collect();
     let field_strings = field_names.iter().map(|f| f.to_string());
     let num_fields = field_names.len();
+
+    let (q_fields, v_fields): (Vec<_>, Vec<_>) = fields.iter().partition(|f| {
+        f.attrs
+            .iter()
+            .all(|attr| !attr.path().is_ident("constrained"))
+    });
+
+    let q_idents: Vec<_> = q_fields.iter().map(|f| f.ident.as_ref().unwrap()).collect();
+    let v_idents: Vec<_> = v_fields.iter().map(|f| f.ident.as_ref().unwrap()).collect();
 
     // For `new` method
     let new_fn_args = field_names.iter().map(|f| quote! { #f: f64 });
@@ -80,6 +89,9 @@ pub fn derive_state_ops(input: TokenStream) -> TokenStream {
         quote! { ( #( #types ),* ) }
     };
 
+    let q_len = q_idents.len();
+    let v_len = v_idents.len();
+
     let expanded = quote! {
         impl #name {
             pub fn new( #( #new_fn_args ),* ) -> Self {
@@ -103,6 +115,22 @@ pub fn derive_state_ops(input: TokenStream) -> TokenStream {
 
             fn labels() -> &'static [&'static str] {
                 &[ #( #label_strs ),* ]
+            }
+
+            fn get_q(&self) -> Vec<f64> {
+                vec![ #( self.#q_idents ),* ]
+            }
+
+            fn get_v(&self) -> Vec<f64> {
+                vec![ #( self.#v_idents ),* ]
+            }
+
+            fn dim_q() -> usize {
+                #q_len
+            }
+
+            fn dim_v() -> usize {
+                #v_len
             }
         }
 
@@ -139,6 +167,7 @@ pub fn derive_state_ops(input: TokenStream) -> TokenStream {
                 #( #eq_fields )&&*
             }
         }
+
     };
 
     expanded.into()

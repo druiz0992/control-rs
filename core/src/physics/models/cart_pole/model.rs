@@ -1,5 +1,7 @@
-use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
-use crate::physics::GRAVITY as G;
+use super::state::CartPoleState;
+use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
+use crate::physics::constants as c;
+use crate::physics::traits::State;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -22,24 +24,15 @@ impl CartPole {
         registry: Option<&Arc<ExprRegistry>>,
     ) -> Self {
         if let Some(registry) = registry {
-            registry.insert_scalar("pole_mass", ExprScalar::new(pole_mass.to_string()));
-            registry.insert_scalar("cart_mass", ExprScalar::new(cart_mass.to_string()));
-            registry.insert_scalar(
-                "friction_coeff",
-                ExprScalar::new(friction_coeff.to_string()),
-            );
-            registry.insert_scalar(
-                "air_resistance_coeff",
-                ExprScalar::new(air_resistance_coeff.to_string()),
-            );
-            registry.insert_scalar("l", ExprScalar::new(l.to_string()));
-            registry.insert_scalar("g", ExprScalar::new(G.to_string()));
+            registry.insert_scalar(c::MASS_POLE_SYMBOLIC, pole_mass);
+            registry.insert_scalar(c::MASS_CART_SYMBOLIC, cart_mass);
+            registry.insert_scalar(c::FRICTION_COEFF_SYMBOLIC, friction_coeff);
+            registry.insert_scalar(c::AIR_RESISTANCE_COEFF_SYMBOLIC, air_resistance_coeff);
+            registry.insert_scalar(c::LENGTH_SYMBOLIC, l);
+            registry.insert_scalar(c::GRAVITY_SYMBOLIC, c::GRAVITY);
 
-            registry.insert_vector(
-                "state",
-                ExprVector::new(&["pos_x", "v_x", "theta", "omega"]),
-            );
-            registry.insert_scalar("input", ExprScalar::new("u1"));
+            registry.insert_vector(c::STATE_SYMBOLIC, CartPoleState::labels());
+            registry.insert_scalar_expr(c::INPUT_SYMBOLIC, ExprScalar::new("u1"));
             registry.insert_var("u1", 0.0);
         }
 
@@ -123,13 +116,17 @@ mod tests {
                 l
             )
         );
-        assert!(registry.get_scalar("pole_mass").is_ok());
-        assert!(registry.get_scalar("cart_mass").is_ok());
-        assert!(registry.get_scalar("air_resistance_coeff").is_ok());
-        assert!(registry.get_scalar("friction_coeff").is_ok());
-        assert!(registry.get_scalar("l").is_ok());
-        assert!(registry.get_scalar("g").is_ok());
-        assert!(registry.get_vector("state").is_ok());
+        assert!(registry.get_scalar(c::MASS_POLE_SYMBOLIC).is_ok());
+        assert!(registry.get_scalar(c::MASS_CART_SYMBOLIC).is_ok());
+        assert!(
+            registry
+                .get_scalar(c::AIR_RESISTANCE_COEFF_SYMBOLIC)
+                .is_ok()
+        );
+        assert!(registry.get_scalar(c::FRICTION_COEFF_SYMBOLIC).is_ok());
+        assert!(registry.get_scalar(c::LENGTH_SYMBOLIC).is_ok());
+        assert!(registry.get_scalar(c::GRAVITY_SYMBOLIC).is_ok());
+        assert!(registry.get_vector(c::STATE_SYMBOLIC).is_ok());
     }
 
     #[test]

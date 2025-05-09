@@ -37,6 +37,12 @@ pub trait State:
     fn as_vec(&self) -> Vec<f64>;
     fn from_vec(v: Vec<f64>) -> Self;
     fn labels() -> &'static [&'static str];
+
+    // optional getters
+    fn get_q(&self) -> Vec<f64>;
+    fn get_v(&self) -> Vec<f64>;
+    fn dim_q() -> usize;
+    fn dim_v() -> usize;
 }
 
 impl<S: State> TryIntoEvalResult<S> for Result<SymbolicEvalResult, SymbolicError> {

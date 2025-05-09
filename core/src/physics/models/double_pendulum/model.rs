@@ -1,5 +1,6 @@
-use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
-use crate::physics::GRAVITY as G;
+use super::state::DoublePendulumState;
+use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
+use crate::physics::{constants as c, traits::State};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -22,21 +23,15 @@ impl DoublePendulum {
         registry: Option<&Arc<ExprRegistry>>,
     ) -> Self {
         if let Some(registry) = registry {
-            registry.insert_scalar("m1", ExprScalar::new(m1.to_string()));
-            registry.insert_scalar("m2", ExprScalar::new(m2.to_string()));
-            registry.insert_scalar("l1", ExprScalar::new(l1.to_string()));
-            registry.insert_scalar("l2", ExprScalar::new(l2.to_string()));
-            registry.insert_scalar(
-                "air_resistance_coeff",
-                ExprScalar::new(air_resistance_coeff.to_string()),
-            );
-            registry.insert_scalar("g", ExprScalar::new(G.to_string()));
+            registry.insert_scalar("m1", m1);
+            registry.insert_scalar("m2", m2);
+            registry.insert_scalar("l1", l1);
+            registry.insert_scalar("l2", l2);
+            registry.insert_scalar(c::AIR_RESISTANCE_COEFF_SYMBOLIC, air_resistance_coeff);
+            registry.insert_scalar(c::GRAVITY_SYMBOLIC, c::GRAVITY);
 
-            registry.insert_vector(
-                "state",
-                ExprVector::new(&["theta1", "omega1", "theta2", "omega2"]),
-            );
-            registry.insert_vector("input", ExprVector::new(&["u1", "u2"]));
+            registry.insert_vector(c::STATE_SYMBOLIC, DoublePendulumState::labels());
+            registry.insert_vector_expr(c::INPUT_SYMBOLIC, ExprVector::new(&["u1", "u2"]));
             registry.insert_var("u1", 0.0);
             registry.insert_var("u2", 0.0);
         }

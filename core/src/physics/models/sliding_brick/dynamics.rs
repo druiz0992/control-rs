@@ -1,8 +1,7 @@
 use super::model::SlidingBrick;
 use super::state::SlidingBrickState;
-use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
-use crate::physics::traits::Dynamics;
-use crate::physics::{GRAVITY as G, energy::Energy};
+use crate::numeric_services::symbolic::{ExprMatrix, ExprRegistry, ExprScalar, ExprVector};
+use crate::physics::{Energy, constants as c, traits::Dynamics};
 use std::sync::Arc;
 
 /// M * v_dot  + M * g = J' * u + f_friction, where M = mass * identity(2), g = [0, 9.81], J = [0,1]
@@ -14,15 +13,16 @@ impl Dynamics for SlidingBrick {
     fn dynamics(&self, state: &Self::State, _input: Option<&[f64]>) -> Self::State {
         let (m, friction_coeff) = self.parameters();
         let (_, pos_y, v_x, v_y) = state.state();
+        let g = c::GRAVITY;
 
         // friction
         let mut f_x = 0.0;
-        let mut f_y = -m * G;
+        let mut f_y = -m * g;
 
         let in_contact = pos_y <= 0.0 && v_y <= 0.0;
 
         if in_contact {
-            let normal_force = m * G;
+            let normal_force = m * g;
             f_y += normal_force;
 
             let friction_force = -friction_coeff * normal_force * v_x.signum();
@@ -45,10 +45,10 @@ impl Dynamics for SlidingBrick {
         let v_x = state.get(2).unwrap();
         let v_y = state.get(3).unwrap();
 
-        let friction_coeff = registry.get_scalar("friction_coeff").unwrap();
-        let m = registry.get_scalar("m").unwrap();
-        let g = registry.get_scalar("g").unwrap();
-        let zero = ExprScalar::new("0");
+        let friction_coeff = registry.get_scalar(c::FRICTION_COEFF_SYMBOLIC).unwrap();
+        let m = registry.get_scalar(c::MASS_SYMBOLIC).unwrap();
+        let g = registry.get_scalar(c::GRAVITY_SYMBOLIC).unwrap();
+        let zero = ExprScalar::zero();
         let normal_force = m.mul(&g).scalef(1.0);
 
         let f_x_opt2 = zero.clone();
@@ -74,9 +74,22 @@ impl Dynamics for SlidingBrick {
         let (_, pos_y, v_x, v_y) = state.state();
 
         let kinetic = 0.5 * m * (v_x.powi(2) + v_y.powi(2));
-        let potential = m * G * pos_y;
+        let potential = m * c::GRAVITY * pos_y;
 
         Energy::new(kinetic, potential)
+    }
+
+    fn mass_matrix_symbolic(&self, registry: &Arc<ExprRegistry>) -> Option<ExprMatrix> {
+        let m = registry.get_scalar(c::MASS_SYMBOLIC).unwrap();
+        Some(ExprMatrix::identity(2).scale(&m))
+    }
+
+    fn constraint_jacobian_symbolic(&self, _registry: &Arc<ExprRegistry>) -> Option<ExprMatrix> {
+        // For constraint v_y = 0
+        let one = ExprScalar::one();
+        let zero = ExprScalar::zero();
+
+        Some(ExprMatrix::from_vec(&vec![vec![zero, one]]))
     }
 }
 
@@ -106,7 +119,7 @@ mod tests {
     fn test_dynamics_symbolic() {
         let registry = Arc::new(ExprRegistry::new());
         let sliding_brick = SlidingBrick::new(1.0, 2.0, Some(&registry));
-        let state_symbol = registry.get_vector("state").unwrap();
+        let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
         let dynamics_func = sliding_brick.dynamics_symbolic(&state_symbol, &registry);
         dbg!(&dynamics_func);
     }
@@ -130,7 +143,7 @@ mod tests {
             let sliding_brick = SlidingBrick::new(m, friction_coeff, Some(&registry));
             let state = SlidingBrickState::new(pos_x, pos_y, v_x, v_y);
 
-            let state_symbol = registry.get_vector("state").unwrap();
+            let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
 
             let new_state = sliding_brick.dynamics(&state, None);
             let dynamics_func = sliding_brick

@@ -1,19 +1,18 @@
-use std::marker::PhantomData;
-use crate::physics::traits::{Dynamics, PhysicsSim, Renderable};
 use super::Animation;
+use crate::physics::traits::{Dynamics, PhysicsSim, Renderable};
 use async_trait::async_trait;
 use macroquad::prelude::*;
 
 /// A struct that implements the `Animation` trait using the `macroquad` library for rendering.
-/// 
-/// This struct is generic over a type `S` that implements the `PhysicsSim` trait. It uses a 
+///
+/// This struct is generic over a type `S` that implements the `PhysicsSim` trait. It uses a
 /// `PhantomData` marker to associate itself with the `S` type without actually storing any value of that type.
-/// 
+///
 /// # Type Parameters
 /// - `S`: A type that implements the `PhysicsSim` trait, representing the physics simulation to be animated.
 #[derive(Clone, Debug, Default)]
 pub struct Macroquad<S: PhysicsSim> {
-    _phantom: std::marker::PhantomData<S>,
+    sim: S,
 }
 
 impl<S> Macroquad<S>
@@ -21,10 +20,8 @@ where
     S: PhysicsSim,
 {
     /// Creates a new instance of the `Macroquad` struct.
-    pub fn new() -> Self {
-        Self {
-            _phantom: PhantomData,
-        }
+    pub fn new(sim: S) -> Self {
+        Self { sim }
     }
 }
 
@@ -52,14 +49,14 @@ where
     /// - Renders the joints of the model based on the current state and screen dimensions.
     /// - Draws lines connecting the joints and circles at each joint position.
     /// - Waits for the next frame before repeating the loop.
-    async fn run_animation(self, simulator: &mut Self::Simulator, screen_dims: (f32, f32)) {
+    async fn run_animation(mut self, screen_dims: (f32, f32)) {
         loop {
             clear_background(BLACK);
             let dt = get_frame_time();
-            let _ = simulator.step(None, dt as f64);
+            let _ = self.sim.step(None, dt as f64);
 
-            let model = simulator.model();
-            let state = simulator.state();
+            let model = self.sim.model();
+            let state = self.sim.state();
             let joints = model.render_joints(state, screen_dims);
 
             for win in joints.windows(2) {
@@ -74,4 +71,3 @@ where
         }
     }
 }
-

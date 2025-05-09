@@ -22,8 +22,8 @@ fn main() {
     let steps = 1000;
 
     let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, None);
-    let integrator = RK4::new();
-    let mut sim = BasicSim::new(model, integrator, state0);
+    let integrator = RK4::new(model);
+    let mut sim = BasicSim::new(integrator, state0);
 
     let history = sim.simulate_steps(dt, steps);
 
