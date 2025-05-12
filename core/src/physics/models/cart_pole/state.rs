@@ -1,7 +1,8 @@
+use crate::common::Labelizable;
 use crate::physics::traits::State;
-use macros::StateOps;
+use macros::{LabelOps, StateOps};
 
-#[derive(Clone, Debug, StateOps)]
+#[derive(Clone, Debug, StateOps, LabelOps)]
 pub struct CartPoleState {
     pub pos_x: f64,
     pub v_x: f64,

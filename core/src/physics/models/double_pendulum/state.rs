@@ -1,7 +1,8 @@
+use crate::common::Labelizable;
 use crate::physics::traits::State;
-use macros::StateOps;
+use macros::{LabelOps, StateOps};
 
-#[derive(Clone, Debug, StateOps)]
+#[derive(Clone, Debug, StateOps, LabelOps)]
 pub struct DoublePendulumState {
     pub theta1: f64,
     pub omega1: f64,
@@ -25,7 +26,8 @@ mod tests {
     #[test]
     fn test_state() {
         let state = DoublePendulumState::new(1.0, 2.0, 3.0, 4.0);
-        assert_eq!(state.state(), (1.0, 2.0, 3.0, 4.0));
+        let vals = state.extract(&["theta1", "omega1", "theta2", "omega2"]);
+        assert_eq!(vals, [1.0, 2.0, 3.0, 4.0]);
     }
 
     #[test]
@@ -116,7 +118,7 @@ mod tests {
         let state1 = DoublePendulumState::new(1.0, 2.0, 3.0, 4.0);
         let v = state1.get_v();
 
-        assert!(v.len() == 0);
+        assert!(v.is_empty());
     }
 
     #[test]

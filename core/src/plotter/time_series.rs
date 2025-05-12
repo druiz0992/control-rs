@@ -1,3 +1,4 @@
+use crate::common::Labelizable;
 use crate::numeric_services::symbolic::{
     ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
 };
@@ -33,7 +34,7 @@ pub fn plot_states<S: State>(
     chart.configure_mesh().draw()?;
 
     let num_states = states[0].as_vec().len();
-    let labels = <S as State>::labels();
+    let labels = <S as Labelizable>::labels();
     for i in 0..num_states {
         let series: Vec<(f64, f64)> = times
             .iter()

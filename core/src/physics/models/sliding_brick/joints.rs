@@ -15,7 +15,7 @@ impl Renderable for SlidingBrick {
         let scale = 0.5 * screen_height;
 
         // Compute the positions in model space (upward is negative y in this system)
-        let p1 = origin + Vector2::new(pos_x as f32 * scale, pos_y as f32 as f32);
+        let p1 = origin + Vector2::new(pos_x as f32 * scale, pos_y as f32);
 
         vec![p1, p1]
     }

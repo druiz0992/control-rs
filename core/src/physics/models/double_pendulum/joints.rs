@@ -1,6 +1,9 @@
 use super::model::DoublePendulum;
 use super::state::DoublePendulumState;
-use crate::physics::traits::{Renderable, State};
+use crate::{
+    common::Labelizable,
+    physics::traits::{Renderable, State},
+};
 use nalgebra::Vector2;
 
 impl Renderable for DoublePendulum {
@@ -10,7 +13,7 @@ impl Renderable for DoublePendulum {
         let (screen_width, screen_height) = screen_dims;
         let origin = Vector2::new(screen_width, screen_height);
 
-        let (_, _, l1, l2, _) = self.parameters();
+        let [l1, l2] = self.extract(&["l1", "l2"]);
         let [theta1, _, theta2, _] = state.as_vec().try_into().unwrap();
 
         let total_length = (l1 + l2) as f32;

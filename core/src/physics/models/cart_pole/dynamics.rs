@@ -1,5 +1,6 @@
 use super::model::CartPole;
 use super::state::CartPoleState;
+use crate::common::Labelizable;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
 use crate::physics::traits::Dynamics;
 use crate::physics::{constants as c, energy::Energy};
@@ -9,8 +10,14 @@ impl Dynamics for CartPole {
     type State = CartPoleState;
 
     fn dynamics(&self, state: &Self::State, input: Option<&[f64]>) -> Self::State {
-        let (m_p, m_c, friction_coeff, air_resistance_coeff, l) = self.parameters();
-        let (_, v_x, theta, omega) = state.state();
+        let [m_p, m_c, friction_coeff, air_resistance_coeff, l] = self.extract(&[
+            "pole_mass",
+            "cart_mass",
+            "friction_coeff",
+            "air_resistance_coeff",
+            "l",
+        ]);
+        let [v_x, theta, omega] = state.extract(&["v_x", "theta", "omega"]);
         let u = input.unwrap_or(&[0.0])[0];
 
         // damping
@@ -41,9 +48,9 @@ impl Dynamics for CartPole {
 
     fn dynamics_symbolic(&self, state: &ExprVector, registry: &Arc<ExprRegistry>) -> ExprVector {
         // Define symbolic variables
-        let v_x = state.get(1).unwrap();
-        let theta = state.get(2).unwrap();
-        let omega = state.get(3).unwrap();
+        let v_x = state.get(CartPoleState::index_of("v_x")).unwrap();
+        let theta = state.get(CartPoleState::index_of("theta")).unwrap();
+        let omega = state.get(CartPoleState::index_of("omega")).unwrap();
         let u = registry.get_scalar(c::INPUT_SYMBOLIC).unwrap();
 
         let m_p = registry.get_scalar(c::MASS_POLE_SYMBOLIC).unwrap();
@@ -111,8 +118,9 @@ impl Dynamics for CartPole {
     }
 
     fn energy(&self, state: &Self::State) -> Energy {
-        let (m_p, m_c, _friction_coeff, _air_resistance_coeff, l) = self.parameters();
-        let (_, v_x, theta, omega) = state.state();
+        let [m_p, m_c, l] = self.extract(&["pole_mass", "cart_mass", "l"]);
+        let [v_x, theta, omega] = state.extract(&["v_x", "theta", "omega"]);
+
         let omega_square = omega.powi(2);
         let vx_square = v_x.powi(2);
 

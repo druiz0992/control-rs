@@ -1,5 +1,6 @@
 use super::model::DoublePendulum;
 use super::state::DoublePendulumState;
+use crate::common::Labelizable;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
 use crate::physics::traits::{Describable, Dynamics};
 use crate::physics::{constants as c, energy::Energy};
@@ -10,8 +11,9 @@ impl Dynamics for DoublePendulum {
     type State = DoublePendulumState;
 
     fn dynamics(&self, s: &DoublePendulumState, input: Option<&[f64]>) -> DoublePendulumState {
-        let (m1, m2, l1, l2, air_resistance_coeff) = self.parameters();
-        let (theta1, omega1, theta2, omega2) = s.state();
+        let [m1, m2, l1, l2, air_resistance_coeff] =
+            self.extract(&["m1", "m2", "l1", "l2", "air_resistance_coeff"]);
+        let [theta1, omega1, theta2, omega2] = s.extract(&["theta1", "omega1", "theta2", "omega2"]);
         let u = input.unwrap_or(&[0.0, 0.0]);
         let g = c::GRAVITY;
 
@@ -21,34 +23,38 @@ impl Dynamics for DoublePendulum {
         let damping1 = -air_resistance_coeff * omega1 * omega1.abs();
         let damping2 = -air_resistance_coeff * omega2 * omega2.abs();
 
-        let dθ1 = omega1;
+        let dtheta1 = omega1;
         let dω1 = (m2 * g * theta2.sin() * c
             - m2 * s * (l1 * c * omega1.powi(2) + l2 * omega2.powi(2))
             - (m1 + m2) * g * theta1.sin()
             + (u[0] + damping1))
             / (l1 * (m1 + m2 * s * s));
-        let dθ2 = omega2;
+        let dtheta2 = omega2;
         let dω2 = ((m1 + m2) * (l1 * omega1.powi(2) * s - g * theta2.sin() + g * theta1.sin() * c)
             + m2 * l2 * omega2.powi(2) * s * c
             + (u[1] + damping2))
             / (l2 * (m1 + m2 * s * s));
 
         DoublePendulumState {
-            theta1: dθ1,
+            theta1: dtheta1,
             omega1: dω1,
-            theta2: dθ2,
+            theta2: dtheta2,
             omega2: dω2,
         }
     }
 
     fn energy(&self, s: &DoublePendulumState) -> Energy {
-        let (m1, m2, l1, l2, _air_resistance_coeff) = self.parameters();
-        let (θ1, θ̇1, θ2, θ̇2) = s.state();
+        let [m1, m2, l1, l2] = self.extract(&["m1", "m2", "l1", "l2"]);
+        let [theta1, omega1, theta2, omega2] = s.extract(&["theta1", "omega1", "theta2", "omega2"]);
 
-        let r1 = Vector3::new(l1 * θ1.sin(), 0.0, -l1 * θ1.cos() + 2.0);
-        let r2 = Vector3::new(r1.x + l2 * θ2.sin(), 0.0, r1.z - l2 * θ2.cos());
-        let v1 = Vector3::new(l1 * θ̇1 * θ1.cos(), 0.0, l1 * θ̇1 * θ1.sin());
-        let v2 = Vector3::new(v1.x + l2 * θ̇2 * θ2.cos(), 0.0, v1.z + l2 * θ̇2 * θ2.sin());
+        let r1 = Vector3::new(l1 * theta1.sin(), 0.0, -l1 * theta1.cos() + 2.0);
+        let r2 = Vector3::new(r1.x + l2 * theta2.sin(), 0.0, r1.z - l2 * theta2.cos());
+        let v1 = Vector3::new(l1 * omega1 * theta1.cos(), 0.0, l1 * omega1 * theta1.sin());
+        let v2 = Vector3::new(
+            v1.x + l2 * omega2 * theta2.cos(),
+            0.0,
+            v1.z + l2 * omega2 * theta2.sin(),
+        );
 
         let kinetic = 0.5 * (m1 * v1.dot(&v1) + m2 * v2.dot(&v2));
         let potential = m1 * c::GRAVITY * r1[2] + m2 * c::GRAVITY * r2[2];
@@ -58,10 +64,10 @@ impl Dynamics for DoublePendulum {
 
     fn dynamics_symbolic(&self, state: &ExprVector, registry: &Arc<ExprRegistry>) -> ExprVector {
         // Define symbolic variables
-        let theta1 = state.get(0).unwrap();
-        let omega1 = state.get(1).unwrap();
-        let theta2 = state.get(2).unwrap();
-        let omega2 = state.get(3).unwrap();
+        let theta1 = state.get(DoublePendulumState::index_of("theta1")).unwrap();
+        let omega1 = state.get(DoublePendulumState::index_of("omega1")).unwrap();
+        let theta2 = state.get(DoublePendulumState::index_of("theta2")).unwrap();
+        let omega2 = state.get(DoublePendulumState::index_of("omega2")).unwrap();
         let u = registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
 
         let m1 = registry.get_scalar("m1").unwrap();

@@ -1,3 +1,4 @@
+use crate::common::Labelizable;
 use crate::numeric_services::symbolic::{SymbolicError, SymbolicEvalResult, TryIntoEvalResult};
 use std::ops::{Add, Div, Mul, Sub};
 
@@ -18,16 +19,18 @@ use std::ops::{Add, Div, Mul, Sub};
 ///
 /// ```rust
 /// use control_rs::physics::traits::State;
-/// use macros::StateOps;
+/// use macros::{StateOps,LabelOps};
+/// use control_rs::common::Labelizable;
 ///
-/// #[derive(Clone, Debug, StateOps)]
+/// #[derive(Clone, Debug, StateOps, LabelOps)]
 /// struct MyState {
 ///     position: f64,
 ///     velocity: f64,
 /// }
 /// ```
 pub trait State:
-    Sized
+    Labelizable
+    + Sized
     + Add<Output = Self>
     + Sub<Output = Self>
     + Mul<f64, Output = Self>
@@ -36,9 +39,7 @@ pub trait State:
 {
     fn as_vec(&self) -> Vec<f64>;
     fn from_vec(v: Vec<f64>) -> Self;
-    fn labels() -> &'static [&'static str];
 
-    // optional getters
     fn get_q(&self) -> Vec<f64>;
     fn get_v(&self) -> Vec<f64>;
     fn dim_q() -> usize;

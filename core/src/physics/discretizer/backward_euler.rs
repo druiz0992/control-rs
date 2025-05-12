@@ -1,6 +1,6 @@
 use super::utils::{get_states, step_intrinsic};
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
-use crate::physics::traits::{Describable, Discretizer, Dynamics, State};
+use crate::physics::traits::{Describable, Discretizer, Dynamics};
 use crate::physics::{ModelError, constants as c};
 use crate::solver::newton::NewtonSolver;
 use std::sync::Arc;

@@ -1,5 +1,6 @@
 use super::model::SlidingBrick;
 use super::state::SlidingBrickState;
+use crate::common::Labelizable;
 use crate::numeric_services::symbolic::{ExprMatrix, ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::{Energy, constants as c, traits::Dynamics};
 use std::sync::Arc;
@@ -11,8 +12,8 @@ impl Dynamics for SlidingBrick {
     type State = SlidingBrickState;
 
     fn dynamics(&self, state: &Self::State, _input: Option<&[f64]>) -> Self::State {
-        let (m, friction_coeff) = self.parameters();
-        let (_, pos_y, v_x, v_y) = state.state();
+        let [m, friction_coeff] = self.extract(&["m", "friction_coeff"]);
+        let [pos_y, v_x, v_y] = state.extract(&["pos_y", "v_x", "v_y"]);
         let g = c::GRAVITY;
 
         // friction
@@ -41,9 +42,9 @@ impl Dynamics for SlidingBrick {
     }
 
     fn dynamics_symbolic(&self, state: &ExprVector, registry: &Arc<ExprRegistry>) -> ExprVector {
-        let pos_y = state.get(1).unwrap();
-        let v_x = state.get(2).unwrap();
-        let v_y = state.get(3).unwrap();
+        let pos_y = state.get(SlidingBrickState::index_of("pos_y")).unwrap();
+        let v_x = state.get(SlidingBrickState::index_of("v_x")).unwrap();
+        let v_y = state.get(SlidingBrickState::index_of("v_y")).unwrap();
 
         let friction_coeff = registry.get_scalar(c::FRICTION_COEFF_SYMBOLIC).unwrap();
         let m = registry.get_scalar(c::MASS_SYMBOLIC).unwrap();
@@ -70,8 +71,8 @@ impl Dynamics for SlidingBrick {
     }
 
     fn energy(&self, state: &Self::State) -> Energy {
-        let (m, _) = self.parameters();
-        let (_, pos_y, v_x, v_y) = state.state();
+        let [m] = self.extract(&["m"]);
+        let [pos_y, v_x, v_y] = state.extract(&["pos_y", "v_x", "v_y"]);
 
         let kinetic = 0.5 * m * (v_x.powi(2) + v_y.powi(2));
         let potential = m * c::GRAVITY * pos_y;

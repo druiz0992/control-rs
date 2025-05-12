@@ -1,7 +1,8 @@
+use crate::common::Labelizable;
 use crate::physics::traits::State;
-use macros::StateOps;
+use macros::{LabelOps, StateOps};
 
-#[derive(Clone, Debug, StateOps)]
+#[derive(Clone, Debug, StateOps, LabelOps)]
 pub struct SlidingBrickState {
     pub pos_x: f64,
     pub pos_y: f64,
@@ -27,7 +28,8 @@ mod tests {
     #[test]
     fn test_state() {
         let state = SlidingBrickState::new(1.0, 2.0, 3.0, 4.0);
-        assert_eq!(state.state(), (1.0, 2.0, 3.0, 4.0));
+        let vals = state.extract(&["pos_x", "pos_y", "v_x", "v_y"]);
+        assert_eq!(vals, [1.0, 2.0, 3.0, 4.0]);
     }
 
     #[test]
