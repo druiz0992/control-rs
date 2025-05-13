@@ -199,6 +199,7 @@ pub struct OptimizerConfig {
     tolerance: f64,
     line_search: LineSeachConfig,
     gauss_newton: bool,
+    regularization_factor: f64,
 }
 
 impl OptimizerConfig {
@@ -251,6 +252,14 @@ impl OptimizerConfig {
     pub fn set_gauss_newton(&mut self, flag: bool) {
         self.gauss_newton = flag;
     }
+
+    pub fn set_regularization_factor(&mut self, factor: f64) {
+        self.regularization_factor = factor;
+    }
+
+    pub fn get_regularization_factor(&self) -> f64 {
+        self.regularization_factor
+    }
 }
 
 impl Default for OptimizerConfig {
@@ -260,6 +269,7 @@ impl Default for OptimizerConfig {
             tolerance: DEFAULT_TOLERANCE,
             line_search: LineSeachConfig::default(),
             gauss_newton: true,
+            regularization_factor: 0.0,
         }
     }
 }

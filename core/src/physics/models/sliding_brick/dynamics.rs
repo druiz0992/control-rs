@@ -1,7 +1,7 @@
 use super::model::SlidingBrick;
 use super::state::SlidingBrickState;
 use crate::common::Labelizable;
-use crate::numeric_services::symbolic::{ExprMatrix, ExprRegistry, ExprScalar, ExprVector};
+use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::{Energy, constants as c, traits::Dynamics};
 use std::sync::Arc;
 
@@ -80,17 +80,13 @@ impl Dynamics for SlidingBrick {
         Energy::new(kinetic, potential)
     }
 
-    fn mass_matrix_symbolic(&self, registry: &Arc<ExprRegistry>) -> Option<ExprMatrix> {
-        let m = registry.get_scalar(c::MASS_SYMBOLIC).unwrap();
-        Some(ExprMatrix::identity(2).scale(&m))
-    }
+    fn linear_term(&self, dt: &ExprScalar, registry: &Arc<ExprRegistry>) -> Option<ExprVector> {
+        let mass_matrix = registry.get_matrix(c::MASS_MATRIX_SYMBOLIC).unwrap();
+        let g = registry.get_scalar(c::GRAVITY_SYMBOLIC).unwrap();
+        let g_vector = ExprVector::new(&["0", "1"]).scale(&g);
+        let v = registry.get_vector(c::STATE_V_SYMBOLIC).unwrap();
 
-    fn constraint_jacobian_symbolic(&self, _registry: &Arc<ExprRegistry>) -> Option<ExprMatrix> {
-        // For constraint v_y = 0
-        let one = ExprScalar::one();
-        let zero = ExprScalar::zero();
-
-        Some(ExprMatrix::from_vec(&vec![vec![zero, one]]))
+        Some(mass_matrix.matmul_vec(&g_vector.scale(dt).sub(&v).wrap()).wrap())
     }
 }
 

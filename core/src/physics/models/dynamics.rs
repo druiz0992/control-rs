@@ -1,4 +1,4 @@
-use crate::numeric_services::symbolic::{ExprMatrix, ExprRegistry, ExprVector};
+use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::Energy;
 use nalgebra::Vector2;
 use std::sync::Arc;
@@ -10,15 +10,7 @@ pub trait Dynamics: Clone {
     fn dynamics_symbolic(&self, state: &ExprVector, registry: &Arc<ExprRegistry>) -> ExprVector;
     fn energy(&self, state: &Self::State) -> Energy;
 
-    // --- Optional symbolic methods for constrained/contact dynamics ---
-
-    /// Mass matrix M(q)
-    fn mass_matrix_symbolic(&self, _registry: &Arc<ExprRegistry>) -> Option<ExprMatrix> {
-        None
-    }
-
-    /// Constraint Jacobian J(q)
-    fn constraint_jacobian_symbolic(&self, _registry: &Arc<ExprRegistry>) -> Option<ExprMatrix> {
+    fn linear_term(&self, _dt: &ExprScalar, _registry: &Arc<ExprRegistry>) -> Option<ExprVector> {
         None
     }
 }

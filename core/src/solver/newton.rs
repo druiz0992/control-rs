@@ -6,6 +6,7 @@ use crate::numeric_services::symbolic::{
     ExprMatrix, ExprScalar, ExprVector, SymbolicFn, TryIntoEvalResult,
 };
 use crate::physics::ModelError;
+use log::info;
 use nalgebra::{DMatrix, DVector};
 use std::sync::Arc;
 
@@ -176,7 +177,7 @@ impl NewtonSolver {
             &eq_jacobian,
             &ineq_jacobian,
             &log_domain_scaling,
-            1e-3,
+            options.get_regularization_factor(),
         );
 
         // ip_kkt_conditions, ip_kkt_jacobian, kkt_conditions
@@ -216,7 +217,11 @@ impl NewtonSolver {
         let residual_expr = gradient.extend(&eq_constraints);
 
         let unknown_expr = unknown_expr.extend(&mus);
-        let ktt_jacobian = ExprMatrix::build_ktt_jacobian(&hessian, &eq_jacobian, 1e-3);
+        let ktt_jacobian = ExprMatrix::build_ktt_jacobian(
+            &hessian,
+            &eq_jacobian,
+            options.get_regularization_factor(),
+        );
 
         let residual_fn = residual_expr.to_fn(registry)?;
         let jacobian_fn = ktt_jacobian.to_fn(registry)?;
@@ -252,6 +257,7 @@ impl NewtonSolver {
             let ip_jac: DMatrix<f64> = ip_jacobian_fn.eval(&[]).try_into_eval_result()?;
 
             let delta = ip_jac
+                .clone()
                 .lu()
                 .solve(&(-&ip_res))
                 .ok_or(ModelError::SolverError(

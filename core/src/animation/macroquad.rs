@@ -1,6 +1,7 @@
 use super::Animation;
 use crate::physics::traits::{Dynamics, PhysicsSim, Renderable};
 use async_trait::async_trait;
+use log::info;
 use macroquad::prelude::*;
 
 /// A struct that implements the `Animation` trait using the `macroquad` library for rendering.
@@ -57,6 +58,7 @@ where
 
             let model = self.sim.model();
             let state = self.sim.state();
+            info!("{:?}", state);
             let joints = model.render_joints(state, screen_dims);
 
             for win in joints.windows(2) {

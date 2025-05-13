@@ -50,6 +50,7 @@ fn get_ineq_constraints_expr(unknown_expr: &ExprVector) -> ExprVector {
 }
 
 fn main() {
+    env_logger::init();
     let unknown_expr = ExprVector::new(&["x1", "x2"]);
     let cost = get_cost_expr(&unknown_expr);
 

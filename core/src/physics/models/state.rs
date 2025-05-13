@@ -30,6 +30,9 @@ use std::ops::{Add, Div, Mul, Sub};
 /// ```
 pub trait State:
     Labelizable
+    + std::fmt::Debug
+    + Send
+    + Sync
     + Sized
     + Add<Output = Self>
     + Sub<Output = Self>

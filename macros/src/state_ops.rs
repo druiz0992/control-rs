@@ -49,7 +49,6 @@ pub fn derive_state_ops_impl(input: TokenStream) -> TokenStream {
     };
 
     let field_names: Vec<_> = fields.iter().map(|f| f.ident.as_ref().unwrap()).collect();
-    let field_strings = field_names.iter().map(|f| f.to_string());
     let num_fields = field_names.len();
 
     let (q_fields, v_fields): (Vec<_>, Vec<_>) = fields.iter().partition(|f| {
@@ -71,7 +70,6 @@ pub fn derive_state_ops_impl(input: TokenStream) -> TokenStream {
         .iter()
         .enumerate()
         .map(|(i, f)| quote! { #f: v[#i] });
-    let label_strs = field_strings.map(|s| quote! { #s });
 
     // For ops
     let add_fields = field_names.iter().map(|f| quote! { #f: self.#f + rhs.#f });
@@ -79,14 +77,6 @@ pub fn derive_state_ops_impl(input: TokenStream) -> TokenStream {
     let mul_fields = field_names.iter().map(|f| quote! { #f: self.#f * rhs });
     let div_fields = field_names.iter().map(|f| quote! { #f: self.#f / rhs });
     let eq_fields = field_names.iter().map(|f| quote! { self.#f == other.#f });
-
-    // Tuple type for `state()` method
-    let tuple_type = {
-        let types = std::iter::repeat(quote! { f64 })
-            .take(num_fields)
-            .collect::<Vec<_>>();
-        quote! { ( #( #types ),* ) }
-    };
 
     let q_len = q_idents.len();
     let v_len = v_idents.len();

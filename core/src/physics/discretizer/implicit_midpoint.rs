@@ -44,7 +44,8 @@ impl<D: Dynamics> Discretizer<D> for ImplicitMidpoint<D> {
         _input: Option<&[f64]>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
-        step_intrinsic(state, dt, &self.solver, &self.registry)
+        let (new_state, _multipliers) = step_intrinsic(state, dt, &self.solver, &self.registry)?;
+        Ok(new_state)
     }
 
     fn get_model(&self) -> &D {

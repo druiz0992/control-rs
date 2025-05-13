@@ -136,6 +136,24 @@ impl ExprMatrix {
         }
     }
 
+    pub fn sub(&self, other: &Self) -> Self {
+        let result_matrix = self
+            .matrix
+            .iter()
+            .zip(&other.matrix)
+            .map(|(row_self, row_other)| {
+                row_self
+                    .iter()
+                    .zip(row_other)
+                    .map(|(val_self, val_other)| val_self.sub(val_other))
+                    .collect()
+            })
+            .collect();
+        ExprMatrix {
+            matrix: result_matrix,
+        }
+    }
+
     pub fn transpose(&self) -> Self {
         let transposed_matrix = (0..self.matrix[0].len())
             .map(|i| self.matrix.iter().map(|row| row[i].clone()).collect())
@@ -145,6 +163,17 @@ impl ExprMatrix {
         }
     }
 
+    pub fn wrap(&self) -> Self {
+        let wrapped_matrix: Vec<Vec<_>> = self
+            .matrix
+            .iter()
+            .map(|row| row.iter().map(|el| el.wrap()).collect())
+            .collect();
+
+        ExprMatrix {
+            matrix: wrapped_matrix,
+        }
+    }
     pub fn matmul(&self, other: &Self) -> Self {
         let rows = self.matrix.len();
         let cols = other.matrix[0].len();
@@ -420,7 +449,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::numeric_services::symbolic::SymbolicExpr;
     use crate::numeric_services::symbolic::fasteval::ExprRegistry;
+    use rand::Rng;
+
+    use nalgebra::{DMatrix, DVector};
+    use proptest::prelude::*;
 
     #[test]
     fn test_new() {
@@ -430,7 +464,6 @@ mod tests {
         assert_eq!(expr_matrix.matrix[0][0].to_string(), "1");
         assert_eq!(expr_matrix.matrix[1][1].to_string(), "4");
     }
-
     #[test]
     fn test_add() {
         let matrix1 = ExprMatrix::new(&vec![&["1", "2"], &["3", "4"]]);
@@ -532,5 +565,213 @@ mod tests {
         let empty_matrix: Vec<&[&str]> = vec![];
         let expr_matrix = ExprMatrix::new(&empty_matrix);
         assert_eq!(expr_matrix.matrix.len(), 0);
+    }
+
+    fn random_dmatrix(rows: usize, cols: usize) -> DMatrix<f64> {
+        let mut rng = rand::thread_rng();
+        let data: Vec<f64> = (0..rows * cols).map(|_| rng.gen_range(-1.0..1.0)).collect();
+        DMatrix::from_vec(rows, cols, data)
+    }
+    fn random_dvector(rows: usize) -> DVector<f64> {
+        let mut rng = rand::thread_rng();
+        let data: Vec<f64> = (0..rows).map(|_| rng.gen_range(-1.0..1.0)).collect();
+        DVector::from_vec(data)
+    }
+
+    fn from_dvector(vector: DVector<f64>) -> ExprVector {
+        let expr: Vec<_> = vector
+            .iter()
+            .map(|&val| ExprScalar::from_f64(val))
+            .collect();
+        ExprVector::from_vec(expr)
+    }
+    fn from_dmatrix(matrix: DMatrix<f64>) -> ExprMatrix {
+        let rows = matrix.nrows();
+        let cols = matrix.ncols();
+        let mut expr_matrix = Vec::new();
+
+        for i in 0..rows {
+            let mut row = Vec::new();
+            for j in 0..cols {
+                row.push(ExprScalar::new(matrix[(i, j)].to_string()));
+            }
+            expr_matrix.push(row);
+        }
+
+        ExprMatrix {
+            matrix: expr_matrix,
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn test_add_arithmetic(
+            n_cols in 1..10,
+            n_rows in 1..10
+        ) {
+            let registry = Arc::new(ExprRegistry::new());
+            let m1 = random_dmatrix(n_rows as usize, n_cols as usize);
+            let m2 = random_dmatrix(n_rows as usize, n_cols as usize);
+            let m1_expr = from_dmatrix(m1.clone());
+            let m2_expr = from_dmatrix(m2.clone());
+
+            let m_target = m1 + m2;
+            let m_expr = m1_expr.add(&m2_expr);
+
+            let m_obtained = m_expr.to_fn(&registry).unwrap();
+
+            if let Ok(SymbolicEvalResult::Matrix(result)) = m_obtained(None) {
+                assert!((m_target - result).abs().sum() < 1e-3);
+            } else {
+                panic!("Unexpected result");
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn test_sub_arithmetic(
+            n_cols in 1..10,
+            n_rows in 1..10
+        ) {
+            let registry = Arc::new(ExprRegistry::new());
+            let m1 = random_dmatrix(n_rows as usize, n_cols as usize);
+            let m2 = random_dmatrix(n_rows as usize, n_cols as usize);
+            let m1_expr = from_dmatrix(m1.clone());
+            let m2_expr = from_dmatrix(m2.clone());
+
+            let m_target = m1 - m2;
+            let m_expr = m1_expr.sub(&m2_expr);
+
+            let m_obtained = m_expr.to_fn(&registry).unwrap();
+
+            if let Ok(SymbolicEvalResult::Matrix(result)) = m_obtained(None) {
+                assert!((m_target - result).abs().sum() < 1e-3);
+            } else {
+                panic!("Unexpected result");
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn test_matmul_arithmetic(
+            n_cols in 1..10,
+            n_rows in 1..10
+        ) {
+            let registry = Arc::new(ExprRegistry::new());
+            let m1 = random_dmatrix(n_rows as usize, n_cols as usize);
+            let m2 = random_dmatrix(n_cols as usize, n_rows as usize);
+            let m1_expr = from_dmatrix(m1.clone());
+            let m2_expr = from_dmatrix(m2.clone());
+
+            let m_target = m1 * m2;
+            let m_expr = m1_expr.matmul(&m2_expr);
+
+            let m_obtained = m_expr.to_fn(&registry).unwrap();
+
+            if let Ok(SymbolicEvalResult::Matrix(result)) = m_obtained(None) {
+                assert!((m_target - result).abs().sum() < 1e-3);
+            } else {
+                panic!("Unexpected result");
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn test_transpose_arithmetic(
+            n_cols in 1..10,
+            n_rows in 1..10
+        ) {
+            let registry = Arc::new(ExprRegistry::new());
+            let m1 = random_dmatrix(n_rows as usize, n_cols as usize);
+            let m1_expr = from_dmatrix(m1.clone());
+
+            let m_target = m1.transpose();
+            let m_expr = m1_expr.transpose();
+
+            let m_obtained = m_expr.to_fn(&registry).unwrap();
+
+            if let Ok(SymbolicEvalResult::Matrix(result)) = m_obtained(None) {
+                assert!((m_target - result).abs().sum() < 1e-3);
+            } else {
+                panic!("Unexpected result");
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn test_matmul_vec_arithmetic(
+            n_cols in 1..10,
+            n_rows in 1..10
+        ) {
+            let registry = Arc::new(ExprRegistry::new());
+            let m = random_dmatrix(n_rows as usize, n_cols as usize);
+            let v = random_dvector(n_cols as usize);
+            let m_expr = from_dmatrix(m.clone());
+            let v_expr = from_dvector(v.clone());
+
+            let m_target = m * v;
+            let m_expr = m_expr.matmul_vec(&v_expr);
+
+            let m_obtained = m_expr.to_fn(&registry).unwrap();
+
+            if let Ok(SymbolicEvalResult::Vector(result)) = m_obtained(None) {
+                assert!((m_target - result).abs().sum() < 1e-3);
+            } else {
+                panic!("Unexpected result");
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn test_combined_arithmetic(
+            n_cols in 1..10,
+            n_rows in 1..10,
+            scalar1 in -1.0..1.0,
+            scalar2 in -1.0..1.0,
+        ) {
+            let registry = Arc::new(ExprRegistry::new());
+            let m1 = random_dmatrix(n_rows as usize, n_cols as usize);
+            let m2 = random_dmatrix(n_rows as usize, n_cols as usize);
+            let m3 = random_dmatrix(n_rows as usize, n_cols as usize);
+
+            let ma = random_dmatrix(n_cols as usize, n_rows as usize);
+            let mb = random_dmatrix(n_cols as usize, n_rows as usize);
+            let mc = random_dmatrix(n_cols as usize, n_rows as usize);
+
+            let v1 = random_dvector(n_rows as usize);
+            let v2 = random_dvector(n_rows as usize);
+            let v3 = random_dvector(n_rows as usize);
+
+            let m1_expr = from_dmatrix(m1.clone());
+            let m2_expr = from_dmatrix(m2.clone());
+            let m3_expr = from_dmatrix(m3.clone());
+
+            let ma_expr = from_dmatrix(ma.clone());
+            let mb_expr = from_dmatrix(mb.clone());
+            let mc_expr = from_dmatrix(mc.clone());
+
+            let v1_expr = from_dvector(v1.clone());
+            let v2_expr = from_dvector(v2.clone());
+            let v3_expr = from_dvector(v3.clone());
+
+            let m_target = (scalar1 * (m1 + m2 -m3) * scalar2 * (ma + mb -mc)) * (v1 + v2 - v3);
+            let m_expr1 = m1_expr.add(&m2_expr).sub(&m3_expr).wrap().scalef(scalar1);
+            let m_expr2 = ma_expr.add(&mb_expr).sub(&mc_expr).wrap().scalef(scalar2);
+            let v_expr = v1_expr.add(&v2_expr).sub(&v3_expr).wrap();
+            let m_expr = m_expr1.matmul(&m_expr2).wrap().matmul_vec(&v_expr);
+
+            let m_obtained = m_expr.to_fn(&registry).unwrap();
+
+            if let Ok(SymbolicEvalResult::Vector(result)) = m_obtained(None) {
+                assert!((m_target - result).abs().sum() < 1e-3);
+            } else {
+                panic!("Unexpected result");
+            }
+        }
     }
 }
