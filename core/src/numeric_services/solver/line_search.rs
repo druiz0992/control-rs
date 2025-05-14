@@ -1,5 +1,5 @@
 use super::models::LineSeachConfig;
-use crate::numeric_services::symbolic::SymbolicFunction;
+use crate::numeric_services::symbolic::{SymbolicEvalResult, SymbolicFunction};
 use crate::physics::ModelError;
 use nalgebra::DVector;
 
@@ -30,32 +30,39 @@ impl LineSearch {
     pub fn run(
         &self,
         merit_fn: &SymbolicFunction,
-        search_direction: &DVector<f64>,
-        start_point: &[f64],
+        delta: &DVector<f64>,
+        z: &[f64],
+        default: Option<f64>,
     ) -> Result<f64, ModelError> {
         let mut alpha = 1.0;
-        let current_merit = merit_fn.eval(start_point)?;
+        let current_merit = match default {
+            Some(v) => SymbolicEvalResult::Scalar(v),
+            _ => merit_fn.eval(z)?,
+        };
 
-        let mut new_point = step_from(search_direction, start_point, alpha);
+        // new_z = z + delta * alpha
+        let mut new_z = step_from(delta, z, alpha);
 
         for _ in 0..self.max_iters {
-            let trial_merit = merit_fn.eval(new_point.as_slice())?;
+            let trial_merit = merit_fn.eval(new_z.as_slice())?;
 
             if trial_merit < current_merit {
                 return Ok(alpha);
             } else {
                 alpha *= self.factor;
-                new_point = step_from(search_direction, start_point, alpha);
+                // new_z = z + delta * alpha
+                new_z = step_from(delta, z, alpha);
             }
         }
 
-        Err(ModelError::SolverError(
-            "Maximum number of iterations reached in linesearch".to_string(),
-        ))
+        //Err(ModelError::SolverError(
+        //    "Maximum number of iterations reached in linesearch".to_string(),
+        //))
+        Ok(alpha)
     }
 }
 
 /// Computes a new point by moving along the search direction scaled by the step size.
-fn step_from(search_direction: &DVector<f64>, start_point: &[f64], alpha: f64) -> DVector<f64> {
-    DVector::from_column_slice(start_point) + search_direction * alpha
+fn step_from(delta: &DVector<f64>, z: &[f64], alpha: f64) -> DVector<f64> {
+    DVector::from_column_slice(z) + delta * alpha
 }

@@ -4,6 +4,7 @@ pub mod hermite_simpson;
 pub mod implicit_midpoint;
 pub mod mid_point;
 pub mod rk4;
+pub mod utils;
 
 use crate::physics::ModelError;
 use crate::physics::traits::Dynamics;
@@ -11,11 +12,11 @@ use crate::physics::traits::Dynamics;
 pub trait Discretizer<D: Dynamics> {
     fn step(
         &mut self,
-        dynamics: &D,
         state: &D::State,
         input: Option<&[f64]>,
         dt: f64,
     ) -> Result<D::State, ModelError>;
+    fn get_model(&self) -> &D;
 }
 
 pub use backward_euler::BackwardEuler;

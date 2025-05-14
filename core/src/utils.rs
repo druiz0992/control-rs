@@ -1,3 +1,4 @@
+
 pub fn unzip3<A, B, C>(v: Vec<(A, B, C)>) -> (Vec<A>, Vec<B>, Vec<C>) {
     let mut a = Vec::with_capacity(v.len());
     let mut b = Vec::with_capacity(v.len());
@@ -18,6 +19,8 @@ pub fn within_tolerance(param1: f64, param2: f64, tol: f64) -> bool {
 
     diff <= tol * scale.max(1.0)
 }
+
+
 #[cfg(test)]
 mod tests {
     use super::*;

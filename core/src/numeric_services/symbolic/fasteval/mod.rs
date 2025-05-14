@@ -1,8 +1,10 @@
 pub mod derivatives;
+pub mod macros;
 pub mod matrix;
 pub mod record;
 pub mod registry;
 pub mod scalar;
+pub mod utils;
 pub mod vector;
 
 pub use matrix::ExprMatrix;

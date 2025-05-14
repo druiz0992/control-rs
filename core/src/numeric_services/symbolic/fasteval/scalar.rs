@@ -63,6 +63,13 @@ impl ExprScalar {
         Self::new(value.to_string())
     }
 
+    pub fn zero() -> Self {
+        Self::new("0")
+    }
+    pub fn one() -> Self {
+        Self::new("1")
+    }
+
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
@@ -120,13 +127,65 @@ impl ExprScalar {
         Self::new(format!("abs({})", self.0))
     }
     pub fn exp(&self) -> Self {
-        Self::new(format!("{}^({})", std::f64::consts::E, self.0))
+        Self::new(format!("({}^({}))", std::f64::consts::E, self.0))
     }
     pub fn min(&self, other: &Self) -> Self {
         Self::new(format!("min({},{})", self.0, other.0))
     }
     pub fn max(&self, other: &Self) -> Self {
         Self::new(format!("max({},{})", self.0, other.0))
+    }
+    pub fn lt(&self, other: &Self) -> Self {
+        Self::new(format!("({} < {})", self.0, other.0))
+    }
+    pub fn lte(&self, other: &Self) -> Self {
+        Self::new(format!("({} <= {})", self.0, other.0))
+    }
+    pub fn gt(&self, other: &Self) -> Self {
+        Self::new(format!("({} > {})", self.0, other.0))
+    }
+    pub fn gte(&self, other: &Self) -> Self {
+        Self::new(format!("({} >= {})", self.0, other.0))
+    }
+    pub fn eq(&self, other: &Self) -> Self {
+        Self::new(format!("({} == {})", self.0, other.0))
+    }
+    pub fn ne(&self, other: &Self) -> Self {
+        Self::new(format!("({} != {})", self.0, other.0))
+    }
+    pub fn and(&self, other: &Self) -> Self {
+        Self::new(format!("({} && {})", self.0, other.0))
+    }
+    pub fn or(&self, other: &Self) -> Self {
+        Self::new(format!("({} || {})", self.0, other.0))
+    }
+    pub fn not(&self) -> Self {
+        Self::new(format!("!({})", self.0))
+    }
+    pub fn select(&self, opt1: &Self, opt2: &Self) -> Self {
+        Self::new(format!(
+            "(({} * {}) + ({} * {}))",
+            self.0,
+            opt1.0,
+            self.not(),
+            opt2.0
+        ))
+    }
+
+    pub fn sigmoid(&self, k: f64) -> Self {
+        Self::new(format!(
+            "1/(1+({}^({}*{})))",
+            std::f64::consts::E,
+            -k,
+            self.0
+        ))
+    }
+    pub fn tanh(&self, k: f64) -> Self {
+        Self::new(format!("tanh({}*{})", k, self.0))
+    }
+
+    pub fn sign(&self) -> Self {
+        Self::new(format!("sign({})", self.0))
     }
 
     pub fn gradient(&self, vars: &ExprVector) -> Result<ExprVector, SymbolicError> {
@@ -162,15 +221,17 @@ impl ExprScalar {
         &self,
         eq_constraints_expr: &ExprVector,
         ineq_constraints_expr: &ExprVector,
+        mu_prefix: &str,
+        lambda_prefix: &str,
     ) -> Result<(Self, ExprVector, ExprVector), SymbolicError> {
         fn make_multipliers(prefix: &str, count: usize) -> ExprVector {
-            let names: Vec<String> = (0..count).map(|i| format!("{}_{}", prefix, i)).collect();
+            let names: Vec<String> = (0..count).map(|i| format!("{}{}", prefix, i)).collect();
             let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
             ExprVector::new(&refs)
         }
 
-        let mus = make_multipliers("lagrangian_mu", eq_constraints_expr.len());
-        let lambdas = make_multipliers("lagrangian_lambda", ineq_constraints_expr.len());
+        let mus = make_multipliers(mu_prefix, eq_constraints_expr.len());
+        let lambdas = make_multipliers(lambda_prefix, ineq_constraints_expr.len());
 
         let mut lagrangian = self.clone();
 
@@ -288,7 +349,9 @@ where
 mod tests {
 
     use super::*;
+    use crate::numeric_services::symbolic::TryIntoEvalResult;
     use crate::numeric_services::symbolic::fasteval::ExprRegistry;
+    use crate::numeric_services::symbolic::models::SymbolicEvalResult;
 
     #[test]
     fn test_new() {
@@ -415,7 +478,7 @@ mod tests {
         let registry = Arc::new(ExprRegistry::default());
 
         let expr_y = ExprScalar::new("2 * x");
-        registry.insert_scalar("y", expr_y);
+        registry.insert_scalar_expr("y", expr_y);
         registry.insert_var("x", 3.0);
         let expr = ExprScalar::new("y + 1");
         let func = expr.to_fn(&registry).unwrap();
@@ -450,5 +513,405 @@ mod tests {
         let result = func(None).unwrap();
 
         assert_eq!(result, SymbolicEvalResult::Scalar(10.0));
+    }
+
+    #[test]
+    fn test_lt_true() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("2");
+        let expr2 = ExprScalar::new("5");
+
+        let r = expr1.lt(&expr2);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(1.0));
+    }
+
+    #[test]
+    fn test_lt_false() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("2");
+        let expr2 = ExprScalar::new("5");
+
+        let r = expr2.lt(&expr1);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(0.0));
+    }
+
+    #[test]
+    fn test_lte_lt() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("2");
+        let expr2 = ExprScalar::new("5");
+
+        let r = expr1.lte(&expr2);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(1.0));
+    }
+
+    #[test]
+    fn test_lte_eq() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("2");
+        let expr2 = ExprScalar::new("2");
+
+        let r = expr1.lte(&expr2);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(1.0));
+    }
+    #[test]
+    fn test_lte_gt() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("3");
+        let expr2 = ExprScalar::new("2");
+
+        let r = expr1.lte(&expr2);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(0.0));
+    }
+
+    #[test]
+    fn test_gt_true() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("5");
+        let expr2 = ExprScalar::new("2");
+
+        let r = expr1.gt(&expr2);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(1.0));
+    }
+
+    #[test]
+    fn test_gt_false() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("2");
+        let expr2 = ExprScalar::new("5");
+
+        let r = expr1.gt(&expr2);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(0.0));
+    }
+
+    #[test]
+    fn test_gte_lt() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("2");
+        let expr2 = ExprScalar::new("5");
+
+        let r = expr1.gte(&expr2);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(0.0));
+    }
+
+    #[test]
+    fn test_gte_eq() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("2");
+        let expr2 = ExprScalar::new("2");
+
+        let r = expr1.gte(&expr2);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(1.0));
+    }
+    #[test]
+    fn test_gte_gt() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("3");
+        let expr2 = ExprScalar::new("2");
+
+        let r = expr1.gte(&expr2);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(1.0));
+    }
+
+    #[test]
+    fn test_eq_true() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("3");
+        let expr2 = ExprScalar::new("3");
+
+        let r = expr1.eq(&expr2);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(1.0));
+    }
+    #[test]
+    fn test_eq_false() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("2");
+        let expr2 = ExprScalar::new("3");
+
+        let r = expr1.eq(&expr2);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(0.0));
+    }
+
+    #[test]
+    fn test_ne_true() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("2");
+        let expr2 = ExprScalar::new("3");
+
+        let r = expr1.ne(&expr2);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(1.0));
+    }
+    #[test]
+    fn test_ne_false() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("3");
+        let expr2 = ExprScalar::new("3");
+
+        let r = expr1.ne(&expr2);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(0.0));
+    }
+
+    #[test]
+    fn test_and_true_true() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("5");
+        let expr2 = ExprScalar::new("3");
+
+        let r = expr1.ne(&expr2).and(&expr1.gt(&expr2));
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(1.0));
+    }
+
+    #[test]
+    fn test_and_false_true() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("5");
+        let expr2 = ExprScalar::new("3");
+
+        let r = expr1.eq(&expr2).and(&expr1.gt(&expr2));
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(0.0));
+    }
+
+    #[test]
+    fn test_and_false_false() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("5");
+        let expr2 = ExprScalar::new("3");
+
+        let r = expr1.eq(&expr2).and(&expr1.lt(&expr2));
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(0.0));
+    }
+
+    #[test]
+    fn test_and_true_false() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("5");
+        let expr2 = ExprScalar::new("3");
+
+        let r = expr1.ne(&expr2).and(&expr1.lt(&expr2));
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(0.0));
+    }
+
+    #[test]
+    fn test_or_true_true() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("5");
+        let expr2 = ExprScalar::new("3");
+
+        let r = expr1.ne(&expr2).or(&expr1.gt(&expr2));
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(1.0));
+    }
+
+    #[test]
+    fn test_or_false_true() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("5");
+        let expr2 = ExprScalar::new("3");
+
+        let r = expr1.eq(&expr2).or(&expr1.gt(&expr2));
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(1.0));
+    }
+
+    #[test]
+    fn test_or_false_false() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("5");
+        let expr2 = ExprScalar::new("3");
+
+        let r = expr1.eq(&expr2).or(&expr1.lt(&expr2));
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(0.0));
+    }
+
+    #[test]
+    fn test_or_true_false() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("5");
+        let expr2 = ExprScalar::new("3");
+
+        let r = expr1.ne(&expr2).or(&expr1.lt(&expr2));
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(1.0));
+    }
+
+    #[test]
+    fn test_not_true() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("5");
+        let expr2 = ExprScalar::new("3");
+
+        let r = expr1.eq(&expr2).not();
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(1.0));
+    }
+
+    #[test]
+    fn test_not_false() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("5");
+        let expr2 = ExprScalar::new("3");
+
+        let r = expr1.ne(&expr2).not();
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(0.0));
+    }
+
+    #[test]
+    fn test_select_true() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("5");
+        let expr2 = ExprScalar::new("3");
+        let r1 = ExprScalar::new("6");
+        let r2 = ExprScalar::new("7");
+
+        let r = expr1.ne(&expr2).select(&r1, &r2);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(6.0));
+    }
+
+    #[test]
+    fn test_select_false() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("5");
+        let expr2 = ExprScalar::new("3");
+        let r1 = ExprScalar::new("6");
+        let r2 = ExprScalar::new("7");
+
+        let r = expr1.eq(&expr2).select(&r1, &r2);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(7.0));
+    }
+
+    #[test]
+    fn test_positive_sign() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("2");
+
+        let r = expr1.sign();
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(1.0));
+    }
+
+    #[test]
+    fn test_negative_sign() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("-2.324");
+
+        let r = expr1.sign();
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(-1.0));
+    }
+
+    #[test]
+    fn test_zero_sign() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("0.0");
+
+        let r = expr1.sign();
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(1.0));
+    }
+
+    #[test]
+    fn test_sigmoid_0() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("0.0");
+
+        let r = expr1.sigmoid(-1.0);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None).unwrap();
+
+        assert_eq!(result, SymbolicEvalResult::Scalar(0.5));
+    }
+
+    #[test]
+    fn test_sigmoid_3() {
+        let registry = Arc::new(ExprRegistry::default());
+        let expr1 = ExprScalar::new("3.0");
+
+        let r = expr1.sigmoid(-1.0);
+        let func = r.to_fn(&registry).unwrap();
+        let result = func(None);
+
+        let eval_result: f64 = result.try_into_eval_result().unwrap();
+
+        assert!((eval_result - 1.0 / (1.0 + (3.0_f64).exp())).abs() < 1e-6);
     }
 }

@@ -1,6 +1,6 @@
 use super::model::CartPole;
 use super::state::CartPoleState;
-use crate::physics::traits::{Renderable, State};
+use crate::{common::Labelizable, physics::traits::Renderable};
 use nalgebra::Vector2;
 
 impl Renderable for CartPole {
@@ -10,8 +10,8 @@ impl Renderable for CartPole {
         let (screen_width, screen_height) = screen_dims;
         let origin = Vector2::new(screen_width, screen_height);
 
-        let (_, _, _, _, l) = self.parameters();
-        let [pos_x, _, theta, _] = state.as_vec().try_into().unwrap();
+        let [l] = self.extract(&["l"]);
+        let [pos_x, theta] = state.extract(&["pos_x", "theta"]);
 
         let total_length = l as f32;
 

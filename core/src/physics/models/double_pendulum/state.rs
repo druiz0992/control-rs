@@ -1,7 +1,8 @@
+use crate::common::Labelizable;
 use crate::physics::traits::State;
-use macros::StateOps;
+use macros::{LabelOps, StateOps};
 
-#[derive(Clone, Debug, StateOps)]
+#[derive(Clone, Debug, StateOps, LabelOps)]
 pub struct DoublePendulumState {
     pub theta1: f64,
     pub omega1: f64,
@@ -25,7 +26,8 @@ mod tests {
     #[test]
     fn test_state() {
         let state = DoublePendulumState::new(1.0, 2.0, 3.0, 4.0);
-        assert_eq!(state.state(), (1.0, 2.0, 3.0, 4.0));
+        let vals = state.extract(&["theta1", "omega1", "theta2", "omega2"]);
+        assert_eq!(vals, [1.0, 2.0, 3.0, 4.0]);
     }
 
     #[test]
@@ -90,5 +92,42 @@ mod tests {
         assert_eq!(result.omega1, 2.0);
         assert_eq!(result.theta2, 3.0);
         assert_eq!(result.omega2, 4.0);
+    }
+
+    #[test]
+    fn test_eq() {
+        let state1 = DoublePendulumState::new(1.0, 2.0, 3.0, 4.0);
+        let state2 = DoublePendulumState::new(0.5, 1.5, 2.5, 3.5);
+        assert!(state1 != state2);
+    }
+
+    #[test]
+    fn test_get_q() {
+        let state1 = DoublePendulumState::new(1.0, 2.0, 3.0, 4.0);
+        let q = state1.get_q();
+
+        assert!(q[0] == 1.0);
+        assert!(q[1] == 2.0);
+        assert!(q[2] == 3.0);
+        assert!(q[3] == 4.0);
+        assert!(q.len() == 4);
+    }
+
+    #[test]
+    fn test_get_v() {
+        let state1 = DoublePendulumState::new(1.0, 2.0, 3.0, 4.0);
+        let v = state1.get_v();
+
+        assert!(v.is_empty());
+    }
+
+    #[test]
+    fn test_dim_q() {
+        assert!(DoublePendulumState::dim_q() == 4);
+    }
+
+    #[test]
+    fn test_dim_v() {
+        assert!(DoublePendulumState::dim_v() == 0);
     }
 }

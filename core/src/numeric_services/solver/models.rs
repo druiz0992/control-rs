@@ -4,6 +4,7 @@ use crate::{
     },
     physics::ModelError,
 };
+use core::fmt;
 
 const DEFAULT_MAX_ITERS: usize = 100;
 const DEFAULT_TOLERANCE: f64 = 1e-6;
@@ -25,9 +26,30 @@ pub struct ProblemSpec {
 
     pub eq_constraints: Option<SymbolicFunction>,
     pub eq_jacobian: Option<SymbolicFunction>,
+    pub n_eq: usize,
 
     pub ineq_constraints: Option<SymbolicFunction>,
     pub ineq_jacobian: Option<SymbolicFunction>,
+    pub n_ineq: usize,
+}
+
+impl fmt::Debug for ProblemSpec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProblemSpec")
+            .field("residual", &self.residual.is_some())
+            .field("ip_residual", &self.ip_residual.is_some())
+            .field("jacobian", &self.jacobian.is_some())
+            .field("hessian", &self.hessian.is_some())
+            .field("unknown_vars", &self.unknown_vars.as_ref().map(|v| v.len()))
+            .field("merit", &self.merit.is_some())
+            .field("eq_constraints", &self.eq_constraints.is_some())
+            .field("n_eq_constraints", &self.n_eq)
+            .field("eq_jacobian", &self.eq_jacobian.is_some())
+            .field("ineq_constraints", &self.ineq_constraints.is_some())
+            .field("n_ineq_constraints", &self.n_ineq)
+            .field("ineq_jacobian", &self.ineq_jacobian.is_some())
+            .finish()
+    }
 }
 
 impl ProblemSpec {
@@ -35,6 +57,7 @@ impl ProblemSpec {
         residual_fn: SymbolicFn,
         jacobian_fn: SymbolicFn,
         merit_fn: SymbolicFn,
+        n_eq: usize,
         unknown_expr: &ExprVector,
     ) -> Self {
         ProblemSpec {
@@ -42,6 +65,7 @@ impl ProblemSpec {
             jacobian: Some(SymbolicFunction::new(jacobian_fn, unknown_expr)),
             merit: Some(SymbolicFunction::new(merit_fn, unknown_expr)),
             unknown_vars: Some(unknown_expr.clone()),
+            n_eq,
             ..Default::default()
         }
     }
@@ -50,6 +74,8 @@ impl ProblemSpec {
         ip_residual_fn: SymbolicFn,
         ip_jacobian_fn: SymbolicFn,
         ip_merit_fn: SymbolicFn,
+        n_eq: usize,
+        n_ineq: usize,
         unknown_expr: &ExprVector,
     ) -> Self {
         ProblemSpec {
@@ -58,6 +84,8 @@ impl ProblemSpec {
             jacobian: Some(SymbolicFunction::new(ip_jacobian_fn, unknown_expr)),
             merit: Some(SymbolicFunction::new(ip_merit_fn, unknown_expr)),
             unknown_vars: Some(unknown_expr.clone()),
+            n_eq,
+            n_ineq,
             ..Default::default()
         }
     }
@@ -199,6 +227,8 @@ pub struct OptimizerConfig {
     tolerance: f64,
     line_search: LineSeachConfig,
     gauss_newton: bool,
+    regularization_factor: f64,
+    verbose: bool,
 }
 
 impl OptimizerConfig {
@@ -251,6 +281,22 @@ impl OptimizerConfig {
     pub fn set_gauss_newton(&mut self, flag: bool) {
         self.gauss_newton = flag;
     }
+
+    pub fn set_regularization_factor(&mut self, factor: f64) {
+        self.regularization_factor = factor;
+    }
+
+    pub fn get_regularization_factor(&self) -> f64 {
+        self.regularization_factor
+    }
+
+    pub fn set_verbose(&mut self, flag: bool) {
+        self.verbose = flag;
+    }
+
+    pub fn get_verbose(&self) -> bool {
+        self.verbose
+    }
 }
 
 impl Default for OptimizerConfig {
@@ -260,6 +306,8 @@ impl Default for OptimizerConfig {
             tolerance: DEFAULT_TOLERANCE,
             line_search: LineSeachConfig::default(),
             gauss_newton: true,
+            regularization_factor: 0.0,
+            verbose: false,
         }
     }
 }
@@ -272,4 +320,18 @@ pub struct OptimizerParams {
     pub ineq_constraints: ExprVector,
     pub mus: ExprVector,
     pub lambdas: ExprVector,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct KktConditionsStatus {
+    /// Lagragian gradient norm
+    pub stationarity: f64,
+    /// eq(x) = 0 => norm(eq(x))
+    pub max_primal_feasibility_c: Option<f64>,
+    /// ineq(x) => 0 => min(ineq(x))
+    pub min_primal_feasibility_h: Option<f64>,
+    /// lambda >= 0 => min(lambda)
+    pub dual_feasibility: Option<f64>,
+    /// lambda_j * ineq_j(x) = 0 => abs(dot(lambda, ineq))
+    pub complementary_slackness: Option<f64>,
 }

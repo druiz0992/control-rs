@@ -7,7 +7,6 @@ where
     D: Discretizer<M>,
 {
     discretizer: D,
-    model: M,
     state: M::State,
 }
 
@@ -16,16 +15,15 @@ where
     M: Dynamics,
     D: Discretizer<M>,
 {
-    pub fn new(model: M, discretizer: D, initial_state: M::State) -> Self {
+    pub fn new(discretizer: D, initial_state: M::State) -> Self {
         BasicSim {
             discretizer,
-            model,
             state: initial_state,
         }
     }
 
     pub fn energy(&self, state: &M::State) -> Energy {
-        self.model.energy(state)
+        self.discretizer.get_model().energy(state)
     }
 }
 
@@ -50,12 +48,12 @@ where
     }
 
     fn step(&mut self, input: Option<&[f64]>, dt: f64) -> Result<&M::State, ModelError> {
-        self.state = self.discretizer.step(&self.model, &self.state, input, dt)?;
+        self.state = self.discretizer.step(&self.state, input, dt)?;
         Ok(&self.state)
     }
 
     fn model(&self) -> &Self::Model {
-        &self.model
+        self.discretizer.get_model()
     }
 
     fn state(&self) -> &<Self::Model as Dynamics>::State {

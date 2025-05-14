@@ -1,18 +1,23 @@
-#![allow(non_snake_case)]
-
 use super::model::CartPole;
 use super::state::CartPoleState;
+use crate::common::Labelizable;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
-use crate::physics::traits::Dynamics;
-use crate::physics::{GRAVITY as G, energy::Energy};
+use crate::physics::traits::{Dynamics, State};
+use crate::physics::{constants as c, energy::Energy};
 use std::sync::Arc;
 
 impl Dynamics for CartPole {
     type State = CartPoleState;
 
     fn dynamics(&self, state: &Self::State, input: Option<&[f64]>) -> Self::State {
-        let (m_p, m_c, friction_coeff, air_resistance_coeff, l) = self.parameters();
-        let (_, v_x, theta, omega) = state.state();
+        let [m_p, m_c, friction_coeff, air_resistance_coeff, l] = self.extract(&[
+            "pole_mass",
+            "cart_mass",
+            "friction_coeff",
+            "air_resistance_coeff",
+            "l",
+        ]);
+        let [v_x, theta, omega] = state.extract(&["v_x", "theta", "omega"]);
         let u = input.unwrap_or(&[0.0])[0];
 
         // damping
@@ -25,7 +30,7 @@ impl Dynamics for CartPole {
 
         let denom = l * (4.0 / 3.0 - m_p * cos_theta * cos_theta / total_mass);
 
-        let domega = (G * sin_theta
+        let domega = (c::GRAVITY * sin_theta
             + cos_theta * (-u - cart_friction - m_p * l * omega * omega * sin_theta) / total_mass
             + pendulum_damping / (m_p + l))
             / denom;
@@ -41,19 +46,25 @@ impl Dynamics for CartPole {
         }
     }
 
+    fn state_dims(&self) -> (usize, usize) {
+        (CartPoleState::dim_q(), CartPoleState::dim_v())
+    }
+
     fn dynamics_symbolic(&self, state: &ExprVector, registry: &Arc<ExprRegistry>) -> ExprVector {
         // Define symbolic variables
-        let v_x = state.get(1).unwrap();
-        let theta = state.get(2).unwrap();
-        let omega = state.get(3).unwrap();
-        let u = registry.get_scalar("input").unwrap();
+        let v_x = state.get(CartPoleState::index_of("v_x")).unwrap();
+        let theta = state.get(CartPoleState::index_of("theta")).unwrap();
+        let omega = state.get(CartPoleState::index_of("omega")).unwrap();
+        let u = registry.get_scalar(c::INPUT_SYMBOLIC).unwrap();
 
-        let m_p = registry.get_scalar("pole_mass").unwrap();
-        let m_c = registry.get_scalar("cart_mass").unwrap();
-        let friction_coeff = registry.get_scalar("friction_coeff").unwrap();
-        let air_resistance_coeff = registry.get_scalar("air_resistance_coeff").unwrap();
-        let l = registry.get_scalar("l").unwrap();
-        let g = registry.get_scalar("g").unwrap();
+        let m_p = registry.get_scalar(c::MASS_POLE_SYMBOLIC).unwrap();
+        let m_c = registry.get_scalar(c::MASS_CART_SYMBOLIC).unwrap();
+        let friction_coeff = registry.get_scalar(c::FRICTION_COEFF_SYMBOLIC).unwrap();
+        let air_resistance_coeff = registry
+            .get_scalar(c::AIR_RESISTANCE_COEFF_SYMBOLIC)
+            .unwrap();
+        let l = registry.get_scalar(c::LENGTH_SYMBOLIC).unwrap();
+        let g = registry.get_scalar(c::GRAVITY_SYMBOLIC).unwrap();
 
         // damping
         let cart_friction = friction_coeff.scalef(-1.0).mul(&v_x);
@@ -111,8 +122,9 @@ impl Dynamics for CartPole {
     }
 
     fn energy(&self, state: &Self::State) -> Energy {
-        let (m_p, m_c, _friction_coeff, _air_resistance_coeff, l) = self.parameters();
-        let (_, v_x, theta, omega) = state.state();
+        let [m_p, m_c, l] = self.extract(&["pole_mass", "cart_mass", "l"]);
+        let [v_x, theta, omega] = state.extract(&["v_x", "theta", "omega"]);
+
         let omega_square = omega.powi(2);
         let vx_square = v_x.powi(2);
 
@@ -123,7 +135,7 @@ impl Dynamics for CartPole {
                 + (l / 2.0 * theta.sin() * omega_square).powi(2));
 
         let kinetic = kinetic_pole + kintetic_cart;
-        let potential = 0.5 * m_p * G * l * theta.cos();
+        let potential = 0.5 * m_p * c::GRAVITY * l * theta.cos();
 
         Energy::new(kinetic, potential)
     }
@@ -156,7 +168,7 @@ mod tests {
     fn test_dynamics_symbolic() {
         let registry = Arc::new(ExprRegistry::new());
         let cart_pole = CartPole::new(1.0, 2.0, 0.0, 0.0, 1.0, Some(&registry));
-        let state_symbol = registry.get_vector("state").unwrap();
+        let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
         let dynamics_func = cart_pole.dynamics_symbolic(&state_symbol, &registry);
         dbg!(&dynamics_func);
     }
@@ -183,7 +195,7 @@ mod tests {
             let cart_pole = CartPole::new(pole_mass, cart_mass, friction_coeff, air_resistance_coeff, l, Some(&registry));
 
             let state = CartPoleState::new(pos_x, v_x, theta, omega);
-            let state_symbol = registry.get_vector("state").unwrap();
+            let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
 
             let new_state = cart_pole.dynamics(&state, None);
             let dynamics_func = cart_pole

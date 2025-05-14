@@ -5,6 +5,7 @@ use control_rs::{plotter, utils};
 use std::f64::consts::PI;
 
 fn main() {
+    env_logger::init();
     let m1 = 1.0;
     let m2 = 1.0;
     let l1 = 1.0;
@@ -22,8 +23,8 @@ fn main() {
     let steps = 1000;
 
     let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, None);
-    let integrator = RK4::new();
-    let mut sim = BasicSim::new(model, integrator, state0);
+    let integrator = RK4::new(model).unwrap();
+    let mut sim = BasicSim::new(integrator, state0);
 
     let history = sim.simulate_steps(dt, steps);
 

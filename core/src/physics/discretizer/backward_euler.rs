@@ -1,7 +1,9 @@
+use super::utils;
+use crate::common::Labelizable;
+use crate::numeric_services::solver::{KktConditionsStatus, NewtonSolver, OptimizerConfig};
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
-use crate::physics::ModelError;
 use crate::physics::traits::{Describable, Discretizer, Dynamics, State};
-use crate::solver::newton::NewtonSolver;
+use crate::physics::{ModelError, constants as c};
 use std::sync::Arc;
 
 // Backward Euler residual:
@@ -10,53 +12,86 @@ use std::sync::Arc;
 //
 // The root of R(x_{k+1}) gives the next state satisfying the Backward Euler integration scheme.
 
-pub struct BackwardEuler {
+pub struct BackwardEuler<D: Dynamics> {
     registry: Arc<ExprRegistry>,
     solver: NewtonSolver,
+    model: D,
 }
 
-impl BackwardEuler {
-    pub fn new<D: Dynamics>(model: &D, registry: Arc<ExprRegistry>) -> Result<Self, ModelError> {
-        let current_state = registry.get_vector("state")?;
-        let next_state = current_state.build_next();
-        registry.insert_vector("next_state", next_state.clone());
+impl<D: Dynamics> BackwardEuler<D> {
+    pub fn new(
+        model: D,
+        registry: Arc<ExprRegistry>,
+        solver_options: Option<OptimizerConfig>,
+    ) -> Result<Self, ModelError> {
+        let solver;
+        let dt_expr = ExprScalar::new(c::TIME_DELTA_SYMBOLIC);
+        let (current_state, next_state) = utils::get_states(&registry)?;
 
-        let dt_expr = ExprScalar::new("dt");
-        let dyn_next_state = model
-            .dynamics_symbolic(&next_state.wrap(), &registry)
-            .scale(&dt_expr);
+        if let Some(linear_term) = model.linear_term(&dt_expr, &registry) {
+            solver = utils::init_constrained_dynamics(
+                &linear_term,
+                &dt_expr,
+                solver_options,
+                &registry,
+            )?;
+        } else {
+            let dyn_next_state = model
+                .dynamics_symbolic(&next_state.wrap(), &registry)
+                .scale(&dt_expr);
 
-        let residual = next_state.sub(&current_state).sub(&dyn_next_state);
-        let solver = NewtonSolver::new_root_solver(&residual, &next_state, &registry, None)?;
+            let residual = next_state.sub(&current_state).sub(&dyn_next_state);
+            solver =
+                NewtonSolver::new_root_solver(&residual, &next_state, &registry, solver_options)?;
+        }
 
-        Ok(BackwardEuler { registry, solver })
+        Ok(BackwardEuler {
+            registry,
+            solver,
+            model,
+        })
+    }
+
+    pub fn solver_status(&self) -> &Option<KktConditionsStatus> {
+        self.solver.status()
     }
 }
 
-impl<D> Discretizer<D> for BackwardEuler
-where
-    D: Dynamics,
-{
+impl<D: Dynamics> Discretizer<D> for BackwardEuler<D> {
     fn step(
         &mut self,
-        _model: &D,
         state: &D::State,
         _input: Option<&[f64]>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
-        self.registry.insert_var("dt", dt);
-        self.registry.insert_vec_as_vars("state", &state.as_vec())?;
-        self.registry
-            .insert_vec_as_vars("next_state", &state.as_vec())?;
+        let v_dims = D::State::dim_v();
+        let (next_v, _multipliers) =
+            utils::step_intrinsic(state, dt, &mut self.solver, &self.registry)?;
+        if v_dims == 0 {
+            return Ok(D::State::from_vec(next_v));
+        }
 
-        let history = self.solver.solve(&state.as_vec(), &self.registry)?;
-        Ok(D::State::from_vec(history.last().cloned().ok_or_else(
-            || ModelError::SolverError(String::from("Solver failed")),
-        )?))
+        let labels = D::State::labels();
+        let q_slice = &labels[..D::State::dim_q()];
+
+        let current_q = state.vectorize(q_slice);
+        let next_q: Vec<_> = current_q
+            .iter()
+            .zip(next_v.iter())
+            .map(|(q, v)| q + dt * v)
+            .collect();
+        let mut full_state = next_q;
+        full_state.extend_from_slice(&next_v);
+
+        Ok(D::State::from_vec(full_state))
+    }
+
+    fn get_model(&self) -> &D {
+        &self.model
     }
 }
 
-impl Describable for BackwardEuler {
+impl<D: Dynamics> Describable for BackwardEuler<D> {
     fn name(&self) -> &'static str {
         "Backward-Euler"
     }
