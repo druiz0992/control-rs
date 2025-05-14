@@ -34,26 +34,30 @@ pub fn step_intrinsic<S: State>(
     dt: f64,
     solver: &NewtonSolver,
     registry: &Arc<ExprRegistry>,
-) -> Result<(S, Option<Vec<f64>>), ModelError> {
+) -> Result<(Vec<f64>, Option<Vec<f64>>), ModelError> {
     registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
     registry.insert_vec_as_vars(c::STATE_SYMBOLIC, &state.as_vec())?;
-    registry.insert_vec_as_vars(c::NEXT_STATE_SYMBOLIC, &state.as_vec())?;
+    //registry.insert_vec_as_vars(c::NEXT_STATE_SYMBOLIC, &state.as_vec())?;
+    let q_dims = S::dim_q();
+    let v_dims = S::dim_v();
+    let start_dim = if v_dims == 0 { 0 } else { q_dims };
+    let end_dim = if v_dims == 0 { q_dims + v_dims } else { v_dims };
 
-    let history = solver.solve(&state.as_vec(), registry)?;
+    let history = solver.solve(&state.as_vec()[start_dim..], registry)?;
     let last = history
         .last()
         .cloned()
         .ok_or_else(|| ModelError::SolverError(String::from("Solver failed")))?;
+
     let state_dims = S::dim_q() + S::dim_v();
-    let state_elems = last[..state_dims].to_vec();
-    let new_state: S = State::from_vec(state_elems);
+    let state_elems = last[..end_dim].to_vec();
     let multipliers = if last.len() > state_dims {
-        Some(last[state_dims..].to_vec())
+        Some(last[end_dim..].to_vec())
     } else {
         None
     };
 
-    Ok((new_state, multipliers))
+    Ok((state_elems, multipliers))
 }
 
 /// 1/2 * next_v_state * M * next_v_state + linear term * next_v_state

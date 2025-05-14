@@ -14,6 +14,7 @@ const LOG_DOMAIN_RHO: &str = "log_domain_rho";
 const SLACK_SIGMA: &str = "slack_sigma_";
 const SLACK_S: &str = "slack_s_";
 const LAMBDA: &str = "lagrangian_lambda_";
+const MU: &str = "lagrangian_mu_";
 
 pub struct NewtonSolver {
     options: OptimizerConfig,
@@ -30,12 +31,13 @@ impl NewtonSolver {
     ) -> Result<Self, ModelError> {
         let options = options.unwrap_or_default();
 
+        // jacobian = d_res / dx
         let jacobian = residual_expr.jacobian(unknown_expr)?;
         let residual_fn = residual_expr.to_fn(registry)?;
         let jacobian_fn = jacobian.to_fn(registry)?;
         let merit_fn = get_merit_fn(residual_expr, registry, &options)?;
 
-        let problem = ProblemSpec::new(residual_fn, jacobian_fn, merit_fn, unknown_expr);
+        let problem = ProblemSpec::new(residual_fn, jacobian_fn, merit_fn, 0, unknown_expr);
 
         Ok(Self { options, problem })
     }
@@ -50,21 +52,23 @@ impl NewtonSolver {
     ) -> Result<Self, ModelError> {
         let options = options.unwrap_or_default();
 
-        // retrieve equality constraints
+        // retrieve constraints
         let eq_constraints = get_constraints(&eq_constraints_expr);
         let ineq_constraints = get_constraints(&ineq_constraints_expr);
 
-        // compute lagrangian
+        // compute lagrangian L = objective + mu * eq_constraints - lambda * ineq_constraints
         let (lagrangian, mus, lambdas) =
-            objective_expr.lagrangian(&eq_constraints, &ineq_constraints)?;
+            objective_expr.lagrangian(&eq_constraints, &ineq_constraints, MU, LAMBDA)?;
+        // dL/dx = [d_objective/dx + mu * d_eq_constraints/dx - lambda * d_ineq/dx]
         let gradient = lagrangian.gradient(unknown_expr)?.wrap();
 
         let fn_expr = match options.get_gauss_newton() {
             false => &lagrangian,
             true => objective_expr,
         };
+        // H = dL2/d2x
         let hessian = fn_expr.hessian(unknown_expr)?;
-
+        // J = dC/dx
         let eq_jacobian = eq_constraints.jacobian(unknown_expr)?;
 
         let optimizer_params = OptimizerParams {
@@ -122,7 +126,7 @@ impl NewtonSolver {
                 ))?;
 
             if let Some(merit_fn) = &self.problem.merit {
-                alpha = ls.run(merit_fn, &delta, &unknown_vals).unwrap();
+                alpha = ls.run(merit_fn, &delta, &unknown_vals, None).unwrap();
             }
 
             for (val, delta_val) in unknown_vals.iter_mut().zip(delta.iter()) {
@@ -150,16 +154,22 @@ impl NewtonSolver {
             mus,
             lambdas,
         } = params;
+
+        // log domain interior point parameters:
+        // s = sqrt(rho) * exp(sigma), lambda = sqrt(rho) * exp(-sigma)
         let rho = ExprScalar::new(LOG_DOMAIN_RHO);
         let sqrt_rho = rho.pow(0.5);
-        let (sigmas, ip_ineq_constraints_expr) =
-            build_ip_inequality_constraints(&ineq_constraints, &sqrt_rho, registry);
 
-        // ip_kkt_conditions = [dL/dX; C_eq; C_ineq -s]
+        //  (sigmas = [sigma_i], ip_C_ineq = [C_ineq(x) - s])
+        let (sigmas, ip_ineq_constraints_expr) =
+            build_ip_params(&ineq_constraints, &sqrt_rho, registry);
+
+        // ip_kkt_conditions = [dL/dX; C_eq; ip_C_ineq]
         let mut ip_kkt_conditions = gradient.extend(&eq_constraints);
         ip_kkt_conditions = ip_kkt_conditions.extend(&ip_ineq_constraints_expr);
 
         let zero_vector = ExprVector::zeros(ineq_constraints.len());
+        // kkt_consitions = [dL/dx; C_eq; min(C_ineq, 0); min(lambda, 0); lambda .* C_ineq]
         let mut kkt_conditions = gradient.extend(&eq_constraints);
         kkt_conditions = kkt_conditions.extend(&ineq_constraints.min(&zero_vector));
         kkt_conditions = kkt_conditions.extend(&lambdas.min(&zero_vector));
@@ -167,7 +177,8 @@ impl NewtonSolver {
 
         // dC_eq/dx
         let ineq_jacobian = ineq_constraints.jacobian(unknown_expr)?;
-        let log_domain_scaling = sigmas.scalef(-1.0).exp().scale(&sqrt_rho).diagm();
+        let log_domain_scaling_neg = sigmas.scalef(-1.0).exp().scale(&sqrt_rho).diagm();
+        let log_domain_scaling_pos = sigmas.exp().scale(&sqrt_rho).scalef(-1.0).diagm();
 
         let mut unknown_expr = unknown_expr.extend(&mus);
         unknown_expr = unknown_expr.extend(&sigmas);
@@ -176,7 +187,8 @@ impl NewtonSolver {
             &hessian,
             &eq_jacobian,
             &ineq_jacobian,
-            &log_domain_scaling,
+            log_domain_scaling_neg,
+            log_domain_scaling_pos,
             options.get_regularization_factor(),
         );
 
@@ -192,6 +204,8 @@ impl NewtonSolver {
             ip_residual_fn,
             ip_jacobian_fn,
             ip_merit_fn,
+            eq_constraints.len(),
+            ineq_constraints.len(),
             &unknown_expr,
         );
 
@@ -227,7 +241,13 @@ impl NewtonSolver {
         let jacobian_fn = ktt_jacobian.to_fn(registry)?;
         let merit_fn = get_merit_fn(&gradient, registry, &options)?;
 
-        let problem = ProblemSpec::new(residual_fn, jacobian_fn, merit_fn, &unknown_expr);
+        let problem = ProblemSpec::new(
+            residual_fn,
+            jacobian_fn,
+            merit_fn,
+            eq_constraints.len(),
+            &unknown_expr,
+        );
 
         Ok(Self { options, problem })
     }
@@ -243,18 +263,25 @@ impl NewtonSolver {
         let max_iters = self.options.get_max_iters();
         let tolerance = self.options.get_tolerance();
         let mut history_results = Vec::with_capacity(max_iters);
+        // extend unknown to include state + sigma
         let mut unknown_vals = extend_initial_guess(initial_guess, &unknown_expr);
         let mut rho = 0.1;
         let ls = LineSearch::new(self.options.get_line_search_opts());
         let mut alpha = 1.0;
 
-        for _ in 0..max_iters {
+        for i in 0..max_iters {
             registry.insert_var("log_domain_rho", rho);
             registry.insert_vars(&unknown_expr, &unknown_vals);
-            history_results.push(unknown_vals.clone());
 
             let ip_res: DVector<f64> = ip_residual_fn.eval(&[]).try_into_eval_result()?;
             let ip_jac: DMatrix<f64> = ip_jacobian_fn.eval(&[]).try_into_eval_result()?;
+
+            /*
+            println!("{},{}", ip_res, ip_jac);
+            if i == 10 {
+                assert!(false);
+            }
+            */
 
             let delta = ip_jac
                 .clone()
@@ -265,18 +292,33 @@ impl NewtonSolver {
                 ))?;
 
             if let Some(ip_merit_fn) = &self.problem.merit {
-                alpha = ls.run(ip_merit_fn, &delta, &unknown_vals).unwrap();
+                alpha = ls
+                    .run(ip_merit_fn, &delta, &unknown_vals, Some(ip_res.norm()))
+                    .unwrap();
             }
 
             for (val, delta_val) in unknown_vals.iter_mut().zip(delta.iter()) {
                 *val += alpha * delta_val;
             }
 
-            let residual: DVector<f64> = residual_fn.eval(&[]).try_into_eval_result()?;
+            let residual: DVector<f64> = residual_fn.eval(&unknown_vals).try_into_eval_result()?;
             let res_norm_inf = residual.amax();
-            let ip_res: DVector<f64> = ip_residual_fn.eval(&[]).try_into_eval_result()?;
+            let ip_res: DVector<f64> = ip_residual_fn.eval(&unknown_vals).try_into_eval_result()?;
             let ip_res_norm_inf = ip_res.amax();
 
+            /*
+            logging(
+                i,
+                &residual,
+                &unknown_vals,
+                rho,
+                alpha,
+                self.problem.n_eq,
+                self.problem.n_ineq,
+            );
+            */
+
+            history_results.push(unknown_vals.clone());
             if res_norm_inf < tolerance {
                 break;
             } else if ip_res_norm_inf < tolerance {
@@ -284,11 +326,34 @@ impl NewtonSolver {
             }
         }
 
-        history_results.push(unknown_vals.clone());
         Ok(history_results)
     }
 }
 
+fn logging(
+    n_iter: usize,
+    gradient: &DVector<f64>,
+    z: &[f64],
+    rho: f64,
+    alpha: f64,
+    n_eq: usize,
+    n_ineq: usize,
+) {
+    let unknown_dims = z.len() - n_ineq;
+    let sigmas = &z[unknown_dims..];
+    let lambdas: Vec<_> = sigmas.iter().map(|s| rho.sqrt() * (-s).exp()).collect();
+    let lg_gradient_norm = gradient.rows(0, unknown_dims).into_owned().norm();
+    let min_ineq = gradient.rows(unknown_dims, n_ineq).into_owned().min();
+    let comp = gradient
+        .rows(unknown_dims + n_ineq, n_ineq)
+        .into_owned()
+        .dot(&DVector::from_vec(lambdas))
+        .abs();
+    info!(
+        "iter:{}\t |lg| {}\t min(h){}\t |compl|{}\t rho{}\t alpha{}",
+        n_iter, lg_gradient_norm, min_ineq, comp, rho, alpha
+    );
+}
 fn get_merit_fn(
     residual_expr: &ExprVector,
     registry: &Arc<ExprRegistry>,
@@ -304,6 +369,7 @@ fn get_constraints(expr: &Option<ExprVector>) -> ExprVector {
     expr.as_ref().cloned().unwrap_or(ExprVector::new(&[]))
 }
 
+/// add s = sqrt(rho) * exp(sigma), lambda = sqrt(rho) * exp(-sigma) to registry
 fn create_interior_point_symbols(
     sqrt_rho: &ExprScalar,
     var_index: usize,
@@ -322,7 +388,8 @@ fn create_interior_point_symbols(
     sigma_expr
 }
 
-fn build_ip_inequality_constraints(
+/// return ([sigma_i], [ineq(x) - s])
+fn build_ip_params(
     ineq_constraints_expr: &ExprVector,
     sqrt_rho: &ExprScalar,
     registry: &Arc<ExprRegistry>,

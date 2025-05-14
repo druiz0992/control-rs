@@ -25,14 +25,18 @@ impl<D: Dynamics> BackwardEuler<D> {
         let (current_state, next_state) = utils::get_states(&registry)?;
 
         if let Some(linear_term) = model.linear_term(&dt_expr, &registry) {
+            // retrieve M and J
+            let mass_matrix = registry.get_matrix(c::MASS_MATRIX_SYMBOLIC)?;
+            let jacobian_constraints_expr = registry.get_vector(c::CONSTRAINT_JACOBIAN_SYMBOLIC)?;
+            // build v_next, q_current
             let (_, next_v_state) = utils::get_v_states(&registry)?;
             let (current_q_state, _) = utils::get_q_states(&registry)?;
-            let mass_matrix = registry.get_matrix(c::MASS_MATRIX_SYMBOLIC)?;
+            // objective =  1/2 * v_next' * M * v_next + linear_term' * v_next
             let objective_expr = utils::build_objective(&mass_matrix, &linear_term, &next_v_state);
-            let jacobian_constraints_expr = registry.get_vector(c::CONSTRAINT_JACOBIAN_SYMBOLIC)?;
+            // constraints => J * (q_current + dt * v_next) >= 0
             let ineq_constraints_expr = ExprVector::from_vec(vec![
                 jacobian_constraints_expr
-                    .dot(&current_q_state.add(&next_v_state.scale(&dt_expr)))
+                    .dot(&current_q_state.add(&next_v_state.scale(&dt_expr)).wrap())
                     .unwrap()
                     .wrap(),
             ]);
@@ -41,7 +45,7 @@ impl<D: Dynamics> BackwardEuler<D> {
                 &objective_expr,
                 None,
                 Some(ineq_constraints_expr),
-                &next_state,
+                &next_v_state,
                 &registry,
                 None,
             )?;
@@ -69,13 +73,14 @@ impl<D: Dynamics> Discretizer<D> for BackwardEuler<D> {
         _input: Option<&[f64]>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
-        let (mut next_state, _multipliers) =
-            utils::step_intrinsic(state, dt, &self.solver, &self.registry)?;
+        let next_state;
         let v_dims = D::State::dim_v();
         if v_dims > 0 {
+            let (next_v, _multipliers) =
+                utils::step_intrinsic(state, dt, &self.solver, &self.registry)?;
+
             let labels = D::State::labels();
             let q_dims = D::State::dim_q();
-            let next_v = next_state.vectorize(&labels[q_dims..]);
             let mut current_q = state.vectorize(&labels[..q_dims]);
             current_q = current_q
                 .iter()
@@ -84,6 +89,9 @@ impl<D: Dynamics> Discretizer<D> for BackwardEuler<D> {
                 .collect();
             current_q.extend_from_slice(&next_v);
             next_state = D::State::from_vec(current_q.clone());
+        } else {
+            let (next_v, _) = utils::step_intrinsic(state, dt, &self.solver, &self.registry)?;
+            next_state = D::State::from_vec(next_v);
         }
         Ok(next_state)
     }

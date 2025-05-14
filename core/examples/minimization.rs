@@ -38,13 +38,15 @@ fn get_eq_constraints_expr(unknown_expr: &ExprVector) -> ExprVector {
     ExprVector::from_vec(vec![constraint1, constraint2])
 }
 
-/// c1: x1^2 + 2 * x2^2 - 0.5 >= 0
+/// c1: -x1^2 - 2 * x2^2 + 0.5 >= 0
 fn get_ineq_constraints_expr(unknown_expr: &ExprVector) -> ExprVector {
     let x1_sq = unknown_expr.get(0).unwrap().pow(2.0);
     let x2_sq = unknown_expr.get(1).unwrap().pow(2.0);
     let constraint = x1_sq
         .add(&x2_sq.scalef(2.0))
         .sub(&ExprScalar::from_f64(0.5))
+        .wrap()
+        .scalef(-1.0)
         .wrap();
     ExprVector::from_vec(vec![constraint])
 }
@@ -64,7 +66,8 @@ fn main() {
 
     let solver = NewtonSolver::new_minimization(
         &cost,
-        Some(eq_constraints_expr.clone()),
+        //Some(eq_constraints_expr.clone()),
+        None,
         Some(ineq_constraints_expr.clone()),
         &unknown_expr,
         &registry,

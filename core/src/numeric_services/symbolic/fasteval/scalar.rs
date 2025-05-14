@@ -127,7 +127,7 @@ impl ExprScalar {
         Self::new(format!("abs({})", self.0))
     }
     pub fn exp(&self) -> Self {
-        Self::new(format!("{}^({})", std::f64::consts::E, self.0))
+        Self::new(format!("({}^({}))", std::f64::consts::E, self.0))
     }
     pub fn min(&self, other: &Self) -> Self {
         Self::new(format!("min({},{})", self.0, other.0))
@@ -221,15 +221,17 @@ impl ExprScalar {
         &self,
         eq_constraints_expr: &ExprVector,
         ineq_constraints_expr: &ExprVector,
+        mu_prefix: &str,
+        lambda_prefix: &str,
     ) -> Result<(Self, ExprVector, ExprVector), SymbolicError> {
         fn make_multipliers(prefix: &str, count: usize) -> ExprVector {
-            let names: Vec<String> = (0..count).map(|i| format!("{}_{}", prefix, i)).collect();
+            let names: Vec<String> = (0..count).map(|i| format!("{}{}", prefix, i)).collect();
             let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
             ExprVector::new(&refs)
         }
 
-        let mus = make_multipliers("lagrangian_mu", eq_constraints_expr.len());
-        let lambdas = make_multipliers("lagrangian_lambda", ineq_constraints_expr.len());
+        let mus = make_multipliers(mu_prefix, eq_constraints_expr.len());
+        let lambdas = make_multipliers(lambda_prefix, ineq_constraints_expr.len());
 
         let mut lagrangian = self.clone();
 

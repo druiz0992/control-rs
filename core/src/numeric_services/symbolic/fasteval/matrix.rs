@@ -313,7 +313,8 @@ impl ExprMatrix {
         hessian: &ExprMatrix,
         eq_jacobian: &ExprMatrix,
         ineq_jacobian: &ExprMatrix,
-        scaling: &ExprMatrix,
+        scaling_neg: ExprMatrix,
+        scaling_pos: ExprMatrix,
         regularization_factor: f64,
     ) -> ExprMatrix {
         let (n_vars, _) = hessian.n_dims();
@@ -321,8 +322,7 @@ impl ExprMatrix {
         let (n_ineq, _) = ineq_jacobian.n_dims();
 
         let reg_hessian = hessian.add(&ExprMatrix::identity(n_vars).scalef(regularization_factor));
-        let g_scaled = ineq_jacobian.transpose().matmul(scaling);
-        let minus_scaling = scaling.scalef(-1.0);
+        let g_scaled = ineq_jacobian.transpose().matmul(&scaling_neg);
 
         let top = if n_eq > 0 {
             ExprMatrix::hstack(&[reg_hessian, eq_jacobian.transpose(), g_scaled])
@@ -344,10 +344,10 @@ impl ExprMatrix {
             ExprMatrix::hstack(&[
                 ineq_jacobian.clone(),
                 ExprMatrix::zeros((n_ineq, n_eq)),
-                minus_scaling,
+                scaling_pos,
             ])
         } else {
-            ExprMatrix::hstack(&[ineq_jacobian.clone(), minus_scaling])
+            ExprMatrix::hstack(&[ineq_jacobian.clone(), scaling_pos])
         };
 
         if n_eq > 0 {
@@ -541,6 +541,28 @@ mod tests {
         assert_eq!(expr_matrix.matrix[0].len(), 2);
         assert_eq!(expr_matrix.matrix[0][0].to_string(), "1");
         assert_eq!(expr_matrix.matrix[1][1].to_string(), "4");
+    }
+
+    #[test]
+    fn test_hstack() {
+        let input1 = vec![
+            vec!["1".to_string(), "2".to_string()],
+            vec!["3".to_string(), "4".to_string()],
+        ];
+        let input2 = vec![
+            vec!["5".to_string(), "6".to_string()],
+            vec!["7".to_string(), "8".to_string()],
+        ];
+        let expr_matrix1 = ExprMatrix::from_string(&input1);
+        let expr_matrix2 = ExprMatrix::from_string(&input2);
+
+        let r = ExprMatrix::hstack(&vec![expr_matrix1, expr_matrix2]);
+        assert_eq!(r.matrix.len(), 2);
+        assert_eq!(r.matrix[0].len(), 4);
+        assert_eq!(r.matrix[0][0].to_string(), "1");
+        assert_eq!(r.matrix[0][2].to_string(), "5");
+        assert_eq!(r.matrix[1][1].to_string(), "4");
+        assert_eq!(r.matrix[1][2].to_string(), "7");
     }
 
     #[test]

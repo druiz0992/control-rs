@@ -80,13 +80,18 @@ impl Dynamics for SlidingBrick {
         Energy::new(kinetic, potential)
     }
 
+    /// linear term = M * (dt * g - v_current)
     fn linear_term(&self, dt: &ExprScalar, registry: &Arc<ExprRegistry>) -> Option<ExprVector> {
         let mass_matrix = registry.get_matrix(c::MASS_MATRIX_SYMBOLIC).unwrap();
         let g = registry.get_scalar(c::GRAVITY_SYMBOLIC).unwrap();
         let g_vector = ExprVector::new(&["0", "1"]).scale(&g);
         let v = registry.get_vector(c::STATE_V_SYMBOLIC).unwrap();
 
-        Some(mass_matrix.matmul_vec(&g_vector.scale(dt).sub(&v).wrap()).wrap())
+        Some(
+            mass_matrix
+                .matmul_vec(&g_vector.scale(dt).sub(&v).wrap())
+                .wrap(),
+        )
     }
 }
 

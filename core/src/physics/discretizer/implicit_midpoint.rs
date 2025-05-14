@@ -1,4 +1,5 @@
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
+use crate::physics::models::state::State;
 use crate::physics::traits::{Describable, Discretizer, Dynamics};
 use crate::physics::{ModelError, constants as c};
 use crate::solver::newton::NewtonSolver;
@@ -45,7 +46,7 @@ impl<D: Dynamics> Discretizer<D> for ImplicitMidpoint<D> {
         dt: f64,
     ) -> Result<D::State, ModelError> {
         let (new_state, _multipliers) = step_intrinsic(state, dt, &self.solver, &self.registry)?;
-        Ok(new_state)
+        Ok(D::State::from_vec(new_state))
     }
 
     fn get_model(&self) -> &D {
