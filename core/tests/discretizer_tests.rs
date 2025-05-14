@@ -1,5 +1,5 @@
 use control_rs::common::Labelizable;
-use control_rs::numeric_services::symbolic::ExprRegistry;
+use control_rs::numeric_services::symbolic::{ExprRegistry};
 use control_rs::physics::discretizer::{
     BackwardEuler, ForwardEuler, HermiteSimpson, ImplicitMidpoint, MidPoint, RK4, RK4Symbolic,
 };
@@ -64,6 +64,7 @@ fn test_backward_euler_constrained_dynamics() {
     let (model, mut result, registry) = init_sliding_brick();
 
     let dt = 0.01;
+    let tol = 0.3;
 
     let mut integrator = BackwardEuler::new(model, registry, None).unwrap();
 
@@ -73,6 +74,11 @@ fn test_backward_euler_constrained_dynamics() {
 
         // check constain is met
         assert!(pos_y >= 0.0);
+        let status = integrator.solver_status().clone().unwrap();
+        assert!(status.stationarity <= tol);
+        assert!(status.min_primal_feasibility_h.unwrap() >= -tol);
+        assert!(status.dual_feasibility.unwrap() >= -tol);
+        assert!(status.complementary_slackness.unwrap() <= tol);
     }
 }
 
@@ -91,5 +97,10 @@ fn test_implicit_midpoint_constrained_dynamics() {
 
         // check constain is met
         assert!(pos_y >= -tol);
+        let status = integrator.solver_status().clone().unwrap();
+        assert!(status.stationarity <= tol);
+        assert!(status.min_primal_feasibility_h.unwrap() >= -tol);
+        assert!(status.dual_feasibility.unwrap() >= -tol);
+        assert!(status.complementary_slackness.unwrap() <= tol);
     }
 }

@@ -451,6 +451,7 @@ mod tests {
     use super::*;
     use crate::numeric_services::symbolic::SymbolicExpr;
     use crate::numeric_services::symbolic::fasteval::ExprRegistry;
+    use crate::numeric_services::symbolic::fasteval::utils::*;
     use rand::Rng;
 
     use nalgebra::{DMatrix, DVector};
@@ -598,31 +599,6 @@ mod tests {
         let mut rng = rand::thread_rng();
         let data: Vec<f64> = (0..rows).map(|_| rng.gen_range(-1.0..1.0)).collect();
         DVector::from_vec(data)
-    }
-
-    fn from_dvector(vector: DVector<f64>) -> ExprVector {
-        let expr: Vec<_> = vector
-            .iter()
-            .map(|&val| ExprScalar::from_f64(val))
-            .collect();
-        ExprVector::from_vec(expr)
-    }
-    fn from_dmatrix(matrix: DMatrix<f64>) -> ExprMatrix {
-        let rows = matrix.nrows();
-        let cols = matrix.ncols();
-        let mut expr_matrix = Vec::new();
-
-        for i in 0..rows {
-            let mut row = Vec::new();
-            for j in 0..cols {
-                row.push(ExprScalar::new(matrix[(i, j)].to_string()));
-            }
-            expr_matrix.push(row);
-        }
-
-        ExprMatrix {
-            matrix: expr_matrix,
-        }
     }
 
     proptest! {

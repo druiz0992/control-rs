@@ -1,6 +1,6 @@
 use super::utils;
 use crate::common::Labelizable;
-use crate::numeric_services::solver::{NewtonSolver, OptimizerConfig};
+use crate::numeric_services::solver::{KktConditionsStatus, NewtonSolver, OptimizerConfig};
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::traits::{Describable, Discretizer, Dynamics, State};
 use crate::physics::{ModelError, constants as c};
@@ -51,6 +51,10 @@ impl<D: Dynamics> BackwardEuler<D> {
             model,
         })
     }
+
+    pub fn solver_status(&self) -> &Option<KktConditionsStatus> {
+        self.solver.status()
+    }
 }
 
 impl<D: Dynamics> Discretizer<D> for BackwardEuler<D> {
@@ -61,7 +65,8 @@ impl<D: Dynamics> Discretizer<D> for BackwardEuler<D> {
         dt: f64,
     ) -> Result<D::State, ModelError> {
         let v_dims = D::State::dim_v();
-        let (next_v, _) = utils::step_intrinsic(state, dt, &self.solver, &self.registry)?;
+        let (next_v, _multipliers) =
+            utils::step_intrinsic(state, dt, &mut self.solver, &self.registry)?;
         if v_dims == 0 {
             return Ok(D::State::from_vec(next_v));
         }

@@ -1,6 +1,7 @@
 pub mod line_search;
 pub mod models;
 pub mod newton;
+mod newton_utils;
 
 use crate::numeric_services::symbolic::fasteval::ExprRegistry;
 use crate::physics::ModelError;
@@ -24,5 +25,5 @@ pub trait Minimizer {
 }
 
 pub use line_search::LineSearch;
-pub use models::{LineSeachConfig, OptimizerConfig, OptimizerParams, ProblemSpec};
+pub use models::{LineSeachConfig, OptimizerConfig, OptimizerParams, ProblemSpec, KktConditionsStatus};
 pub use newton::NewtonSolver;

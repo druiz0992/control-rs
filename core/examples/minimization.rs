@@ -61,7 +61,7 @@ fn main() {
     options.set_max_iters(1).unwrap();
     options.set_verbose(true);
 
-    let solver = NewtonSolver::new_minimization(
+    let mut solver = NewtonSolver::new_minimization(
         &cost,
         Some(eq_constraints_expr.clone()),
         //None,

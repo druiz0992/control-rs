@@ -1,8 +1,8 @@
+use crate::numeric_services::solver::{NewtonSolver, OptimizerConfig};
 use crate::numeric_services::symbolic::{ExprMatrix, ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::constants as c;
 use crate::physics::error::ModelError;
 use crate::physics::traits::State;
-use crate::numeric_services::solver::{NewtonSolver, OptimizerConfig};
 use std::sync::Arc;
 
 pub fn get_states(registry: &Arc<ExprRegistry>) -> Result<(ExprVector, ExprVector), ModelError> {
@@ -32,7 +32,7 @@ pub fn get_v_states(registry: &Arc<ExprRegistry>) -> Result<(ExprVector, ExprVec
 pub fn step_intrinsic<S: State>(
     state: &S,
     dt: f64,
-    solver: &NewtonSolver,
+    solver: &mut NewtonSolver,
     registry: &Arc<ExprRegistry>,
 ) -> Result<(Vec<f64>, Option<Vec<f64>>), ModelError> {
     registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);

@@ -80,7 +80,8 @@ impl<D: Dynamics> Discretizer<D> for HermiteSimpson<D> {
         _input: Option<&[f64]>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
-        let (new_state, _multipliers) = step_intrinsic(state, dt, &self.solver, &self.registry)?;
+        let (new_state, _multipliers) =
+            step_intrinsic(state, dt, &mut self.solver, &self.registry)?;
         Ok(D::State::from_vec(new_state))
     }
     fn get_model(&self) -> &D {

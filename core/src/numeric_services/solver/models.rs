@@ -1,11 +1,10 @@
-use core::fmt;
-
 use crate::{
     numeric_services::symbolic::{
         ExprMatrix, ExprScalar, ExprVector, SymbolicFn, SymbolicFunction,
     },
     physics::ModelError,
 };
+use core::fmt;
 
 const DEFAULT_MAX_ITERS: usize = 100;
 const DEFAULT_TOLERANCE: f64 = 1e-6;
@@ -321,4 +320,18 @@ pub struct OptimizerParams {
     pub ineq_constraints: ExprVector,
     pub mus: ExprVector,
     pub lambdas: ExprVector,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct KktConditionsStatus {
+    /// Lagragian gradient norm
+    pub stationarity: f64,
+    /// eq(x) = 0 => norm(eq(x))
+    pub max_primal_feasibility_c: Option<f64>,
+    /// ineq(x) => 0 => min(ineq(x))
+    pub min_primal_feasibility_h: Option<f64>,
+    /// lambda >= 0 => min(lambda)
+    pub dual_feasibility: Option<f64>,
+    /// lambda_j * ineq_j(x) = 0 => abs(dot(lambda, ineq))
+    pub complementary_slackness: Option<f64>,
 }
