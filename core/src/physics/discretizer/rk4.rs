@@ -11,8 +11,12 @@ pub struct RK4<D: Dynamics> {
 }
 
 impl<D: Dynamics> RK4<D> {
-    pub fn new(model: D) -> Self {
-        Self { model }
+    pub fn new(model: D) -> Result<Self, ModelError> {
+        let (_, v_dims) = model.state_dims();
+        if v_dims > 0 {
+            return Err(ModelError::Unexpected("Insuported Discretizer".into()));
+        }
+        Ok(Self { model })
     }
 }
 
@@ -54,6 +58,11 @@ pub struct RK4Symbolic<D: Dynamics> {
 
 impl<D: Dynamics> RK4Symbolic<D> {
     pub fn new(model: D, registry: Arc<ExprRegistry>) -> Result<Self, ModelError> {
+        let (_, v_dims) = model.state_dims();
+        if v_dims > 0 {
+            return Err(ModelError::Unexpected("Insuported Discretizer".into()));
+        }
+
         let state = registry.get_vector(c::STATE_SYMBOLIC)?;
 
         let dt = ExprScalar::new(c::TIME_DELTA_SYMBOLIC);
@@ -132,7 +141,7 @@ mod tests {
     #[test]
     fn test_rk4_step() {
         let dynamics = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, 0.0, None);
-        let mut rk4 = RK4::new(dynamics);
+        let mut rk4 = RK4::new(dynamics).unwrap();
         let initial_state = DoublePendulumState::new(0.0, 0.0, 0.0, 0.0);
         let dt = 0.1;
 
@@ -177,7 +186,7 @@ mod tests {
             let dynamics = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry));
             let state = DoublePendulumState::new(theta1, omega1, theta2, omega2);
             let mut rk4_symbolic = RK4Symbolic::new(dynamics.clone(), Arc::clone(&registry)).unwrap();
-            let mut rk4 = RK4::new(dynamics);
+            let mut rk4 = RK4::new(dynamics).unwrap();
             let dt = 0.1;
 
 

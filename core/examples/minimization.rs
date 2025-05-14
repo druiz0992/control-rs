@@ -1,7 +1,6 @@
+use control_rs::numeric_services::solver::{NewtonSolver, OptimizerConfig};
 use control_rs::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
 use control_rs::plotter;
-use control_rs::solver::models::OptimizerConfig;
-use control_rs::solver::newton::NewtonSolver;
 use std::io::{self, Read};
 use std::sync::Arc;
 
@@ -26,16 +25,13 @@ fn get_cost_expr(unknown_expr: &ExprVector) -> ExprScalar {
 }
 
 /// c1: norm(x) - 0.5 = 0
-/// c2: x1 + x2 = 0
 fn get_eq_constraints_expr(unknown_expr: &ExprVector) -> ExprVector {
     let constraint1 = unknown_expr
         .norm2()
         .unwrap()
         .sub(&ExprScalar::new("0.5"))
         .wrap();
-    let vars = unknown_expr.as_vec();
-    let constraint2 = vars[0].add(&vars[1]).wrap();
-    ExprVector::from_vec(vec![constraint1, constraint2])
+    ExprVector::from_vec(vec![constraint1])
 }
 
 /// c1: -x1^2 - 2 * x2^2 + 0.5 >= 0
@@ -63,11 +59,12 @@ fn main() {
     // set optimization to 1 iterations so that we can draw convergence
     let mut options = OptimizerConfig::default();
     options.set_max_iters(1).unwrap();
+    options.set_verbose(true);
 
     let solver = NewtonSolver::new_minimization(
         &cost,
-        //Some(eq_constraints_expr.clone()),
-        None,
+        Some(eq_constraints_expr.clone()),
+        //None,
         Some(ineq_constraints_expr.clone()),
         &unknown_expr,
         &registry,
@@ -81,9 +78,9 @@ fn main() {
     loop {
         match solver.solve(&initial_guess, &registry) {
             Ok(result) => {
-                initial_guess = result.last().unwrap().clone();
-                dbg!(&initial_guess);
-                history.push(result[0].clone())
+                dbg!(&result);
+                history.push(result.clone());
+                initial_guess = result;
             }
             Err(e) => {
                 eprintln!("Solver error: {e:?}");

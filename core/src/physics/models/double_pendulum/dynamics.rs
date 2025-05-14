@@ -2,7 +2,7 @@ use super::model::DoublePendulum;
 use super::state::DoublePendulumState;
 use crate::common::Labelizable;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
-use crate::physics::traits::{Describable, Dynamics};
+use crate::physics::traits::{Describable, Dynamics, State};
 use crate::physics::{constants as c, energy::Energy};
 use nalgebra::Vector3;
 use std::sync::Arc;
@@ -127,6 +127,10 @@ impl Dynamics for DoublePendulum {
 
         // Return as a symbolic vector
         ExprVector::from_vec(vec![dtheta1, domega1, dtheta2, domega2])
+    }
+
+    fn state_dims(&self) -> (usize, usize) {
+        (DoublePendulumState::dim_q(), DoublePendulumState::dim_v())
     }
 }
 

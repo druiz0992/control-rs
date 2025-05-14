@@ -2,6 +2,7 @@ use super::model::SlidingBrick;
 use super::state::SlidingBrickState;
 use crate::common::Labelizable;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
+use crate::physics::traits::State;
 use crate::physics::{Energy, constants as c, traits::Dynamics};
 use std::sync::Arc;
 
@@ -39,6 +40,10 @@ impl Dynamics for SlidingBrick {
             v_x: a_x,
             v_y: a_y,
         }
+    }
+
+    fn state_dims(&self) -> (usize, usize) {
+        (SlidingBrickState::dim_q(), SlidingBrickState::dim_v())
     }
 
     fn dynamics_symbolic(&self, state: &ExprVector, registry: &Arc<ExprRegistry>) -> ExprVector {

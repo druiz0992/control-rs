@@ -94,7 +94,7 @@ impl NewtonSolver {
         &self,
         initial_guess: &[f64],
         registry: &Arc<ExprRegistry>,
-    ) -> Result<Vec<Vec<f64>>, ModelError> {
+    ) -> Result<Vec<f64>, ModelError> {
         // check if interior point minimization problem
         if self.problem.ip_residual.is_some() {
             return self.solve_ip(initial_guess, registry);
@@ -102,15 +102,13 @@ impl NewtonSolver {
         let (residual_fn, jacobian_fn, unknown_expr) = self.problem.get_params()?;
         let max_iters = self.options.get_max_iters();
         let tolerance = self.options.get_tolerance();
-        let mut history_results = Vec::with_capacity(max_iters);
         let mut unknown_vals = extend_initial_guess(initial_guess, &unknown_expr);
         let mut alpha = 1.0;
 
         let ls = LineSearch::new(self.options.get_line_search_opts());
 
-        for _ in 0..max_iters {
+        for i in 0..max_iters {
             registry.insert_vars(&unknown_expr, &unknown_vals);
-            history_results.push(unknown_vals.clone());
 
             let fx: DVector<f64> = residual_fn.eval(&[]).try_into_eval_result()?;
             if fx.norm() < tolerance {
@@ -132,9 +130,20 @@ impl NewtonSolver {
             for (val, delta_val) in unknown_vals.iter_mut().zip(delta.iter()) {
                 *val += alpha * delta_val;
             }
+
+            if self.options.get_verbose() {
+                logging(
+                    i,
+                    &fx,
+                    &unknown_vals,
+                    0.0,
+                    alpha,
+                    self.problem.n_eq,
+                    self.problem.n_ineq,
+                );
+            }
         }
-        history_results.push(unknown_vals.clone());
-        Ok(history_results)
+        Ok(unknown_vals)
     }
 
     /// interior point minimization
@@ -177,8 +186,8 @@ impl NewtonSolver {
 
         // dC_eq/dx
         let ineq_jacobian = ineq_constraints.jacobian(unknown_expr)?;
-        let log_domain_scaling_neg = sigmas.scalef(-1.0).exp().scale(&sqrt_rho).diagm();
-        let log_domain_scaling_pos = sigmas.exp().scale(&sqrt_rho).scalef(-1.0).diagm();
+        let lambda = sigmas.scalef(-1.0).exp().scale(&sqrt_rho).diagm();
+        let neg_s = sigmas.exp().scale(&sqrt_rho).scalef(-1.0).diagm();
 
         let mut unknown_expr = unknown_expr.extend(&mus);
         unknown_expr = unknown_expr.extend(&sigmas);
@@ -187,8 +196,8 @@ impl NewtonSolver {
             &hessian,
             &eq_jacobian,
             &ineq_jacobian,
-            log_domain_scaling_neg,
-            log_domain_scaling_pos,
+            lambda,
+            neg_s,
             options.get_regularization_factor(),
         );
 
@@ -257,31 +266,24 @@ impl NewtonSolver {
         &self,
         initial_guess: &[f64],
         registry: &Arc<ExprRegistry>,
-    ) -> Result<Vec<Vec<f64>>, ModelError> {
+    ) -> Result<Vec<f64>, ModelError> {
         let (residual_fn, ip_residual_fn, ip_jacobian_fn, unknown_expr) =
             self.problem.get_ip_params()?;
         let max_iters = self.options.get_max_iters();
         let tolerance = self.options.get_tolerance();
-        let mut history_results = Vec::with_capacity(max_iters);
-        // extend unknown to include state + sigma
+        // extend unknown to include state + mus + sigmas
         let mut unknown_vals = extend_initial_guess(initial_guess, &unknown_expr);
-        let mut rho = 0.1;
         let ls = LineSearch::new(self.options.get_line_search_opts());
+
+        let mut rho = 0.1;
         let mut alpha = 1.0;
 
         for i in 0..max_iters {
-            registry.insert_var("log_domain_rho", rho);
+            registry.insert_var(LOG_DOMAIN_RHO, rho);
             registry.insert_vars(&unknown_expr, &unknown_vals);
 
             let ip_res: DVector<f64> = ip_residual_fn.eval(&[]).try_into_eval_result()?;
             let ip_jac: DMatrix<f64> = ip_jacobian_fn.eval(&[]).try_into_eval_result()?;
-
-            /*
-            println!("{},{}", ip_res, ip_jac);
-            if i == 10 {
-                assert!(false);
-            }
-            */
 
             let delta = ip_jac
                 .clone()
@@ -306,19 +308,18 @@ impl NewtonSolver {
             let ip_res: DVector<f64> = ip_residual_fn.eval(&unknown_vals).try_into_eval_result()?;
             let ip_res_norm_inf = ip_res.amax();
 
-            /*
-            logging(
-                i,
-                &residual,
-                &unknown_vals,
-                rho,
-                alpha,
-                self.problem.n_eq,
-                self.problem.n_ineq,
-            );
-            */
+            if self.options.get_verbose() {
+                logging(
+                    i,
+                    &residual,
+                    &unknown_vals,
+                    rho,
+                    alpha,
+                    self.problem.n_eq,
+                    self.problem.n_ineq,
+                );
+            }
 
-            history_results.push(unknown_vals.clone());
             if res_norm_inf < tolerance {
                 break;
             } else if ip_res_norm_inf < tolerance {
@@ -326,7 +327,7 @@ impl NewtonSolver {
             }
         }
 
-        Ok(history_results)
+        Ok(unknown_vals)
     }
 }
 
@@ -339,20 +340,46 @@ fn logging(
     n_eq: usize,
     n_ineq: usize,
 ) {
-    let unknown_dims = z.len() - n_ineq;
-    let sigmas = &z[unknown_dims..];
+    let unknown_dims = z.len() - n_eq - n_ineq;
+    let sigmas = &z[unknown_dims + n_eq..];
     let lambdas: Vec<_> = sigmas.iter().map(|s| rho.sqrt() * (-s).exp()).collect();
+
     let lg_gradient_norm = gradient.rows(0, unknown_dims).into_owned().norm();
-    let min_ineq = gradient.rows(unknown_dims, n_ineq).into_owned().min();
-    let comp = gradient
-        .rows(unknown_dims + n_ineq, n_ineq)
+    let norm_eq = gradient.rows(unknown_dims, n_eq).into_owned().amax();
+    let min_ineq = gradient
+        .rows(unknown_dims + n_eq, n_ineq)
+        .into_owned()
+        .min();
+    let min_lambda = gradient
+        .rows(unknown_dims + n_eq + n_ineq, n_ineq)
+        .into_owned()
+        .amax();
+    let compl = gradient
+        .rows(unknown_dims + n_eq + 2 * n_ineq, n_ineq)
         .into_owned()
         .dot(&DVector::from_vec(lambdas))
         .abs();
-    info!(
-        "iter:{}\t |lg| {}\t min(h){}\t |compl|{}\t rho{}\t alpha{}",
-        n_iter, lg_gradient_norm, min_ineq, comp, rho, alpha
-    );
+    if n_eq > 0 && n_ineq > 0 {
+        info!(
+            "iter: {:03}\t |lg|: {:7.2e}\t min(h): {:>+7.2e}\t |c|: {:7.2e}\t |compl|: {:7.2e}\t |lambda|: {:7.2e}\t rho: {:5.0e}\t alpha: {:5.0e}",
+            n_iter, lg_gradient_norm, min_ineq, norm_eq, compl, min_lambda, rho, alpha
+        );
+    } else if n_ineq > 0 && n_eq == 0 {
+        info!(
+            "iter: {:03}\t |lg|: {:7.2e}\t min(h): {:>+7.2e}\t |compl|: {:7.2e}\t rho: {:5.0e}\t alpha: {:5.0e}",
+            n_iter, lg_gradient_norm, min_ineq, compl, rho, alpha
+        );
+    } else if n_eq > 0 && n_ineq == 0 {
+        info!(
+            "iter: {:03}\t |lg|: {:7.2e}\t |c|: {:7.2e}\t |lambda|: {:7.2e}\t alpha: {:5.0e}",
+            n_iter, lg_gradient_norm, norm_eq, min_lambda, alpha
+        );
+    } else {
+        info!(
+            "iter: {:03}\t |lg|: {:7.2e}\t alpha: {:5.0e}",
+            n_iter, lg_gradient_norm, alpha
+        );
+    }
 }
 fn get_merit_fn(
     residual_expr: &ExprVector,

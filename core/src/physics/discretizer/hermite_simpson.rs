@@ -1,8 +1,8 @@
+use crate::numeric_services::solver::{NewtonSolver, OptimizerConfig};
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::models::state::State;
 use crate::physics::traits::{Describable, Discretizer, Dynamics};
 use crate::physics::{ModelError, constants as c};
-use crate::solver::newton::NewtonSolver;
 use std::sync::Arc;
 
 use super::utils::{get_states, step_intrinsic};
@@ -26,7 +26,15 @@ pub struct HermiteSimpson<D: Dynamics> {
 }
 
 impl<D: Dynamics> HermiteSimpson<D> {
-    pub fn new(model: &D, registry: Arc<ExprRegistry>) -> Result<Self, ModelError> {
+    pub fn new(
+        model: D,
+        registry: Arc<ExprRegistry>,
+        solver_options: Option<OptimizerConfig>,
+    ) -> Result<Self, ModelError> {
+        let (_, v_dims) = model.state_dims();
+        if v_dims > 0 {
+            return Err(ModelError::Unexpected("Insuported Discretizer".into()));
+        }
         let dt_expr = ExprScalar::new(c::TIME_DELTA_SYMBOLIC);
         let dt6 = dt_expr.scalef(1.0 / 6.0);
         let dt8 = dt_expr.scalef(1.0 / 8.0);
@@ -54,7 +62,8 @@ impl<D: Dynamics> HermiteSimpson<D> {
             .wrap()
             .scale(&dt6);
         residual = current_state.add(&residual).sub(&next_state).wrap();
-        let solver = NewtonSolver::new_root_solver(&residual, &next_state, &registry, None)?;
+        let solver =
+            NewtonSolver::new_root_solver(&residual, &next_state, &registry, solver_options)?;
 
         Ok(HermiteSimpson {
             registry,

@@ -2,7 +2,7 @@ use crate::numeric_services::symbolic::{ExprMatrix, ExprRegistry, ExprScalar, Ex
 use crate::physics::constants as c;
 use crate::physics::error::ModelError;
 use crate::physics::traits::State;
-use crate::solver::newton::NewtonSolver;
+use crate::numeric_services::solver::{NewtonSolver, OptimizerConfig};
 use std::sync::Arc;
 
 pub fn get_states(registry: &Arc<ExprRegistry>) -> Result<(ExprVector, ExprVector), ModelError> {
@@ -37,22 +37,18 @@ pub fn step_intrinsic<S: State>(
 ) -> Result<(Vec<f64>, Option<Vec<f64>>), ModelError> {
     registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
     registry.insert_vec_as_vars(c::STATE_SYMBOLIC, &state.as_vec())?;
-    //registry.insert_vec_as_vars(c::NEXT_STATE_SYMBOLIC, &state.as_vec())?;
-    let q_dims = S::dim_q();
-    let v_dims = S::dim_v();
-    let start_dim = if v_dims == 0 { 0 } else { q_dims };
-    let end_dim = if v_dims == 0 { q_dims + v_dims } else { v_dims };
 
-    let history = solver.solve(&state.as_vec()[start_dim..], registry)?;
-    let last = history
-        .last()
-        .cloned()
-        .ok_or_else(|| ModelError::SolverError(String::from("Solver failed")))?;
+    let (start_dims, end_dims) = if S::dim_v() == 0 {
+        (0, S::dim_v() + S::dim_q())
+    } else {
+        (S::dim_q(), S::dim_v())
+    };
 
-    let state_dims = S::dim_q() + S::dim_v();
-    let state_elems = last[..end_dim].to_vec();
-    let multipliers = if last.len() > state_dims {
-        Some(last[end_dim..].to_vec())
+    let result = solver.solve(&state.as_vec()[start_dims..], registry)?;
+
+    let state_elems = result[..end_dims].to_vec();
+    let multipliers = if result.len() > S::dim_q() + S::dim_v() {
+        Some(result[end_dims..].to_vec())
     } else {
         None
     };
@@ -76,6 +72,38 @@ pub fn build_objective(
         .wrap();
     let expr2 = linear_term.dot(next_v_state).unwrap().wrap();
     expr1.add(&expr2)
+}
+
+pub fn init_constrained_dynamics(
+    linear_term: &ExprVector,
+    dt_expr: &ExprScalar,
+    solver_options: Option<OptimizerConfig>,
+    registry: &Arc<ExprRegistry>,
+) -> Result<NewtonSolver, ModelError> {
+    // retrieve M and J
+    let mass_matrix = registry.get_matrix(c::MASS_MATRIX_SYMBOLIC)?;
+    let jacobian_constraints_expr = registry.get_vector(c::CONSTRAINT_JACOBIAN_SYMBOLIC)?;
+    // build v_next, q_current
+    let (_, next_v_state) = get_v_states(registry)?;
+    let (current_q_state, _) = get_q_states(registry)?;
+    // objective =  1/2 * v_next' * M * v_next + linear_term' * v_next
+    let objective_expr = build_objective(&mass_matrix, linear_term, &next_v_state);
+    // constraints => J * (q_current + dt * v_next) >= 0
+    let ineq_constraints_expr = ExprVector::from_vec(vec![
+        jacobian_constraints_expr
+            .dot(&current_q_state.add(&next_v_state.scale(dt_expr)).wrap())
+            .unwrap()
+            .wrap(),
+    ]);
+
+    NewtonSolver::new_minimization(
+        &objective_expr,
+        None,
+        Some(ineq_constraints_expr),
+        &next_v_state,
+        registry,
+        solver_options,
+    )
 }
 
 #[cfg(test)]

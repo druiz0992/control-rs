@@ -7,10 +7,15 @@ pub struct MidPoint<D: Dynamics> {
 }
 
 impl<D: Dynamics> MidPoint<D> {
-    pub fn new(model: D) -> Self {
-        Self { model }
+    pub fn new(model: D) -> Result<Self, ModelError> {
+        let (_, v_dims) = model.state_dims();
+        if v_dims > 0 {
+            return Err(ModelError::Unexpected("Insuported Discretizer".into()));
+        }
+        Ok(Self { model })
     }
 }
+
 impl<D: Dynamics> Discretizer<D> for MidPoint<D> {
     fn step(
         &mut self,

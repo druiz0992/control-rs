@@ -313,8 +313,8 @@ impl ExprMatrix {
         hessian: &ExprMatrix,
         eq_jacobian: &ExprMatrix,
         ineq_jacobian: &ExprMatrix,
-        scaling_neg: ExprMatrix,
-        scaling_pos: ExprMatrix,
+        lambda: ExprMatrix,
+        neg_s: ExprMatrix,
         regularization_factor: f64,
     ) -> ExprMatrix {
         let (n_vars, _) = hessian.n_dims();
@@ -322,7 +322,7 @@ impl ExprMatrix {
         let (n_ineq, _) = ineq_jacobian.n_dims();
 
         let reg_hessian = hessian.add(&ExprMatrix::identity(n_vars).scalef(regularization_factor));
-        let g_scaled = ineq_jacobian.transpose().matmul(&scaling_neg);
+        let g_scaled = ineq_jacobian.transpose().matmul(&lambda);
 
         let top = if n_eq > 0 {
             ExprMatrix::hstack(&[reg_hessian, eq_jacobian.transpose(), g_scaled])
@@ -344,10 +344,10 @@ impl ExprMatrix {
             ExprMatrix::hstack(&[
                 ineq_jacobian.clone(),
                 ExprMatrix::zeros((n_ineq, n_eq)),
-                scaling_pos,
+                neg_s,
             ])
         } else {
-            ExprMatrix::hstack(&[ineq_jacobian.clone(), scaling_pos])
+            ExprMatrix::hstack(&[ineq_jacobian.clone(), neg_s])
         };
 
         if n_eq > 0 {
@@ -556,7 +556,7 @@ mod tests {
         let expr_matrix1 = ExprMatrix::from_string(&input1);
         let expr_matrix2 = ExprMatrix::from_string(&input2);
 
-        let r = ExprMatrix::hstack(&vec![expr_matrix1, expr_matrix2]);
+        let r = ExprMatrix::hstack(&[expr_matrix1, expr_matrix2]);
         assert_eq!(r.matrix.len(), 2);
         assert_eq!(r.matrix[0].len(), 4);
         assert_eq!(r.matrix[0][0].to_string(), "1");

@@ -2,7 +2,7 @@ use super::model::CartPole;
 use super::state::CartPoleState;
 use crate::common::Labelizable;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
-use crate::physics::traits::Dynamics;
+use crate::physics::traits::{Dynamics, State};
 use crate::physics::{constants as c, energy::Energy};
 use std::sync::Arc;
 
@@ -44,6 +44,10 @@ impl Dynamics for CartPole {
             theta: omega,
             omega: domega,
         }
+    }
+
+    fn state_dims(&self) -> (usize, usize) {
+        (CartPoleState::dim_q(), CartPoleState::dim_v())
     }
 
     fn dynamics_symbolic(&self, state: &ExprVector, registry: &Arc<ExprRegistry>) -> ExprVector {

@@ -9,6 +9,7 @@ pub trait Dynamics: Clone {
     fn dynamics(&self, state: &Self::State, input: Option<&[f64]>) -> Self::State;
     fn dynamics_symbolic(&self, state: &ExprVector, registry: &Arc<ExprRegistry>) -> ExprVector;
     fn energy(&self, state: &Self::State) -> Energy;
+    fn state_dims(&self) -> (usize, usize);
 
     fn linear_term(&self, _dt: &ExprScalar, _registry: &Arc<ExprRegistry>) -> Option<ExprVector> {
         None

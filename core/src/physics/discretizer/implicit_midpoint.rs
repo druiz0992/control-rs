@@ -1,11 +1,11 @@
+use super::utils;
+use crate::common::Labelizable;
+use crate::numeric_services::solver::{NewtonSolver, OptimizerConfig};
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::models::state::State;
 use crate::physics::traits::{Describable, Discretizer, Dynamics};
 use crate::physics::{ModelError, constants as c};
-use crate::solver::newton::NewtonSolver;
 use std::sync::Arc;
-
-use super::utils::{get_states, step_intrinsic};
 
 // residual(x_next) = x_next - x_k - dt * f((x_k + x_next) / 2)
 
@@ -16,19 +16,34 @@ pub struct ImplicitMidpoint<D: Dynamics> {
 }
 
 impl<D: Dynamics> ImplicitMidpoint<D> {
-    pub fn new(model: D, registry: Arc<ExprRegistry>) -> Result<Self, ModelError> {
+    pub fn new(
+        model: D,
+        registry: Arc<ExprRegistry>,
+        solver_options: Option<OptimizerConfig>,
+    ) -> Result<Self, ModelError> {
+        let solver;
         let dt_expr = ExprScalar::new(c::TIME_DELTA_SYMBOLIC);
-        let (current_state, next_state) = get_states(&registry)?;
+        let (current_state, next_state) = utils::get_states(&registry)?;
 
-        let mid_state = current_state.add(&next_state).wrap().scalef(0.5).wrap();
+        if let Some(linear_term) = model.linear_term(&dt_expr, &registry) {
+            solver = utils::init_constrained_dynamics(
+                &linear_term,
+                &dt_expr,
+                solver_options,
+                &registry,
+            )?;
+        } else {
+            let mid_state = current_state.add(&next_state).wrap().scalef(0.5).wrap();
 
-        let dyn_mid_state = model
-            .dynamics_symbolic(&mid_state, &registry)
-            .wrap()
-            .scale(&dt_expr);
+            let dyn_mid_state = model
+                .dynamics_symbolic(&mid_state, &registry)
+                .wrap()
+                .scale(&dt_expr);
 
-        let residual = next_state.sub(&current_state).sub(&dyn_mid_state).wrap();
-        let solver = NewtonSolver::new_root_solver(&residual, &next_state, &registry, None)?;
+            let residual = next_state.sub(&current_state).sub(&dyn_mid_state).wrap();
+            solver =
+                NewtonSolver::new_root_solver(&residual, &next_state, &registry, solver_options)?;
+        }
 
         Ok(ImplicitMidpoint {
             registry,
@@ -45,8 +60,28 @@ impl<D: Dynamics> Discretizer<D> for ImplicitMidpoint<D> {
         _input: Option<&[f64]>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
-        let (new_state, _multipliers) = step_intrinsic(state, dt, &self.solver, &self.registry)?;
-        Ok(D::State::from_vec(new_state))
+        let v_dims = D::State::dim_v();
+        let (next_v, _) = utils::step_intrinsic(state, dt, &self.solver, &self.registry)?;
+        if v_dims == 0 {
+            return Ok(D::State::from_vec(next_v));
+        }
+
+        let labels = D::State::labels();
+        let q_slice = &labels[..D::State::dim_q()];
+        let v_slice = &labels[D::State::dim_q()..];
+
+        let current_q = state.vectorize(q_slice);
+        let current_v = state.vectorize(v_slice);
+        let next_q: Vec<_> = current_q
+            .iter()
+            .zip(current_v.iter())
+            .zip(next_v.iter())
+            .map(|((q, v_curr), v_next)| q + dt * 0.5 * (v_curr + v_next))
+            .collect();
+        let mut full_state = next_q;
+        full_state.extend_from_slice(&next_v);
+
+        Ok(D::State::from_vec(full_state))
     }
 
     fn get_model(&self) -> &D {

@@ -229,6 +229,7 @@ pub struct OptimizerConfig {
     line_search: LineSeachConfig,
     gauss_newton: bool,
     regularization_factor: f64,
+    verbose: bool,
 }
 
 impl OptimizerConfig {
@@ -289,6 +290,14 @@ impl OptimizerConfig {
     pub fn get_regularization_factor(&self) -> f64 {
         self.regularization_factor
     }
+
+    pub fn set_verbose(&mut self, flag: bool) {
+        self.verbose = flag;
+    }
+
+    pub fn get_verbose(&self) -> bool {
+        self.verbose
+    }
 }
 
 impl Default for OptimizerConfig {
@@ -299,6 +308,7 @@ impl Default for OptimizerConfig {
             line_search: LineSeachConfig::default(),
             gauss_newton: true,
             regularization_factor: 0.0,
+            verbose: false,
         }
     }
 }

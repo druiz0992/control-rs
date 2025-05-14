@@ -5,11 +5,13 @@ use control_rs::physics::discretizer::{
 };
 use control_rs::physics::models::{DoublePendulum, DoublePendulumState};
 use control_rs::physics::simulator::{BasicSim, PhysicsSim};
+use control_rs::numeric_services::solver::OptimizerConfig;
 use control_rs::{plotter, utils};
 use std::f64::consts::PI;
 use std::sync::Arc;
 
 fn main() {
+    env_logger::init();
     let m1 = 1.0;
     let m2 = 1.0;
     let l1 = 1.0;
@@ -28,10 +30,12 @@ fn main() {
     let steps = 1000;
 
     let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry));
+    let mut solver_options = OptimizerConfig::default();
+    solver_options.set_verbose(true);
     //let integrator = RK4Symbolic::new(model, Arc::clone(&registry)).unwrap();
     //let integrator = BackwardEuler::new(model, Arc::clone(&registry)).unwrap();
     //let integrator = HermiteSimpson::new(model, Arc::clone(&registry)).unwrap();
-    let integrator = ImplicitMidpoint::new(model, Arc::clone(&registry)).unwrap();
+    let integrator = ImplicitMidpoint::new(model, Arc::clone(&registry), Some(solver_options)).unwrap();
     let mut sim = BasicSim::new(integrator, state0);
 
     let history = sim.simulate_steps(dt, steps);

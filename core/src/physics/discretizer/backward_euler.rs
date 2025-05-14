@@ -1,9 +1,9 @@
 use super::utils;
 use crate::common::Labelizable;
-use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
+use crate::numeric_services::solver::{NewtonSolver, OptimizerConfig};
+use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::traits::{Describable, Discretizer, Dynamics, State};
 use crate::physics::{ModelError, constants as c};
-use crate::solver::newton::NewtonSolver;
 use std::sync::Arc;
 
 // Backward Euler residual:
@@ -19,35 +19,21 @@ pub struct BackwardEuler<D: Dynamics> {
 }
 
 impl<D: Dynamics> BackwardEuler<D> {
-    pub fn new(model: D, registry: Arc<ExprRegistry>) -> Result<Self, ModelError> {
+    pub fn new(
+        model: D,
+        registry: Arc<ExprRegistry>,
+        solver_options: Option<OptimizerConfig>,
+    ) -> Result<Self, ModelError> {
         let solver;
         let dt_expr = ExprScalar::new(c::TIME_DELTA_SYMBOLIC);
         let (current_state, next_state) = utils::get_states(&registry)?;
 
         if let Some(linear_term) = model.linear_term(&dt_expr, &registry) {
-            // retrieve M and J
-            let mass_matrix = registry.get_matrix(c::MASS_MATRIX_SYMBOLIC)?;
-            let jacobian_constraints_expr = registry.get_vector(c::CONSTRAINT_JACOBIAN_SYMBOLIC)?;
-            // build v_next, q_current
-            let (_, next_v_state) = utils::get_v_states(&registry)?;
-            let (current_q_state, _) = utils::get_q_states(&registry)?;
-            // objective =  1/2 * v_next' * M * v_next + linear_term' * v_next
-            let objective_expr = utils::build_objective(&mass_matrix, &linear_term, &next_v_state);
-            // constraints => J * (q_current + dt * v_next) >= 0
-            let ineq_constraints_expr = ExprVector::from_vec(vec![
-                jacobian_constraints_expr
-                    .dot(&current_q_state.add(&next_v_state.scale(&dt_expr)).wrap())
-                    .unwrap()
-                    .wrap(),
-            ]);
-
-            solver = NewtonSolver::new_minimization(
-                &objective_expr,
-                None,
-                Some(ineq_constraints_expr),
-                &next_v_state,
+            solver = utils::init_constrained_dynamics(
+                &linear_term,
+                &dt_expr,
+                solver_options,
                 &registry,
-                None,
             )?;
         } else {
             let dyn_next_state = model
@@ -55,7 +41,8 @@ impl<D: Dynamics> BackwardEuler<D> {
                 .scale(&dt_expr);
 
             let residual = next_state.sub(&current_state).sub(&dyn_next_state);
-            solver = NewtonSolver::new_root_solver(&residual, &next_state, &registry, None)?;
+            solver =
+                NewtonSolver::new_root_solver(&residual, &next_state, &registry, solver_options)?;
         }
 
         Ok(BackwardEuler {
@@ -73,27 +60,25 @@ impl<D: Dynamics> Discretizer<D> for BackwardEuler<D> {
         _input: Option<&[f64]>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
-        let next_state;
         let v_dims = D::State::dim_v();
-        if v_dims > 0 {
-            let (next_v, _multipliers) =
-                utils::step_intrinsic(state, dt, &self.solver, &self.registry)?;
-
-            let labels = D::State::labels();
-            let q_dims = D::State::dim_q();
-            let mut current_q = state.vectorize(&labels[..q_dims]);
-            current_q = current_q
-                .iter()
-                .zip(next_v.iter())
-                .map(|(q, v)| q + dt * v)
-                .collect();
-            current_q.extend_from_slice(&next_v);
-            next_state = D::State::from_vec(current_q.clone());
-        } else {
-            let (next_v, _) = utils::step_intrinsic(state, dt, &self.solver, &self.registry)?;
-            next_state = D::State::from_vec(next_v);
+        let (next_v, _) = utils::step_intrinsic(state, dt, &self.solver, &self.registry)?;
+        if v_dims == 0 {
+            return Ok(D::State::from_vec(next_v));
         }
-        Ok(next_state)
+
+        let labels = D::State::labels();
+        let q_slice = &labels[..D::State::dim_q()];
+
+        let current_q = state.vectorize(q_slice);
+        let next_q: Vec<_> = current_q
+            .iter()
+            .zip(next_v.iter())
+            .map(|(q, v)| q + dt * v)
+            .collect();
+        let mut full_state = next_q;
+        full_state.extend_from_slice(&next_v);
+
+        Ok(D::State::from_vec(full_state))
     }
 
     fn get_model(&self) -> &D {
