@@ -2,6 +2,7 @@ use super::model::DoublePendulum;
 use super::state::DoublePendulumState;
 use crate::common::Labelizable;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
+use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Describable, Dynamics, State};
 use crate::physics::{constants as c, energy::Energy};
 use nalgebra::Vector3;
@@ -43,7 +44,7 @@ impl Dynamics for DoublePendulum {
         }
     }
 
-    fn energy(&self, s: &DoublePendulumState) -> Energy {
+    fn energy(&self, s: &DoublePendulumState) -> Option<Energy> {
         let [m1, m2, l1, l2] = self.extract(&["m1", "m2", "l1", "l2"]);
         let [theta1, omega1, theta2, omega2] = s.extract(&["theta1", "omega1", "theta2", "omega2"]);
 
@@ -59,9 +60,15 @@ impl Dynamics for DoublePendulum {
         let kinetic = 0.5 * (m1 * v1.dot(&v1) + m2 * v2.dot(&v2));
         let potential = m1 * c::GRAVITY * r1[2] + m2 * c::GRAVITY * r2[2];
 
-        Energy::new(kinetic, potential)
+        Some(Energy::new(kinetic, potential))
     }
 
+    fn state_dims(&self) -> (usize, usize) {
+        (DoublePendulumState::dim_q(), DoublePendulumState::dim_v())
+    }
+}
+
+impl SymbolicDynamics for DoublePendulum {
     fn dynamics_symbolic(&self, state: &ExprVector, registry: &Arc<ExprRegistry>) -> ExprVector {
         // Define symbolic variables
         let theta1 = state.get(DoublePendulumState::index_of("theta1")).unwrap();
@@ -128,12 +135,7 @@ impl Dynamics for DoublePendulum {
         // Return as a symbolic vector
         ExprVector::from_vec(vec![dtheta1, domega1, dtheta2, domega2])
     }
-
-    fn state_dims(&self) -> (usize, usize) {
-        (DoublePendulumState::dim_q(), DoublePendulumState::dim_v())
-    }
 }
-
 impl Describable for DoublePendulum {
     fn name(&self) -> &'static str {
         "Doubple Pendulum"

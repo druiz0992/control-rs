@@ -1,5 +1,5 @@
 use super::error::DerivativeError;
-use super::models::{DerivativeRequest, DerivativeResponse};
+use super::dtos::{DerivativeRequest, DerivativeResponse};
 
 /// Specification of a derivative engine service
 pub trait DerivativeEngine {

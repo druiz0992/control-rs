@@ -8,7 +8,7 @@ use std::ops::{Add, Div, Mul, Sub};
 ///
 /// # Required Methods
 ///
-/// - `as_vec`: Converts the state into a `Vec<f64>` representation.
+/// - `to_vec`: Converts the state into a `Vec<f64>` representation.
 /// - `from_vec`: Constructs a state from a `Vec<f64>` representation.
 /// - `labels`: Returns a static slice of string slices representing the labels
 ///   for each component of the state.
@@ -40,8 +40,9 @@ pub trait State:
     + Div<f64, Output = Self>
     + PartialEq
 {
-    fn as_vec(&self) -> Vec<f64>;
+    fn to_vec(&self) -> Vec<f64>;
     fn from_vec(v: Vec<f64>) -> Self;
+    fn from_slice(v: &[f64]) -> Self;
 
     fn get_q(&self) -> Vec<f64>;
     fn get_v(&self) -> Vec<f64>;

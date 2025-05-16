@@ -1,7 +1,8 @@
 use super::utils;
 use crate::common::Labelizable;
-use crate::numeric_services::solver::{KktConditionsStatus, NewtonSolver, OptimizerConfig};
+use crate::numeric_services::solver::{KktConditionsStatus, NewtonSolverSymbolic, OptimizerConfig};
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
+use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Describable, Discretizer, Dynamics, State};
 use crate::physics::{ModelError, constants as c};
 use std::sync::Arc;
@@ -14,11 +15,11 @@ use std::sync::Arc;
 
 pub struct BackwardEuler<D: Dynamics> {
     registry: Arc<ExprRegistry>,
-    solver: NewtonSolver,
+    solver: NewtonSolverSymbolic,
     model: D,
 }
 
-impl<D: Dynamics> BackwardEuler<D> {
+impl<D: SymbolicDynamics> BackwardEuler<D> {
     pub fn new(
         model: D,
         registry: Arc<ExprRegistry>,
@@ -28,7 +29,7 @@ impl<D: Dynamics> BackwardEuler<D> {
         let dt_expr = ExprScalar::new(c::TIME_DELTA_SYMBOLIC);
         let (current_state, next_state) = utils::get_states(&registry)?;
 
-        if let Some(linear_term) = model.linear_term(&dt_expr, &registry) {
+        if let Some(linear_term) = model.cost_linear_term(&dt_expr, &registry) {
             solver = utils::init_constrained_dynamics(
                 &linear_term,
                 &dt_expr,
@@ -41,8 +42,12 @@ impl<D: Dynamics> BackwardEuler<D> {
                 .scale(&dt_expr);
 
             let residual = next_state.sub(&current_state).sub(&dyn_next_state);
-            solver =
-                NewtonSolver::new_root_solver(&residual, &next_state, &registry, solver_options)?;
+            solver = NewtonSolverSymbolic::new_root_solver(
+                &residual,
+                &next_state,
+                &registry,
+                solver_options,
+            )?;
         }
 
         Ok(BackwardEuler {
@@ -65,7 +70,7 @@ impl<D: Dynamics> Discretizer<D> for BackwardEuler<D> {
         dt: f64,
     ) -> Result<D::State, ModelError> {
         let v_dims = D::State::dim_v();
-        let (next_v, _multipliers) =
+        let (next_v, _mus, _lambdas) =
             utils::step_intrinsic(state, dt, &mut self.solver, &self.registry)?;
         if v_dims == 0 {
             return Ok(D::State::from_vec(next_v));

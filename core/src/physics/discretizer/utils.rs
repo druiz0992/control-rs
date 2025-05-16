@@ -1,4 +1,5 @@
-use crate::numeric_services::solver::{NewtonSolver, OptimizerConfig};
+use crate::numeric_services::solver::dtos::SolverResult;
+use crate::numeric_services::solver::{NewtonSolverSymbolic, OptimizerConfig};
 use crate::numeric_services::symbolic::{ExprMatrix, ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::constants as c;
 use crate::physics::error::ModelError;
@@ -32,28 +33,19 @@ pub fn get_v_states(registry: &Arc<ExprRegistry>) -> Result<(ExprVector, ExprVec
 pub fn step_intrinsic<S: State>(
     state: &S,
     dt: f64,
-    solver: &mut NewtonSolver,
+    solver: &mut NewtonSolverSymbolic,
     registry: &Arc<ExprRegistry>,
-) -> Result<(Vec<f64>, Option<Vec<f64>>), ModelError> {
+) -> Result<SolverResult, ModelError> {
     registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
-    registry.insert_vec_as_vars(c::STATE_SYMBOLIC, &state.as_vec())?;
+    registry.insert_vec_as_vars(c::STATE_SYMBOLIC, &state.to_vec())?;
 
-    let (start_dims, end_dims) = if S::dim_v() == 0 {
-        (0, S::dim_v() + S::dim_q())
+    let start_dims = if S::dim_v() == 0 {
+        0
     } else {
-        (S::dim_q(), S::dim_v())
+        S::dim_q()
     };
 
-    let result = solver.solve(&state.as_vec()[start_dims..], registry)?;
-
-    let state_elems = result[..end_dims].to_vec();
-    let multipliers = if result.len() > S::dim_q() + S::dim_v() {
-        Some(result[end_dims..].to_vec())
-    } else {
-        None
-    };
-
-    Ok((state_elems, multipliers))
+    solver.solve(&state.to_vec()[start_dims..])
 }
 
 /// 1/2 * next_v_state * M * next_v_state + linear term * next_v_state
@@ -79,7 +71,7 @@ pub fn init_constrained_dynamics(
     dt_expr: &ExprScalar,
     solver_options: Option<OptimizerConfig>,
     registry: &Arc<ExprRegistry>,
-) -> Result<NewtonSolver, ModelError> {
+) -> Result<NewtonSolverSymbolic, ModelError> {
     // retrieve M and J
     let mass_matrix = registry.get_matrix(c::MASS_MATRIX_SYMBOLIC)?;
     let jacobian_constraints_expr = registry.get_vector(c::CONSTRAINT_JACOBIAN_SYMBOLIC)?;
@@ -96,7 +88,7 @@ pub fn init_constrained_dynamics(
             .wrap(),
     ]);
 
-    NewtonSolver::new_minimization(
+    NewtonSolverSymbolic::new_minimization(
         &objective_expr,
         None,
         Some(ineq_constraints_expr),
@@ -110,8 +102,8 @@ pub fn init_constrained_dynamics(
 mod tests {
     use crate::numeric_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
     use crate::physics::constants as c;
-    use crate::physics::models::SlidingBrick;
-    use crate::physics::traits::Dynamics;
+    use crate::physics::models::BouncingBall;
+    use crate::physics::models::dynamics::SymbolicDynamics;
     use crate::utils::within_tolerance;
 
     use super::*;
@@ -133,9 +125,9 @@ mod tests {
     fn test_objective_symbolic() {
         let registry = Arc::new(ExprRegistry::new());
         let dt_expr = ExprScalar::new(c::TIME_DELTA_SYMBOLIC);
-        let sliding_brick = SlidingBrick::new(1.0, 2.0, Some(&registry));
+        let bouncing_ball = BouncingBall::new(1.0, 2.0, Some(&registry));
         let mass_matrix = registry.get_matrix(c::MASS_MATRIX_SYMBOLIC).unwrap();
-        let linear_term = sliding_brick.linear_term(&dt_expr, &registry).unwrap();
+        let linear_term = bouncing_ball.cost_linear_term(&dt_expr, &registry).unwrap();
         let (_, next_v_state) = get_v_states(&registry).unwrap();
         let objective_symbolic = build_objective(&mass_matrix, &linear_term, &next_v_state);
         dbg!(&objective_symbolic, &linear_term, &next_v_state);
@@ -153,7 +145,7 @@ mod tests {
             let dt = 0.01;
             let registry = Arc::new(ExprRegistry::new());
             let dt_expr = ExprScalar::new(c::TIME_DELTA_SYMBOLIC);
-            let model = SlidingBrick::new(m, 0.0, Some(&registry));
+            let model = BouncingBall::new(m, 0.0, Some(&registry));
 
             registry.insert_var("v_x", v_x);
             registry.insert_var("v_y", v_y);
@@ -163,7 +155,7 @@ mod tests {
             registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
 
 
-            let linear_term = model.linear_term(&dt_expr, &registry).unwrap();
+            let linear_term = model.cost_linear_term(&dt_expr, &registry).unwrap();
             let (_, next_v_state) = get_v_states(&registry).unwrap();
             let mass_matrix = registry.get_matrix(c::MASS_MATRIX_SYMBOLIC).unwrap();
             let v_next = DVector::from_vec(vec![v_x_next, v_y_next]);

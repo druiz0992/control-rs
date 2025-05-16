@@ -1,6 +1,9 @@
-use super::line_search::LineSearch;
-use super::models::{OptimizerConfig, OptimizerParams, ProblemSpec};
-use super::{KktConditionsStatus, newton_utils};
+use super::utils;
+use crate::numeric_services::solver::LineSearch;
+use crate::numeric_services::solver::dtos::{
+    KktConditionsStatus, LagrangianMultiplier, OptimizerConfig, OptimizerParams, ProblemSpec,
+    SolverResult,
+};
 use crate::numeric_services::symbolic::fasteval::ExprRegistry;
 use crate::numeric_services::symbolic::ports::SymbolicExpr;
 use crate::numeric_services::symbolic::{ExprMatrix, ExprScalar, ExprVector, TryIntoEvalResult};
@@ -13,13 +16,14 @@ const LOG_DOMAIN_RHO: &str = "log_domain_rho";
 pub(crate) const LAMBDA: &str = "lagrangian_lambda_";
 const MU: &str = "lagrangian_mu_";
 
-pub struct NewtonSolver {
+pub struct NewtonSolverSymbolic {
     options: OptimizerConfig,
     problem: ProblemSpec,
     status: Option<KktConditionsStatus>,
+    registry: Arc<ExprRegistry>,
 }
 
-impl NewtonSolver {
+impl NewtonSolverSymbolic {
     /// find x of residual_expr f(x) = 0;
     pub fn new_root_solver(
         residual_expr: &ExprVector,
@@ -33,7 +37,7 @@ impl NewtonSolver {
         let jacobian = residual_expr.jacobian(unknown_expr)?;
         let residual_fn = residual_expr.to_fn(registry)?;
         let jacobian_fn = jacobian.to_fn(registry)?;
-        let merit_fn = newton_utils::get_merit_fn(residual_expr, registry, &options)?;
+        let merit_fn = utils::get_merit_fn(residual_expr, registry, &options)?;
 
         let problem = ProblemSpec::new(residual_fn, jacobian_fn, merit_fn, 0, unknown_expr);
 
@@ -41,6 +45,7 @@ impl NewtonSolver {
             options,
             problem,
             status: None,
+            registry: Arc::clone(registry),
         })
     }
 
@@ -55,8 +60,8 @@ impl NewtonSolver {
         let options = options.unwrap_or_default();
 
         // retrieve constraints
-        let eq_constraints = newton_utils::get_constraints(&eq_constraints_expr);
-        let ineq_constraints = newton_utils::get_constraints(&ineq_constraints_expr);
+        let eq_constraints = utils::get_constraints(&eq_constraints_expr);
+        let ineq_constraints = utils::get_constraints(&ineq_constraints_expr);
 
         // compute lagrangian L = objective + mu * eq_constraints - lambda * ineq_constraints
         let (lagrangian, mus, lambdas) =
@@ -96,23 +101,21 @@ impl NewtonSolver {
     }
 
     /// solve problem
-    pub fn solve(
-        &mut self,
-        initial_guess: &[f64],
-        registry: &Arc<ExprRegistry>,
-    ) -> Result<Vec<f64>, ModelError> {
+    pub fn solve(&mut self, initial_guess: &[f64]) -> Result<SolverResult, ModelError> {
         // check if interior point minimization problem
         if self.problem.ip_residual.is_some() {
-            return self.solve_ip(initial_guess, registry);
+            return self.solve_ip(initial_guess);
         }
         let (residual_fn, jacobian_fn, unknown_expr) = self.problem.get_params()?;
         let max_iters = self.options.get_max_iters();
         let tolerance = self.options.get_tolerance();
-        let mut unknown_vals = newton_utils::extend_initial_guess(initial_guess, &unknown_expr);
+        let mut unknown_vals = utils::extend_initial_guess(initial_guess, &unknown_expr);
         let mut alpha = 1.0;
 
         let ls = LineSearch::new(self.options.get_line_search_opts());
         let mut status = Some(KktConditionsStatus::default());
+        let registry = Arc::clone(&self.registry);
+        let (n_eq, n_ineq) = (self.problem.n_eq, self.problem.n_ineq);
 
         for i in 0..max_iters {
             registry.insert_vars(&unknown_expr, &unknown_vals);
@@ -138,12 +141,11 @@ impl NewtonSolver {
                 *val += alpha * delta_val;
             }
 
-            status = Some(newton_utils::update_kkt_status(
+            status = Some(utils::update_kkt_status(
                 &fx,
                 &unknown_vals,
                 0.0,
-                self.problem.n_eq,
-                self.problem.n_ineq,
+                (n_eq, n_ineq),
             ));
 
             if self.options.get_verbose() {
@@ -154,7 +156,13 @@ impl NewtonSolver {
             }
         }
         self.status = status;
-        Ok(unknown_vals)
+        let (result, mus, lambdas) =
+            utils::into_raw_result(&unknown_vals, initial_guess.len(), n_eq, n_ineq)?;
+        Ok((
+            result,
+            LagrangianMultiplier::Mus(mus),
+            LagrangianMultiplier::Lambdas(lambdas),
+        ))
     }
 
     /// interior point minimization
@@ -182,7 +190,7 @@ impl NewtonSolver {
 
         //  (sigmas = [sigma_i], ip_C_ineq = [C_ineq(x) - s])
         let (sigmas, ip_ineq_constraints_expr) =
-            newton_utils::build_ip_params(&ineq_constraints, &sqrt_rho, registry);
+            utils::build_ip_params(&ineq_constraints, &sqrt_rho, registry);
 
         // ip_kkt_conditions = [dL/dX; C_eq; ip_C_ineq]
         let mut ip_kkt_conditions = gradient.extend(&eq_constraints);
@@ -217,7 +225,7 @@ impl NewtonSolver {
         let residual_fn = kkt_conditions.to_fn(registry)?;
         let ip_residual_fn = ip_kkt_conditions.to_fn(registry)?;
         let ip_jacobian_fn = ip_ktt_jacobian.to_fn(registry)?;
-        let ip_merit_fn = newton_utils::get_merit_fn(&ip_kkt_conditions, registry, &options)?;
+        let ip_merit_fn = utils::get_merit_fn(&ip_kkt_conditions, registry, &options)?;
 
         let problem = ProblemSpec::new_ip(
             residual_fn,
@@ -233,6 +241,7 @@ impl NewtonSolver {
             options,
             problem,
             status: None,
+            registry: Arc::clone(registry),
         })
     }
 
@@ -263,7 +272,7 @@ impl NewtonSolver {
 
         let residual_fn = residual_expr.to_fn(registry)?;
         let jacobian_fn = ktt_jacobian.to_fn(registry)?;
-        let merit_fn = newton_utils::get_merit_fn(&gradient, registry, &options)?;
+        let merit_fn = utils::get_merit_fn(&gradient, registry, &options)?;
 
         let problem = ProblemSpec::new(
             residual_fn,
@@ -277,28 +286,27 @@ impl NewtonSolver {
             options,
             problem,
             status: None,
+            registry: Arc::clone(registry),
         })
     }
 
     /// solve interior point minimization problem
-    fn solve_ip(
-        &mut self,
-        initial_guess: &[f64],
-        registry: &Arc<ExprRegistry>,
-    ) -> Result<Vec<f64>, ModelError> {
+    fn solve_ip(&mut self, initial_guess: &[f64]) -> Result<SolverResult, ModelError> {
         let (residual_fn, ip_residual_fn, ip_jacobian_fn, unknown_expr) =
             self.problem.get_ip_params()?;
         let max_iters = self.options.get_max_iters();
         let tolerance = self.options.get_tolerance();
         // extend unknown to include state + mus + sigmas
-        let mut unknown_vals = newton_utils::extend_initial_guess(initial_guess, &unknown_expr);
+        let mut unknown_vals = utils::extend_initial_guess(initial_guess, &unknown_expr);
         let ls = LineSearch::new(self.options.get_line_search_opts());
 
         let mut rho = 0.1;
         let mut alpha = 1.0;
         let mut status = Some(KktConditionsStatus::default());
+        let (n_eq, n_ineq) = (self.problem.n_eq, self.problem.n_ineq);
+        let registry = Arc::clone(&self.registry);
 
-        for i in 0..max_iters {
+        for n_iter in 0..max_iters {
             registry.insert_var(LOG_DOMAIN_RHO, rho);
             registry.insert_vars(&unknown_expr, &unknown_vals);
 
@@ -328,18 +336,17 @@ impl NewtonSolver {
             let ip_res: DVector<f64> = ip_residual_fn.eval(&unknown_vals).try_into_eval_result()?;
             let ip_res_norm_inf = ip_res.amax();
 
-            status = Some(newton_utils::update_kkt_status(
+            status = Some(utils::update_kkt_status(
                 &residual,
                 &unknown_vals,
                 rho,
-                self.problem.n_eq,
-                self.problem.n_ineq,
+                (n_eq, n_ineq),
             ));
 
             if self.options.get_verbose() {
                 info!(
                     "iter: {}, kkt_status: {:?}, alpha: {}, rho: {}",
-                    i, self.status, alpha, rho
+                    n_iter, self.status, alpha, rho
                 );
             }
 
@@ -351,6 +358,14 @@ impl NewtonSolver {
         }
 
         self.status = status;
-        Ok(unknown_vals)
+        let (result, mus, sigmas) =
+            utils::into_raw_result(&unknown_vals, initial_guess.len(), n_eq, n_ineq)?;
+        let lambdas: Vec<_> = sigmas.iter().map(|s| rho.sqrt() * (-s).exp()).collect();
+
+        Ok((
+            result,
+            LagrangianMultiplier::Mus(mus),
+            LagrangianMultiplier::Lambdas(lambdas),
+        ))
     }
 }

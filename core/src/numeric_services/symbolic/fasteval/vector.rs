@@ -1,9 +1,8 @@
 use super::derivatives::compute_derivatives;
 use super::{ExprMatrix, ExprScalar};
-use crate::numeric_services::differentiation::models::{DerivativeResponse, DerivativeType};
+use crate::numeric_services::differentiation::dtos::{DerivativeResponse, DerivativeType};
+use crate::numeric_services::symbolic::dtos::{ExprRecord, SymbolicEvalResult, SymbolicFn};
 use crate::numeric_services::symbolic::error::SymbolicError;
-use crate::numeric_services::symbolic::fasteval::ExprRecord;
-use crate::numeric_services::symbolic::models::{SymbolicEvalResult, SymbolicFn};
 use crate::numeric_services::symbolic::ports::{SymbolicExpr, SymbolicRegistry};
 use nalgebra::DVector;
 use std::collections::HashMap;
@@ -72,7 +71,7 @@ impl ExprVector {
         self.vector.is_empty()
     }
 
-    pub fn as_vec(&self) -> Vec<ExprScalar> {
+    pub fn to_vec(&self) -> Vec<ExprScalar> {
         self.vector.clone()
     }
 
@@ -81,7 +80,7 @@ impl ExprVector {
     }
 
     pub fn get(&self, index: usize) -> Option<ExprScalar> {
-        self.as_vec().get(index).cloned()
+        self.to_vec().get(index).cloned()
     }
 
     pub fn from_vec(vec: Vec<ExprScalar>) -> Self {
@@ -272,7 +271,7 @@ impl ExprVector {
     pub fn build_next(&self) -> Self {
         ExprVector::from_string(
             &self
-                .as_vec()
+                .to_vec()
                 .iter()
                 .map(|e| format!("next_{}", e.as_str()))
                 .collect::<Vec<String>>(),
@@ -300,8 +299,8 @@ impl ExprVector {
     }
 
     pub fn extend(&self, expr: &ExprVector) -> Self {
-        let mut extended_vector = self.as_vec();
-        extended_vector.extend(expr.as_vec());
+        let mut extended_vector = self.to_vec();
+        extended_vector.extend(expr.to_vec());
         Self {
             vector: extended_vector,
         }
@@ -434,7 +433,7 @@ mod tests {
     fn test_new() {
         let vector = ExprVector::new(&["x", "y", "z"]);
         assert_eq!(
-            vector.as_vec(),
+            vector.to_vec(),
             vec![
                 ExprScalar::new("x"),
                 ExprScalar::new("y"),
@@ -449,7 +448,7 @@ mod tests {
         let vec2 = ExprVector::new(&["a", "b", "c"]);
         let result = vec1.add(&vec2);
         assert_eq!(
-            result.as_vec(),
+            result.to_vec(),
             vec![
                 ExprScalar::new("x").add(&ExprScalar::new("a")),
                 ExprScalar::new("y").add(&ExprScalar::new("b")),
@@ -464,7 +463,7 @@ mod tests {
         let vec2 = ExprVector::new(&["a", "b", "c"]);
         let result = vec1.sub(&vec2);
         assert_eq!(
-            result.as_vec(),
+            result.to_vec(),
             vec![
                 ExprScalar::new("x").sub(&ExprScalar::new("a")),
                 ExprScalar::new("y").sub(&ExprScalar::new("b")),
@@ -478,7 +477,7 @@ mod tests {
         let vec = ExprVector::new(&["x", "y", "z"]);
         let result = vec.scalef(2.0);
         assert_eq!(
-            result.as_vec(),
+            result.to_vec(),
             vec![
                 ExprScalar::new("x").scalef(2.0),
                 ExprScalar::new("y").scalef(2.0),
@@ -522,7 +521,7 @@ mod tests {
             ExprScalar::new("z"),
         ];
         let vec = ExprVector::from_vec(scalars.clone());
-        assert_eq!(vec.as_vec(), scalars);
+        assert_eq!(vec.to_vec(), scalars);
     }
 
     #[test]

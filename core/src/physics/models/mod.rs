@@ -1,13 +1,14 @@
+pub mod bouncing_ball;
 pub mod cart_pole;
 pub mod double_pendulum;
 pub mod dynamics;
-pub mod sliding_brick;
 pub mod state;
+pub mod linear_time_invariant;
 
+pub use bouncing_ball::model::BouncingBall;
+pub use bouncing_ball::state::BouncingBallState;
 pub use cart_pole::CartPole;
 pub use cart_pole::state::CartPoleState;
 pub use double_pendulum::DoublePendulum;
 pub use double_pendulum::state::DoublePendulumState;
 pub use dynamics::Dynamics;
-pub use sliding_brick::model::SlidingBrick;
-pub use sliding_brick::state::SlidingBrickState;

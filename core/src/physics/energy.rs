@@ -41,7 +41,7 @@
 /// energy.set_potential(25.0).unwrap();
 /// assert_eq!(energy.get_potential(), 25.0);
 /// ```
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Energy {
     kinetic: f64,
     potential: f64,

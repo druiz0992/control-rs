@@ -1,6 +1,6 @@
 use crate::numeric_services::differentiation::engine::DerivativeEngine;
 use crate::numeric_services::differentiation::error::DerivativeError;
-use crate::numeric_services::differentiation::models::{DerivativeRequest, DerivativeResponse};
+use crate::numeric_services::differentiation::dtos::{DerivativeRequest, DerivativeResponse};
 use serde_json::json;
 use std::io::Write;
 use std::path::PathBuf;
@@ -111,7 +111,7 @@ fn convert_python_expr_matrix(exprs: &[Vec<String>]) -> Vec<Vec<String>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::numeric_services::differentiation::models::DerivativeType;
+    use crate::numeric_services::differentiation::dtos::DerivativeType;
 
     use super::*;
 

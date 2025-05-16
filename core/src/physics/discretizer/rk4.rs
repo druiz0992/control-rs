@@ -1,6 +1,7 @@
 use crate::numeric_services::symbolic::{
     ExprRegistry, ExprScalar, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
 };
+use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Describable, Discretizer, Dynamics, State};
 use crate::physics::{ModelError, constants as c};
 use std::sync::Arc;
@@ -56,7 +57,7 @@ pub struct RK4Symbolic<D: Dynamics> {
     model: D,
 }
 
-impl<D: Dynamics> RK4Symbolic<D> {
+impl<D: SymbolicDynamics> RK4Symbolic<D> {
     pub fn new(model: D, registry: Arc<ExprRegistry>) -> Result<Self, ModelError> {
         let (_, v_dims) = model.state_dims();
         if v_dims > 0 {
@@ -89,9 +90,9 @@ impl<D: Dynamics> RK4Symbolic<D> {
         let step_func = result_s.to_fn(&registry)?;
 
         // if model allows inputs, redefine vars to include inputs
-        let mut vars = state.as_vec();
+        let mut vars = state.to_vec();
         if let Ok(input) = registry.get_vector(c::INPUT_SYMBOLIC) {
-            vars.extend_from_slice(&input.as_vec());
+            vars.extend_from_slice(&input.to_vec());
         }
         let step_func = SymbolicFunction::new(step_func, &vars);
 
@@ -112,7 +113,7 @@ impl<D: Dynamics> Discretizer<D> for RK4Symbolic<D> {
     ) -> Result<D::State, ModelError> {
         self.registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
 
-        let mut vals = state.as_vec();
+        let mut vals = state.to_vec();
         if let Some(u) = input {
             vals.extend_from_slice(u);
         }

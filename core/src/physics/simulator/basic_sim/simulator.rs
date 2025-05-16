@@ -22,7 +22,7 @@ where
         }
     }
 
-    pub fn energy(&self, state: &M::State) -> Energy {
+    pub fn energy(&self, state: &M::State) -> Option<Energy> {
         self.discretizer.get_model().energy(state)
     }
 }
@@ -38,7 +38,7 @@ where
         let mut history = Vec::with_capacity(steps);
         let mut t = 0.0;
         for _ in 0..steps {
-            let energy = self.energy(&self.state);
+            let energy = self.energy(&self.state).unwrap_or_default();
 
             history.push((t, self.state.clone(), energy));
             let _ = self.step(None, dt);

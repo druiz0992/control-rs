@@ -29,7 +29,8 @@ where
 impl<S> Animation for Macroquad<S>
 where
     S: PhysicsSim + Send,
-    S::Model: Renderable<State = <S::Model as Dynamics>::State>,
+    S::Model: Renderable,
+    <S::Model as Dynamics>::State: Clone,
 {
     /// The associated simulator type, which must implement the `PhysicsSim` trait.
     type Simulator = S;

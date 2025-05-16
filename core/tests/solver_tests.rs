@@ -1,4 +1,6 @@
-use control_rs::numeric_services::solver::{LineSeachConfig, NewtonSolver, OptimizerConfig};
+use control_rs::numeric_services::solver::{
+    LineSeachConfig, NewtonSolverSymbolic, OptimizerConfig,
+};
 use control_rs::numeric_services::symbolic::fasteval::ExprRegistry;
 use control_rs::numeric_services::symbolic::fasteval::utils::*;
 use control_rs::numeric_services::symbolic::{
@@ -75,8 +77,9 @@ fn test_newton_root_finding() {
     let initial_guess = vec![-1.742410372590328, 1.4020334125022704];
 
     let unknown_expr = ExprVector::new(&["x1", "x2"]);
-    let mut solver = NewtonSolver::new_root_solver(&expr, &unknown_expr, &registry, None).unwrap();
-    let result = solver.solve(&initial_guess, &registry).unwrap();
+    let mut solver =
+        NewtonSolverSymbolic::new_root_solver(&expr, &unknown_expr, &registry, None).unwrap();
+    let (result, _, _) = solver.solve(&initial_guess).unwrap();
 
     assert!(result[0].sin().abs() < 1e-6);
     assert!(result[1].cos().abs() < 1e-6);
@@ -97,8 +100,9 @@ fn test_newton_root_finding_norm1_line_search() {
     options.set_line_search_opts(ls_opts);
 
     let mut solver =
-        NewtonSolver::new_root_solver(&expr, &unknown_expr, &registry, Some(options)).unwrap();
-    let result = solver.solve(&initial_guess, &registry).unwrap();
+        NewtonSolverSymbolic::new_root_solver(&expr, &unknown_expr, &registry, Some(options))
+            .unwrap();
+    let (result, _, _) = solver.solve(&initial_guess).unwrap();
 
     assert!(result[0].sin().abs() < 1e-6);
     assert!(result[1].cos().abs() < 1e-6);
@@ -113,8 +117,9 @@ fn test_newton_minimization_no_constraints() {
     let initial_guess = vec![-0.1, 0.5];
 
     let mut solver =
-        NewtonSolver::new_minimization(&cost, None, None, &unknown_expr, &registry, None).unwrap();
-    let result = solver.solve(&initial_guess, &registry).unwrap();
+        NewtonSolverSymbolic::new_minimization(&cost, None, None, &unknown_expr, &registry, None)
+            .unwrap();
+    let (result, _, _) = solver.solve(&initial_guess).unwrap();
 
     let grad_cost_norm = grad_cost_norm(&result);
     assert!(grad_cost_norm < 1e-6);
@@ -130,10 +135,16 @@ fn test_gauss_newton_minimization_no_constraints() {
     let mut options = OptimizerConfig::default();
     options.set_gauss_newton(true);
 
-    let mut solver =
-        NewtonSolver::new_minimization(&cost, None, None, &unknown_expr, &registry, Some(options))
-            .unwrap();
-    let result = solver.solve(&initial_guess, &registry).unwrap();
+    let mut solver = NewtonSolverSymbolic::new_minimization(
+        &cost,
+        None,
+        None,
+        &unknown_expr,
+        &registry,
+        Some(options),
+    )
+    .unwrap();
+    let (result, _, _) = solver.solve(&initial_guess).unwrap();
 
     let grad_cost_norm = grad_cost_norm(&result);
     assert!(grad_cost_norm < 1e-6);
@@ -148,7 +159,7 @@ fn test_newton_minimization() {
     let initial_guess = vec![-0.1, 0.5];
     let eq_constraints_expr = get_eq_constraints_expr(&unknown_expr);
 
-    let mut solver = NewtonSolver::new_minimization(
+    let mut solver = NewtonSolverSymbolic::new_minimization(
         &cost,
         Some(eq_constraints_expr),
         None,
@@ -157,7 +168,7 @@ fn test_newton_minimization() {
         None,
     )
     .unwrap();
-    let result = solver.solve(&initial_guess, &registry).unwrap();
+    let (result, _, _) = solver.solve(&initial_guess).unwrap();
 
     let constraint_eval = eval_eq_constraint(&result);
 
@@ -176,7 +187,7 @@ fn test_gauss_newton_minimization() {
     let mut options = OptimizerConfig::default();
     options.set_gauss_newton(true);
 
-    let mut solver = NewtonSolver::new_minimization(
+    let mut solver = NewtonSolverSymbolic::new_minimization(
         &cost,
         Some(eq_constraints_expr),
         None,
@@ -185,7 +196,7 @@ fn test_gauss_newton_minimization() {
         Some(options),
     )
     .unwrap();
-    let result = solver.solve(&initial_guess, &registry).unwrap();
+    let (result, _, _) = solver.solve(&initial_guess).unwrap();
 
     let constraint_eval = eval_eq_constraint(&result);
 
@@ -202,7 +213,7 @@ fn test_newton_minimization_ineq_eq_constraint() {
     let eq_constraints_expr = get_eq_constraints_expr(&unknown_expr);
     let ineq_constraints_expr = get_ineq_constraints_expr(&unknown_expr);
 
-    let mut solver = NewtonSolver::new_minimization(
+    let mut solver = NewtonSolverSymbolic::new_minimization(
         &cost,
         Some(eq_constraints_expr),
         Some(ineq_constraints_expr),
@@ -211,7 +222,7 @@ fn test_newton_minimization_ineq_eq_constraint() {
         None,
     )
     .unwrap();
-    let result = solver.solve(&initial_guess, &registry).unwrap();
+    let (result, _, _) = solver.solve(&initial_guess).unwrap();
 
     let eq_constraint_eval = eval_eq_constraint(&result);
     let ineq_constraint_eval = eval_ineq_constraint(&result);
@@ -229,7 +240,7 @@ fn test_newton_minimization_ineq_constraint() {
     let initial_guess = vec![-0.1, 0.5];
     let ineq_constraints_expr = get_ineq_constraints_expr(&unknown_expr);
 
-    let mut solver = NewtonSolver::new_minimization(
+    let mut solver = NewtonSolverSymbolic::new_minimization(
         &cost,
         None,
         Some(ineq_constraints_expr),
@@ -238,7 +249,7 @@ fn test_newton_minimization_ineq_constraint() {
         None,
     )
     .unwrap();
-    let result = solver.solve(&initial_guess, &registry).unwrap();
+    let (result, _, _) = solver.solve(&initial_guess).unwrap();
 
     let ineq_constraint_eval = eval_ineq_constraint(&result);
 
@@ -373,7 +384,7 @@ fn test_qp() {
     let mut solver_options = OptimizerConfig::default();
     solver_options.set_verbose(true);
 
-    let mut solver = NewtonSolver::new_minimization(
+    let mut solver = NewtonSolverSymbolic::new_minimization(
         &objective_expr,
         Some(eq_constraints_expr),
         Some(ineq_constraints_expr),
@@ -382,7 +393,7 @@ fn test_qp() {
         Some(solver_options),
     )
     .unwrap();
-    solver.solve(&[0.0, 0.0, 0.0, 0.0], &registry).unwrap();
+    solver.solve(&[0.0, 0.0, 0.0, 0.0]).unwrap();
 
     assert!(solver.status().is_some());
     if let Some(status) = solver.status() {

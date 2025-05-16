@@ -8,6 +8,7 @@ pub enum ModelError {
     IncompleteConfiguration(String),
     SolverError(String),
     ConfigError(String),
+    DiscretizerError(String),
     Other(String),
 }
 

@@ -1,11 +1,8 @@
 use super::model::CartPole;
-use super::state::CartPoleState;
 use crate::{common::Labelizable, physics::traits::Renderable};
 use nalgebra::Vector2;
 
 impl Renderable for CartPole {
-    type State = CartPoleState;
-
     fn render_joints(&self, state: &Self::State, screen_dims: (f32, f32)) -> Vec<Vector2<f32>> {
         let (screen_width, screen_height) = screen_dims;
         let origin = Vector2::new(screen_width, screen_height);

@@ -1,16 +1,13 @@
-use super::model::SlidingBrick;
-use super::state::SlidingBrickState;
+use super::model::BouncingBall;
 use crate::physics::traits::{Renderable, State};
 use nalgebra::Vector2;
 
-impl Renderable for SlidingBrick {
-    type State = SlidingBrickState;
-
+impl Renderable for BouncingBall {
     fn render_joints(&self, state: &Self::State, screen_dims: (f32, f32)) -> Vec<Vector2<f32>> {
         let (screen_width, screen_height) = screen_dims;
         let origin = Vector2::new(screen_width, screen_height);
 
-        let [pos_x, pos_y, _, _] = state.as_vec().try_into().unwrap();
+        let [pos_x, pos_y, _, _] = state.to_vec().try_into().unwrap();
 
         let scale = 0.1 * screen_height;
 

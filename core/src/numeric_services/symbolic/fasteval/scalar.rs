@@ -1,8 +1,8 @@
 use super::derivatives::compute_derivatives;
-use crate::numeric_services::differentiation::models::DerivativeType;
+use crate::numeric_services::differentiation::dtos::DerivativeType;
+use crate::numeric_services::symbolic::dtos::{ExprRecord, SymbolicEvalResult, SymbolicFn};
 use crate::numeric_services::symbolic::error::SymbolicError;
-use crate::numeric_services::symbolic::fasteval::{ExprMatrix, ExprRecord, ExprVector};
-use crate::numeric_services::symbolic::models::{SymbolicEvalResult, SymbolicFn};
+use crate::numeric_services::symbolic::fasteval::{ExprMatrix, ExprVector};
 use crate::numeric_services::symbolic::ports::{SymbolicExpr, SymbolicRegistry};
 use fasteval::parser::{DEFAULT_EXPR_DEPTH_LIMIT, DEFAULT_EXPR_LEN_LIMIT};
 use fasteval::{Compiler, Error, Evaler, Instruction, Parser, Slab};
@@ -77,7 +77,7 @@ impl ExprScalar {
         Self::new(format!("({})", self.0))
     }
 
-    pub fn as_vec(&self) -> ExprVector {
+    pub fn to_vec(&self) -> ExprVector {
         ExprVector::from_vec(vec![self.clone()])
     }
 
@@ -350,8 +350,8 @@ mod tests {
 
     use super::*;
     use crate::numeric_services::symbolic::TryIntoEvalResult;
+    use crate::numeric_services::symbolic::dtos::SymbolicEvalResult;
     use crate::numeric_services::symbolic::fasteval::ExprRegistry;
-    use crate::numeric_services::symbolic::models::SymbolicEvalResult;
 
     #[test]
     fn test_new() {

@@ -1,5 +1,5 @@
 use super::error::SymbolicError;
-use super::models::SymbolicFn;
+use super::dtos::SymbolicFn;
 use std::sync::Arc;
 
 /// A trait that defines a registry for managing symbolic expressions.

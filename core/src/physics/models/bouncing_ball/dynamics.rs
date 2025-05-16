@@ -1,7 +1,8 @@
-use super::model::SlidingBrick;
-use super::state::SlidingBrickState;
+use super::model::BouncingBall;
+use super::state::BouncingBallState;
 use crate::common::Labelizable;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
+use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::State;
 use crate::physics::{Energy, constants as c, traits::Dynamics};
 use std::sync::Arc;
@@ -9,8 +10,8 @@ use std::sync::Arc;
 /// M * v_dot  + M * g = J' * u + f_friction, where M = mass * identity(2), g = [0, 9.81], J = [0,1]
 /// mu is normal force (scalar), v is velocity (2D vector), and q is position (2D vector),
 ///  f_friction = [ -mu * friction_coeff * sign(v_x), 0]
-impl Dynamics for SlidingBrick {
-    type State = SlidingBrickState;
+impl Dynamics for BouncingBall {
+    type State = BouncingBallState;
 
     fn dynamics(&self, state: &Self::State, _input: Option<&[f64]>) -> Self::State {
         let [m, friction_coeff] = self.extract(&["m", "friction_coeff"]);
@@ -34,7 +35,7 @@ impl Dynamics for SlidingBrick {
         let a_x = f_x / m;
         let a_y = f_y / m;
 
-        SlidingBrickState {
+        BouncingBallState {
             pos_x: v_x,
             pos_y: v_y,
             v_x: a_x,
@@ -43,13 +44,25 @@ impl Dynamics for SlidingBrick {
     }
 
     fn state_dims(&self) -> (usize, usize) {
-        (SlidingBrickState::dim_q(), SlidingBrickState::dim_v())
+        (BouncingBallState::dim_q(), BouncingBallState::dim_v())
     }
 
+    fn energy(&self, state: &Self::State) -> Option<Energy> {
+        let [m] = self.extract(&["m"]);
+        let [pos_y, v_x, v_y] = state.extract(&["pos_y", "v_x", "v_y"]);
+
+        let kinetic = 0.5 * m * (v_x.powi(2) + v_y.powi(2));
+        let potential = m * c::GRAVITY * pos_y;
+
+        Some(Energy::new(kinetic, potential))
+    }
+}
+
+impl SymbolicDynamics for BouncingBall {
     fn dynamics_symbolic(&self, state: &ExprVector, registry: &Arc<ExprRegistry>) -> ExprVector {
-        let pos_y = state.get(SlidingBrickState::index_of("pos_y")).unwrap();
-        let v_x = state.get(SlidingBrickState::index_of("v_x")).unwrap();
-        let v_y = state.get(SlidingBrickState::index_of("v_y")).unwrap();
+        let pos_y = state.get(BouncingBallState::index_of("pos_y")).unwrap();
+        let v_x = state.get(BouncingBallState::index_of("v_x")).unwrap();
+        let v_y = state.get(BouncingBallState::index_of("v_y")).unwrap();
 
         let friction_coeff = registry.get_scalar(c::FRICTION_COEFF_SYMBOLIC).unwrap();
         let m = registry.get_scalar(c::MASS_SYMBOLIC).unwrap();
@@ -75,18 +88,12 @@ impl Dynamics for SlidingBrick {
         ExprVector::from_vec(vec![v_x, v_y, a_x.div(&m), a_y.div(&m)])
     }
 
-    fn energy(&self, state: &Self::State) -> Energy {
-        let [m] = self.extract(&["m"]);
-        let [pos_y, v_x, v_y] = state.extract(&["pos_y", "v_x", "v_y"]);
-
-        let kinetic = 0.5 * m * (v_x.powi(2) + v_y.powi(2));
-        let potential = m * c::GRAVITY * pos_y;
-
-        Energy::new(kinetic, potential)
-    }
-
     /// linear term = M * (dt * g - v_current)
-    fn linear_term(&self, dt: &ExprScalar, registry: &Arc<ExprRegistry>) -> Option<ExprVector> {
+    fn cost_linear_term(
+        &self,
+        dt: &ExprScalar,
+        registry: &Arc<ExprRegistry>,
+    ) -> Option<ExprVector> {
         let mass_matrix = registry.get_matrix(c::MASS_MATRIX_SYMBOLIC).unwrap();
         let g = registry.get_scalar(c::GRAVITY_SYMBOLIC).unwrap();
         let g_vector = ExprVector::new(&["0", "1"]).scale(&g);
@@ -110,10 +117,10 @@ mod tests {
 
     #[test]
     fn test_dynamics() {
-        let sliding_brick = SlidingBrick::new(1.0, 0.0, None);
-        let state = SlidingBrickState::new(0.0, 0.0, 0.0, 0.0);
+        let bouncing_ball = BouncingBall::new(1.0, 0.0, None);
+        let state = BouncingBallState::new(0.0, 0.0, 0.0, 0.0);
 
-        let new_state = sliding_brick.dynamics(&state, None);
+        let new_state = bouncing_ball.dynamics(&state, None);
 
         assert!(new_state.pos_x.abs() < 1e-6);
         assert!(new_state.pos_y.abs() < 1e-6);
@@ -125,9 +132,9 @@ mod tests {
     #[ignore]
     fn test_dynamics_symbolic() {
         let registry = Arc::new(ExprRegistry::new());
-        let sliding_brick = SlidingBrick::new(1.0, 2.0, Some(&registry));
+        let bouncing_ball = BouncingBall::new(1.0, 2.0, Some(&registry));
         let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
-        let dynamics_func = sliding_brick.dynamics_symbolic(&state_symbol, &registry);
+        let dynamics_func = bouncing_ball.dynamics_symbolic(&state_symbol, &registry);
         dbg!(&dynamics_func);
     }
 
@@ -147,17 +154,17 @@ mod tests {
             registry.insert_var("v_x", v_x);
             registry.insert_var("v_y", v_y);
 
-            let sliding_brick = SlidingBrick::new(m, friction_coeff, Some(&registry));
-            let state = SlidingBrickState::new(pos_x, pos_y, v_x, v_y);
+            let bouncing_ball = BouncingBall::new(m, friction_coeff, Some(&registry));
+            let state = BouncingBallState::new(pos_x, pos_y, v_x, v_y);
 
             let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
 
-            let new_state = sliding_brick.dynamics(&state, None);
-            let dynamics_func = sliding_brick
+            let new_state = bouncing_ball.dynamics(&state, None);
+            let dynamics_func = bouncing_ball
                 .dynamics_symbolic(&state_symbol, &registry)
                 .to_fn(&registry)
                 .unwrap();
-            let new_state_symbol: SlidingBrickState = dynamics_func(None).try_into_eval_result().unwrap();
+            let new_state_symbol: BouncingBallState = dynamics_func(None).try_into_eval_result().unwrap();
 
             // Compare numeric and symbolic outputs approximately
             let tol = 1e-3; // tolerance for floating point comparison

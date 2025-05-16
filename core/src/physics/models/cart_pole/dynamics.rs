@@ -2,6 +2,7 @@ use super::model::CartPole;
 use super::state::CartPoleState;
 use crate::common::Labelizable;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
+use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Dynamics, State};
 use crate::physics::{constants as c, energy::Energy};
 use std::sync::Arc;
@@ -50,6 +51,27 @@ impl Dynamics for CartPole {
         (CartPoleState::dim_q(), CartPoleState::dim_v())
     }
 
+    fn energy(&self, state: &Self::State) -> Option<Energy> {
+        let [m_p, m_c, l] = self.extract(&["pole_mass", "cart_mass", "l"]);
+        let [v_x, theta, omega] = state.extract(&["v_x", "theta", "omega"]);
+
+        let omega_square = omega.powi(2);
+        let vx_square = v_x.powi(2);
+
+        let kintetic_cart = 0.5 * m_c * vx_square;
+        let kinetic_pole = 0.5
+            * m_p
+            * ((v_x + l / 2.0 * theta.cos() * omega_square).powi(2)
+                + (l / 2.0 * theta.sin() * omega_square).powi(2));
+
+        let kinetic = kinetic_pole + kintetic_cart;
+        let potential = 0.5 * m_p * c::GRAVITY * l * theta.cos();
+
+        Some(Energy::new(kinetic, potential))
+    }
+}
+
+impl SymbolicDynamics for CartPole {
     fn dynamics_symbolic(&self, state: &ExprVector, registry: &Arc<ExprRegistry>) -> ExprVector {
         // Define symbolic variables
         let v_x = state.get(CartPoleState::index_of("v_x")).unwrap();
@@ -120,27 +142,7 @@ impl Dynamics for CartPole {
             .div(&total_mass);
         ExprVector::from_vec(vec![v_x, dv, omega, domega])
     }
-
-    fn energy(&self, state: &Self::State) -> Energy {
-        let [m_p, m_c, l] = self.extract(&["pole_mass", "cart_mass", "l"]);
-        let [v_x, theta, omega] = state.extract(&["v_x", "theta", "omega"]);
-
-        let omega_square = omega.powi(2);
-        let vx_square = v_x.powi(2);
-
-        let kintetic_cart = 0.5 * m_c * vx_square;
-        let kinetic_pole = 0.5
-            * m_p
-            * ((v_x + l / 2.0 * theta.cos() * omega_square).powi(2)
-                + (l / 2.0 * theta.sin() * omega_square).powi(2));
-
-        let kinetic = kinetic_pole + kintetic_cart;
-        let potential = 0.5 * m_p * c::GRAVITY * l * theta.cos();
-
-        Energy::new(kinetic, potential)
-    }
 }
-
 #[cfg(test)]
 mod tests {
     use crate::numeric_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
