@@ -22,6 +22,23 @@ pub struct QP {
     pub(super) status: Option<KktConditionsStatus>,
 }
 
+impl std::fmt::Debug for QP {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QP")
+            .field("q_mat", &self.q_mat)
+            .field("q_vec", &self.q_vec)
+            .field("a_mat", &self.a_mat)
+            .field("b_vec", &self.b_vec)
+            .field("g_mat", &self.g_mat)
+            .field("h_vec", &self.h_vec)
+            .field("xi", &self.xi)
+            .field("mui", &self.mui)
+            .field("sigmai", &self.sigmai)
+            .field("status", &self.status)
+            .finish()
+    }
+}
+
 impl QP {
     fn c_eq(&self, x: &DVectorView<f64>) -> DVector<f64> {
         &self.a_mat * x - &self.b_vec
@@ -102,7 +119,7 @@ impl QP {
         jac.view_mut((0, x_dim), (x_dim, n_eq))
             .copy_from(&self.a_mat.transpose());
         jac.view_mut((0, x_dim + n_eq), (x_dim, n_ineq))
-            .copy_from(&(self.g_mat.transpose() * -&l_diag));
+            .copy_from(&(self.g_mat.transpose() * &l_diag));
 
         jac.view_mut((x_dim, 0), (n_eq, x_dim))
             .copy_from(&self.a_mat);
@@ -128,6 +145,7 @@ impl QP {
         for main_iter in 0..self.options.get_max_iters() {
             let res = self.ip_kkt_conditions(&z, rho);
             let jac = self.ip_kkt_jacobian(&z, rho);
+
             let dz = jac
                 .lu()
                 .solve(&(-&res))
@@ -142,12 +160,12 @@ impl QP {
                 alpha *= ls_options.get_factor();
             }
 
-            z += alpha * dz;
+            z += alpha * &dz;
 
             if self.options.get_verbose() {
                 info!(
                     "iter: {}, kkt_status: {:?}, alpha: {}, rho: {}",
-                    main_iter, self.status, alpha, rho
+                    main_iter, &self.status, alpha, rho
                 );
             }
 
@@ -182,5 +200,144 @@ impl QP {
 impl Minimizer for QP {
     fn minimize(&mut self, initial_guess: &[f64]) -> Result<SolverResult, ModelError> {
         self.solve_qp(initial_guess)
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nalgebra::{dmatrix, dvector};
+
+    #[test]
+    fn test_kkt_conditions() {
+        let q_vec = dvector![-2.0, -5.0];
+        let b_vec = dvector![1.0];
+        let h_vec = dvector![0.0, 0.0];
+
+        let kkt_conditions_len = q_vec.len() + b_vec.len() + 3 * h_vec.len();
+
+        let mut qp = QP {
+            q_mat: dmatrix![
+                2.0, 0.0;
+                0.0, 2.0
+            ],
+            q_vec,
+            a_mat: dmatrix![1.0, 1.0],
+            b_vec,
+            g_mat: dmatrix![
+                -1.0, 0.0;
+                0.0, -1.0
+            ],
+            h_vec,
+            xi: 0..2,
+            mui: 2..3,
+            sigmai: 3..5,
+            options: OptimizerConfig::default(),
+            status: None,
+        };
+
+        let z = dvector![0.5, 0.5, 0.0, 0.0, 0.0];
+        let rho = 0.1;
+
+        let kkt_res = qp.kkt_conditions(&z, rho);
+
+        assert_eq!(kkt_res.len(), kkt_conditions_len);
+    }
+
+    #[test]
+    fn test_ip_kkt_conditions() {
+        let q_vec = dvector![-2.0, -5.0];
+        let b_vec = dvector![1.0];
+        let h_vec = dvector![0.0, 0.0];
+
+        let ip_kkt_conditions_len = q_vec.len() + b_vec.len() + h_vec.len();
+        let qp = QP {
+            q_mat: dmatrix![
+                2.0, 0.0;
+                0.0, 2.0
+            ],
+            q_vec,
+            a_mat: dmatrix![1.0, 1.0],
+            b_vec,
+            g_mat: dmatrix![
+                -1.0, 0.0;
+                0.0, -1.0
+            ],
+            h_vec,
+            xi: 0..2,
+            mui: 2..3,
+            sigmai: 3..5,
+            options: OptimizerConfig::default(),
+            status: None,
+        };
+
+        let z = dvector![0.5, 0.5, 0.0, 0.0, 0.0];
+        let rho = 0.1;
+
+        let ip_kkt_res = qp.ip_kkt_conditions(&z, rho);
+        assert_eq!(ip_kkt_res.len(), ip_kkt_conditions_len);
+    }
+
+    #[test]
+    fn test_ip_kkt_jacobian() {
+        let qp = QP {
+            q_mat: dmatrix![
+                2.0, 0.0;
+                0.0, 2.0
+            ],
+            q_vec: dvector![-2.0, -5.0],
+            a_mat: dmatrix![1.0, 1.0],
+            b_vec: dvector![1.0],
+            g_mat: dmatrix![
+                -1.0, 0.0;
+                0.0, -1.0
+            ],
+            h_vec: dvector![0.0, 0.0],
+            xi: 0..2,
+            mui: 2..3,
+            sigmai: 3..5,
+            options: OptimizerConfig::default(),
+            status: None,
+        };
+
+        let ip_kkt_jacobian_cols = qp.q_mat.ncols() + qp.a_mat.nrows() + qp.g_mat.nrows();
+        let ip_kkt_jacobian_rows = qp.q_mat.nrows() + qp.a_mat.nrows() + qp.g_mat.nrows();
+
+        let z = dvector![0.5, 0.5, 0.0, 0.0, 0.0];
+        let rho = 0.1;
+
+        let jac = qp.ip_kkt_jacobian(&z, rho);
+        assert_eq!(jac.nrows(), ip_kkt_jacobian_rows);
+        assert_eq!(jac.ncols(), ip_kkt_jacobian_cols);
+    }
+
+    #[test]
+    fn test_solve_qp() {
+        let mut qp = QP {
+            q_mat: dmatrix![
+                2.0, 0.0;
+                0.0, 2.0
+            ],
+            q_vec: dvector![-2.0, -5.0],
+            a_mat: dmatrix![1.0, 1.0],
+            b_vec: dvector![1.0],
+            g_mat: dmatrix![
+                -1.0, 0.0;
+                0.0, -1.0
+            ],
+            h_vec: dvector![0.0, 0.0],
+            xi: 0..2,
+            mui: 2..3,
+            sigmai: 3..5,
+            options: OptimizerConfig::default(),
+            status: None,
+        };
+
+        let initial_guess = [0.5, 0.5];
+        let result = qp.solve_qp(&initial_guess);
+
+        assert!(result.is_ok());
+        let (x, _, _) = result.unwrap();
+        assert!((x[0] - 0.5).abs() < 1e-6);
+        assert!((x[1] - 0.5).abs() < 1e-6);
     }
 }

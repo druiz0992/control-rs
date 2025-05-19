@@ -134,7 +134,9 @@ impl NewtonSolverSymbolic {
                 ))?;
 
             if let Some(merit_fn) = &self.problem.merit {
-                alpha = ls.run(merit_fn, &delta, &unknown_vals, None).unwrap();
+                alpha = ls
+                    .run(merit_fn, &delta, &unknown_vals, None)
+                    .unwrap();
             }
 
             for (val, delta_val) in unknown_vals.iter_mut().zip(delta.iter()) {
@@ -323,7 +325,12 @@ impl NewtonSolverSymbolic {
 
             if let Some(ip_merit_fn) = &self.problem.merit {
                 alpha = ls
-                    .run(ip_merit_fn, &delta, &unknown_vals, Some(ip_res.norm()))
+                    .run(
+                        ip_merit_fn,
+                        &delta,
+                        &unknown_vals,
+                        Some(ip_res.norm()),
+                    )
                     .unwrap();
             }
 
@@ -346,7 +353,7 @@ impl NewtonSolverSymbolic {
             if self.options.get_verbose() {
                 info!(
                     "iter: {}, kkt_status: {:?}, alpha: {}, rho: {}",
-                    n_iter, self.status, alpha, rho
+                    n_iter, &status, alpha, rho
                 );
             }
 

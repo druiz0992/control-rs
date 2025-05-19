@@ -58,6 +58,11 @@ impl QPBuilder {
         self
     }
 
+    pub fn add_options(mut self, options: OptimizerConfig) -> Self {
+        self.options = options;
+        self
+    }
+
     pub fn build(self) -> Result<QP, ModelError> {
         if self.b_vec.is_none() && self.a_mat.is_some()
             || self.b_vec.is_some() && self.a_mat.is_none()
@@ -79,11 +84,13 @@ impl QPBuilder {
         let a_mat = self.a_mat.unwrap_or(DMatrix::from_vec(1, 1, vec![0.0]));
         let g_mat = self.g_mat.unwrap_or(DMatrix::from_vec(1, 1, vec![0.0]));
 
-        let mui = 0..b_vec.len();
-        let sigmai = 0..h_vec.len();
+        let q_len = self.q_vec.as_ref().unwrap().len();
+        let b_len = b_vec.len();
+        let mui = 0 + q_len..b_vec.len() + q_len;
+        let sigmai = 0 + q_len + b_len..h_vec.len() + q_len + b_len;
 
         Ok(QP {
-            xi: 0..self.q_vec.as_ref().unwrap().len(),
+            xi: 0..q_len,
             mui,
             sigmai,
             q_mat: self
@@ -99,5 +106,84 @@ impl QPBuilder {
             options: self.options,
             status: None,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nalgebra::{dmatrix, dvector};
+
+    #[test]
+    fn test_qp_builder_with_minimal_configuration() {
+        let q_mat = dmatrix![1.0, 0.0; 0.0, 1.0];
+        let q_vec = dvector![1.0, 1.0];
+
+        let qp = QPBuilder::new()
+            .q_mat(q_mat.clone())
+            .q_vec(q_vec.clone())
+            .build()
+            .unwrap();
+
+        assert_eq!(qp.q_mat, q_mat);
+        assert_eq!(qp.q_vec, q_vec);
+        assert_eq!(qp.a_mat, DMatrix::from_vec(1, 1, vec![0.0]));
+        assert_eq!(qp.b_vec, DVector::from_row_slice(&[0.0]));
+        assert_eq!(qp.g_mat, DMatrix::from_vec(1, 1, vec![0.0]));
+        assert_eq!(qp.h_vec, DVector::from_row_slice(&[0.0]));
+    }
+
+    #[test]
+    fn test_qp_builder_with_full_configuration() {
+        let q_mat = dmatrix![1.0, 0.0; 0.0, 1.0];
+        let q_vec = dvector![1.0, 1.0];
+        let a_mat = dmatrix![1.0, 2.0];
+        let b_vec = dvector![3.0];
+        let g_mat = dmatrix![1.0, 0.0; 0.0, 1.0];
+        let h_vec = dvector![4.0, 5.0];
+
+        let qp = QPBuilder::new()
+            .q_mat(q_mat.clone())
+            .q_vec(q_vec.clone())
+            .a_mat(a_mat.clone())
+            .b_vec(b_vec.clone())
+            .g_mat(g_mat.clone())
+            .h_vec(h_vec.clone())
+            .build()
+            .unwrap();
+
+        assert_eq!(qp.q_mat, q_mat);
+        assert_eq!(qp.q_vec, q_vec);
+        assert_eq!(qp.a_mat, a_mat);
+        assert_eq!(qp.b_vec, b_vec);
+        assert_eq!(qp.g_mat, g_mat);
+        assert_eq!(qp.h_vec, h_vec);
+    }
+
+    #[test]
+    fn test_qp_builder_missing_q_mat() {
+        let q_vec = dvector![1.0, 1.0];
+
+        let result = QPBuilder::new().q_vec(q_vec).build();
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_qp_builder_inconsistent_equality_constraints() {
+        let a_mat = dmatrix![1.0, 2.0];
+
+        let result = QPBuilder::new().a_mat(a_mat).build();
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_qp_builder_inconsistent_inequality_constraints() {
+        let g_mat = dmatrix![1.0, 0.0; 0.0, 1.0];
+
+        let result = QPBuilder::new().g_mat(g_mat).build();
+
+        assert!(result.is_err());
     }
 }
