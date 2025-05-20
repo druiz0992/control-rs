@@ -1,5 +1,5 @@
 use crate::physics::ModelError;
-use crate::physics::traits::{Describable, Discretizer, Dynamics};
+use crate::physics::traits::{ Discretizer, Dynamics};
 
 #[derive(Default)]
 pub struct MidPoint<D: Dynamics> {
@@ -28,10 +28,5 @@ impl<D: Dynamics> Discretizer<D> for MidPoint<D> {
     }
     fn get_model(&self) -> &D {
         &self.model
-    }
-}
-impl<D: Dynamics> Describable for MidPoint<D> {
-    fn name(&self) -> &'static str {
-        "Midpoint"
     }
 }

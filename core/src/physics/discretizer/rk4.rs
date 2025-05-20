@@ -2,7 +2,7 @@ use crate::numeric_services::symbolic::{
     ExprRegistry, ExprScalar, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
 };
 use crate::physics::models::dynamics::SymbolicDynamics;
-use crate::physics::traits::{Describable, Discretizer, Dynamics, State};
+use crate::physics::traits::{Discretizer, Dynamics, State};
 use crate::physics::{ModelError, constants as c};
 use std::sync::Arc;
 
@@ -46,12 +46,7 @@ impl<D: Dynamics> Discretizer<D> for RK4<D> {
     }
 }
 
-impl<D: Dynamics> Describable for RK4<D> {
-    fn name(&self) -> &'static str {
-        "RK4"
-    }
-}
-pub struct RK4Symbolic<D: Dynamics> {
+pub struct RK4Symbolic<D: SymbolicDynamics> {
     step_func: SymbolicFunction,
     registry: Arc<ExprRegistry>,
     model: D,
@@ -104,7 +99,7 @@ impl<D: SymbolicDynamics> RK4Symbolic<D> {
     }
 }
 
-impl<D: Dynamics> Discretizer<D> for RK4Symbolic<D> {
+impl<D: SymbolicDynamics> Discretizer<D> for RK4Symbolic<D> {
     fn step(
         &mut self,
         state: &D::State,
@@ -122,12 +117,6 @@ impl<D: Dynamics> Discretizer<D> for RK4Symbolic<D> {
     }
     fn get_model(&self) -> &D {
         &self.model
-    }
-}
-
-impl<D: Dynamics> Describable for RK4Symbolic<D> {
-    fn name(&self) -> &'static str {
-        "RK4-Symbolic"
     }
 }
 

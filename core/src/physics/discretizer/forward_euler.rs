@@ -1,5 +1,5 @@
 use crate::physics::ModelError;
-use crate::physics::traits::{Describable, Discretizer, Dynamics};
+use crate::physics::traits::{Discretizer, Dynamics};
 
 #[derive(Default)]
 pub struct ForwardEuler<D: Dynamics> {
@@ -26,11 +26,5 @@ impl<D: Dynamics> Discretizer<D> for ForwardEuler<D> {
     }
     fn get_model(&self) -> &D {
         &self.model
-    }
-}
-
-impl<D: Dynamics> Describable for ForwardEuler<D> {
-    fn name(&self) -> &'static str {
-        "Forward-Euler"
     }
 }

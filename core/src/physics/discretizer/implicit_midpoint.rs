@@ -4,7 +4,7 @@ use crate::numeric_services::solver::{KktConditionsStatus, NewtonSolverSymbolic,
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::models::state::State;
-use crate::physics::traits::{Describable, Discretizer, Dynamics};
+use crate::physics::traits::{Discretizer, Dynamics};
 use crate::physics::{ModelError, constants as c};
 use std::sync::Arc;
 
@@ -42,8 +42,12 @@ impl<D: SymbolicDynamics> ImplicitMidpoint<D> {
                 .scale(&dt_expr);
 
             let residual = next_state.sub(&current_state).sub(&dyn_mid_state).wrap();
-            solver =
-                NewtonSolverSymbolic::new_root_solver(&residual, &next_state, &registry, solver_options)?;
+            solver = NewtonSolverSymbolic::new_root_solver(
+                &residual,
+                &next_state,
+                &registry,
+                solver_options,
+            )?;
         }
 
         Ok(ImplicitMidpoint {
@@ -91,11 +95,5 @@ impl<D: Dynamics> Discretizer<D> for ImplicitMidpoint<D> {
 
     fn get_model(&self) -> &D {
         &self.model
-    }
-}
-
-impl<D: Dynamics> Describable for ImplicitMidpoint<D> {
-    fn name(&self) -> &'static str {
-        "Implicit-Midpoint"
     }
 }

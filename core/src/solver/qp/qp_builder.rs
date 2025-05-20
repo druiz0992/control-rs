@@ -86,8 +86,8 @@ impl QPBuilder {
 
         let q_len = self.q_vec.as_ref().unwrap().len();
         let b_len = b_vec.len();
-        let mui = 0 + q_len..b_vec.len() + q_len;
-        let sigmai = 0 + q_len + b_len..h_vec.len() + q_len + b_len;
+        let mui = q_len..b_vec.len() + q_len;
+        let sigmai = q_len + b_len..h_vec.len() + q_len + b_len;
 
         Ok(QP {
             xi: 0..q_len,

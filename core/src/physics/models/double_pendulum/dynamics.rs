@@ -3,7 +3,7 @@ use super::state::DoublePendulumState;
 use crate::common::Labelizable;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
 use crate::physics::models::dynamics::SymbolicDynamics;
-use crate::physics::traits::{Describable, Dynamics, State};
+use crate::physics::traits::{Dynamics, State};
 use crate::physics::{constants as c, energy::Energy};
 use nalgebra::Vector3;
 use std::sync::Arc;
@@ -134,11 +134,6 @@ impl SymbolicDynamics for DoublePendulum {
 
         // Return as a symbolic vector
         ExprVector::from_vec(vec![dtheta1, domega1, dtheta2, domega2])
-    }
-}
-impl Describable for DoublePendulum {
-    fn name(&self) -> &'static str {
-        "Doubple Pendulum"
     }
 }
 

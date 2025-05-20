@@ -1,7 +1,7 @@
 use nalgebra::{DMatrix, DVector};
 
 use crate::physics::ModelError;
-use crate::physics::traits::{Describable, Discretizer, LinearDynamics, State};
+use crate::physics::traits::{Discretizer, LinearDynamics, State};
 
 const EXPM_TOL: f64 = 1e-6;
 const EXPM_MAX_ITERATIONS: usize = 50;
@@ -69,15 +69,6 @@ where
 
     fn get_model(&self) -> &D {
         &self.model
-    }
-}
-
-impl<D> Describable for ZOH<D>
-where
-    D: LinearDynamics,
-{
-    fn name(&self) -> &'static str {
-        "Zero Order Hold"
     }
 }
 

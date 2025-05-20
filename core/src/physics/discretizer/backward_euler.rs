@@ -3,7 +3,7 @@ use crate::common::Labelizable;
 use crate::numeric_services::solver::{KktConditionsStatus, NewtonSolverSymbolic, OptimizerConfig};
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::models::dynamics::SymbolicDynamics;
-use crate::physics::traits::{Describable, Discretizer, Dynamics, State};
+use crate::physics::traits::{Discretizer, Dynamics, State};
 use crate::physics::{ModelError, constants as c};
 use std::sync::Arc;
 
@@ -93,11 +93,5 @@ impl<D: Dynamics> Discretizer<D> for BackwardEuler<D> {
 
     fn get_model(&self) -> &D {
         &self.model
-    }
-}
-
-impl<D: Dynamics> Describable for BackwardEuler<D> {
-    fn name(&self) -> &'static str {
-        "Backward-Euler"
     }
 }

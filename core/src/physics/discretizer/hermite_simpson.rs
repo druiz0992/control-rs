@@ -2,7 +2,7 @@ use crate::numeric_services::solver::{NewtonSolverSymbolic, OptimizerConfig};
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::models::state::State;
-use crate::physics::traits::{Describable, Discretizer, Dynamics};
+use crate::physics::traits::{Discretizer, Dynamics};
 use crate::physics::{ModelError, constants as c};
 use std::sync::Arc;
 
@@ -91,11 +91,5 @@ impl<D: Dynamics> Discretizer<D> for HermiteSimpson<D> {
     }
     fn get_model(&self) -> &D {
         &self.model
-    }
-}
-
-impl<D: Dynamics> Describable for HermiteSimpson<D> {
-    fn name(&self) -> &'static str {
-        "Hermite-Simpson"
     }
 }
