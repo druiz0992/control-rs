@@ -6,7 +6,7 @@ use control_rs::numeric_services::symbolic::fasteval::utils::*;
 use control_rs::numeric_services::symbolic::{
     ExprScalar, ExprVector, SymbolicEvalResult, SymbolicExpr, SymbolicFunction,
 };
-use control_rs::solver::qp::{QPBuilder};
+use control_rs::solver::qp::QPBuilder;
 use nalgebra::{DMatrix, DVector};
 use std::sync::Arc;
 

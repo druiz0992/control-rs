@@ -4,6 +4,7 @@ use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::models::state::State;
 use crate::physics::traits::{Discretizer, Dynamics};
 use crate::physics::{ModelError, constants as c};
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 use super::utils::{get_states, step_intrinsic};
@@ -23,12 +24,12 @@ use super::utils::{get_states, step_intrinsic};
 pub struct HermiteSimpson<D: Dynamics> {
     registry: Arc<ExprRegistry>,
     solver: NewtonSolverSymbolic,
-    model: D,
+    _phantom_data: PhantomData<D>,
 }
 
 impl<D: SymbolicDynamics> HermiteSimpson<D> {
     pub fn new(
-        model: D,
+        model: &D,
         registry: Arc<ExprRegistry>,
         solver_options: Option<OptimizerConfig>,
     ) -> Result<Self, ModelError> {
@@ -73,7 +74,7 @@ impl<D: SymbolicDynamics> HermiteSimpson<D> {
         Ok(HermiteSimpson {
             registry,
             solver,
-            model: model.clone(),
+            _phantom_data: PhantomData,
         })
     }
 }
@@ -81,6 +82,7 @@ impl<D: SymbolicDynamics> HermiteSimpson<D> {
 impl<D: Dynamics> Discretizer<D> for HermiteSimpson<D> {
     fn step(
         &mut self,
+        _model: &D,
         state: &D::State,
         _input: Option<&[f64]>,
         dt: f64,
@@ -88,8 +90,5 @@ impl<D: Dynamics> Discretizer<D> for HermiteSimpson<D> {
         let (new_state, _mus, _lambdas) =
             step_intrinsic(state, dt, &mut self.solver, &self.registry)?;
         Ok(D::State::from_vec(new_state))
-    }
-    fn get_model(&self) -> &D {
-        &self.model
     }
 }

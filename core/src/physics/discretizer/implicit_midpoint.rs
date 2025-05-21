@@ -6,6 +6,7 @@ use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::models::state::State;
 use crate::physics::traits::{Discretizer, Dynamics};
 use crate::physics::{ModelError, constants as c};
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 // residual(x_next) = x_next - x_k - dt * f((x_k + x_next) / 2)
@@ -13,12 +14,12 @@ use std::sync::Arc;
 pub struct ImplicitMidpoint<D: Dynamics> {
     registry: Arc<ExprRegistry>,
     solver: NewtonSolverSymbolic,
-    model: D,
+    _phantom_data: PhantomData<D>,
 }
 
 impl<D: SymbolicDynamics> ImplicitMidpoint<D> {
     pub fn new(
-        model: D,
+        model: &D,
         registry: Arc<ExprRegistry>,
         solver_options: Option<OptimizerConfig>,
     ) -> Result<Self, ModelError> {
@@ -53,7 +54,7 @@ impl<D: SymbolicDynamics> ImplicitMidpoint<D> {
         Ok(ImplicitMidpoint {
             registry,
             solver,
-            model,
+            _phantom_data: PhantomData,
         })
     }
     pub fn solver_status(&self) -> &Option<KktConditionsStatus> {
@@ -64,6 +65,7 @@ impl<D: SymbolicDynamics> ImplicitMidpoint<D> {
 impl<D: Dynamics> Discretizer<D> for ImplicitMidpoint<D> {
     fn step(
         &mut self,
+        _model: &D,
         state: &D::State,
         _input: Option<&[f64]>,
         dt: f64,
@@ -91,9 +93,5 @@ impl<D: Dynamics> Discretizer<D> for ImplicitMidpoint<D> {
         full_state.extend_from_slice(&next_v);
 
         Ok(D::State::from_vec(full_state))
-    }
-
-    fn get_model(&self) -> &D {
-        &self.model
     }
 }

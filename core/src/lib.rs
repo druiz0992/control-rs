@@ -5,3 +5,4 @@ pub mod physics;
 pub mod plotter;
 pub mod solver;
 pub mod utils;
+pub mod controllers;

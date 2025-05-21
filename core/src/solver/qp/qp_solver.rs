@@ -146,10 +146,12 @@ impl QP {
             let res = self.ip_kkt_conditions(&z, rho);
             let jac = self.ip_kkt_jacobian(&z, rho);
 
+            dbg!("OK");
             let dz = jac
                 .lu()
                 .solve(&(-&res))
                 .ok_or_else(|| ModelError::SolverError("Failed to solve linear problem".into()))?;
+            dbg!("OK2");
 
             let mut alpha = 1.0;
             for _ in 0..ls_options.get_max_iters() {
@@ -183,6 +185,7 @@ impl QP {
             } else if self.ip_kkt_conditions(&z, rho).amax() < self.options.get_tolerance() {
                 rho *= 0.1;
             }
+            dbg!(&z);
         }
 
         self.status = Some(KktConditionsStatus::default());
