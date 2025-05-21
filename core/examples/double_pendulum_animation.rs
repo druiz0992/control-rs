@@ -23,8 +23,11 @@ async fn main() {
     let state0 = DoublePendulumState::new(theta1, omega1, theta2, omega2);
 
     let integrator = RK4::new(&model).unwrap();
-    let sim = BasicSim::new(model, integrator, state0);
+    let sim = BasicSim::new(model, integrator);
     let animation_sim = Macroquad::new(sim);
 
-    animation_sim.run_animation((400.0, 300.0), None).await;
+    animation_sim
+        .run_animation(&state0, (400.0, 300.0), None)
+        .await
+        .unwrap();
 }

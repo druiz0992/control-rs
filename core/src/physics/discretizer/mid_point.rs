@@ -22,7 +22,7 @@ impl<D: Dynamics> MidPoint<D> {
 
 impl<D: Dynamics> Discretizer<D> for MidPoint<D> {
     fn step(
-        &mut self,
+        &self,
         model: &D,
         state: &D::State,
         input: Option<&[f64]>,

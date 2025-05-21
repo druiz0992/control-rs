@@ -1,5 +1,5 @@
 use crate::numeric_services::solver::dtos::SolverResult;
-use crate::numeric_services::solver::{NewtonSolverSymbolic, OptimizerConfig};
+use crate::numeric_services::solver::{KktConditionsStatus, NewtonSolverSymbolic, OptimizerConfig};
 use crate::numeric_services::symbolic::{ExprMatrix, ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::constants as c;
 use crate::physics::error::ModelError;
@@ -34,17 +34,13 @@ pub fn get_v_states(registry: &Arc<ExprRegistry>) -> Result<(ExprVector, ExprVec
 pub fn step_intrinsic<S: State, RF: RootFinder>(
     state: &S,
     dt: f64,
-    solver: &mut RF,
+    solver: &RF,
     registry: &Arc<ExprRegistry>,
 ) -> Result<SolverResult, ModelError> {
     registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
     registry.insert_vec_as_vars(c::STATE_SYMBOLIC, &state.to_vec())?;
 
-    let start_dims = if S::dim_v() == 0 {
-        0
-    } else {
-        S::dim_q()
-    };
+    let start_dims = if S::dim_v() == 0 { 0 } else { S::dim_q() };
 
     solver.find_roots(&state.to_vec()[start_dims..])
 }
@@ -65,6 +61,42 @@ pub fn build_objective(
         .wrap();
     let expr2 = linear_term.dot(next_v_state).unwrap().wrap();
     expr1.add(&expr2)
+}
+
+pub(super) fn check_convergence(status: KktConditionsStatus, tol: f64) -> Result<(), ModelError> {
+    let stationarity_cond = status.stationarity <= tol;
+    if !stationarity_cond {
+        return Err(ModelError::SolverError(format!(
+            "Stationarity Condition failed: {}",
+            status.stationarity
+        )));
+    }
+
+    let primal_feasibility_cond = status.min_primal_feasibility_h.unwrap_or(0.0) >= -tol;
+    if !primal_feasibility_cond {
+        return Err(ModelError::SolverError(format!(
+            "Primal Feasibility Condition failed: {:?}",
+            status.min_primal_feasibility_h
+        )));
+    }
+
+    let dual_feasibility_cond = status.dual_feasibility.unwrap_or(0.0) >= -tol;
+    if !dual_feasibility_cond {
+        return Err(ModelError::SolverError(format!(
+            "Dual Feasibility Condition failed: {:?}",
+            status.dual_feasibility
+        )));
+    }
+
+    let complementary_cond = status.complementary_slackness.unwrap_or(0.0) <= tol;
+    if !complementary_cond {
+        return Err(ModelError::SolverError(format!(
+            "Complementary Condition failed: {:?}",
+            status.complementary_slackness
+        )));
+    }
+
+    Ok(())
 }
 
 pub fn init_constrained_dynamics(

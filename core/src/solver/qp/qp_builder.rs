@@ -104,7 +104,6 @@ impl QPBuilder {
             g_mat,
             h_vec,
             options: self.options,
-            status: None,
         })
     }
 }

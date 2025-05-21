@@ -48,7 +48,7 @@ where
     D: LinearDynamics,
 {
     fn step(
-        &mut self,
+        &self,
         _model: &D,
         state: &D::State,
         input: Option<&[f64]>,

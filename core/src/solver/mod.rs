@@ -7,9 +7,9 @@ pub use qp::{QP, QPBuilder};
 
 use crate::{numeric_services::solver::dtos::SolverResult, physics::ModelError};
 pub trait Minimizer {
-    fn minimize(&mut self, initial_guess: &[f64]) -> Result<SolverResult, ModelError>;
+    fn minimize(&self, initial_guess: &[f64]) -> Result<SolverResult, ModelError>;
 }
 
 pub trait RootFinder {
-    fn find_roots(&mut self, initial_guess: &[f64]) -> Result<SolverResult, ModelError>;
+    fn find_roots(&self, initial_guess: &[f64]) -> Result<SolverResult, ModelError>;
 }

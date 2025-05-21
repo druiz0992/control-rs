@@ -1,5 +1,8 @@
 use super::Animation;
-use crate::physics::traits::{Dynamics, PhysicsSim, Renderable};
+use crate::physics::{
+    ModelError,
+    traits::{Dynamics, PhysicsSim, Renderable},
+};
 use async_trait::async_trait;
 use macroquad::prelude::*;
 
@@ -50,15 +53,20 @@ where
     /// - Renders the joints of the model based on the current state and screen dimensions.
     /// - Draws lines connecting the joints and circles at each joint position.
     /// - Waits for the next frame before repeating the loop.
-    async fn run_animation(mut self, screen_dims: (f32, f32), dt: Option<f64>) {
+    async fn run_animation(
+        self,
+        initial_state: &<S::Model as Dynamics>::State,
+        screen_dims: (f32, f32),
+        dt: Option<f64>,
+    ) -> Result<(), ModelError> {
+        let state = initial_state;
         loop {
             clear_background(BLACK);
             let dt = dt.unwrap_or(get_frame_time() as f64);
-            let _ = self.sim.step(None, dt);
+            let state = self.sim.step(state, None, dt)?;
 
             let model = self.sim.model();
-            let state = self.sim.state();
-            let joints = model.render_joints(state, screen_dims);
+            let joints = model.render_joints(&state, screen_dims);
 
             for win in joints.windows(2) {
                 draw_line(win[0].x, win[0].y, win[1].x, win[1].y, 2.0, WHITE);

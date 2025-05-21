@@ -26,7 +26,7 @@ impl<D: Dynamics> RK4<D> {
 
 impl<D: Dynamics> Discretizer<D> for RK4<D> {
     fn step(
-        &mut self,
+        &self,
         model: &D,
         state: &D::State,
         input: Option<&[f64]>,
@@ -96,7 +96,7 @@ impl<D: SymbolicDynamics> RK4Symbolic<D> {
 
 impl<D: SymbolicDynamics> Discretizer<D> for RK4Symbolic<D> {
     fn step(
-        &mut self,
+        &self,
         _model: &D,
         state: &D::State,
         input: Option<&[f64]>,
@@ -124,7 +124,7 @@ mod tests {
     #[test]
     fn test_rk4_step() {
         let dynamics = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, 0.0, None);
-        let mut rk4 = RK4::new(&dynamics).unwrap();
+        let rk4 = RK4::new(&dynamics).unwrap();
         let initial_state = DoublePendulumState::new(0.0, 0.0, 0.0, 0.0);
         let dt = 0.1;
 
@@ -144,7 +144,7 @@ mod tests {
         let omega2 = 0.0;
 
         let state = DoublePendulumState::new(theta1, omega1, theta2, omega2);
-        let mut rk4_symbolic = RK4Symbolic::new(&dynamics, Arc::clone(&registry)).unwrap();
+        let rk4_symbolic = RK4Symbolic::new(&dynamics, Arc::clone(&registry)).unwrap();
         let dt = 0.1;
 
         let next_state = rk4_symbolic.step(&dynamics, &state, None, dt).unwrap();
@@ -168,8 +168,8 @@ mod tests {
             let registry = Arc::new(ExprRegistry::new());
             let dynamics = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry));
             let state = DoublePendulumState::new(theta1, omega1, theta2, omega2);
-            let mut rk4_symbolic = RK4Symbolic::new(&dynamics, Arc::clone(&registry)).unwrap();
-            let mut rk4 = RK4::new(&dynamics).unwrap();
+            let rk4_symbolic = RK4Symbolic::new(&dynamics, Arc::clone(&registry)).unwrap();
+            let rk4 = RK4::new(&dynamics).unwrap();
             let dt = 0.1;
 
 

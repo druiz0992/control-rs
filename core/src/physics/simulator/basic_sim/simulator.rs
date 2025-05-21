@@ -7,7 +7,6 @@ where
     D: Discretizer<M>,
 {
     discretizer: D,
-    state: M::State,
     model: M,
 }
 
@@ -16,16 +15,8 @@ where
     M: Dynamics,
     D: Discretizer<M>,
 {
-    pub fn new(model: M, discretizer: D, initial_state: M::State) -> Self {
-        BasicSim {
-            discretizer,
-            state: initial_state,
-            model,
-        }
-    }
-
-    pub fn energy(&self, state: &M::State) -> Option<Energy> {
-        self.model.energy(state)
+    pub fn new(model: M, discretizer: D) -> Self {
+        BasicSim { discretizer, model }
     }
 }
 
@@ -36,29 +27,36 @@ where
 {
     type Model = M;
 
-    fn simulate_steps(&mut self, dt: f64, steps: usize) -> Vec<(f64, M::State, Energy)> {
+    fn rollout(
+        &self,
+        initial_state: &M::State,
+        dt: f64,
+        steps: usize,
+    ) -> Vec<(f64, M::State, Energy)> {
         let mut history = Vec::with_capacity(steps);
         let mut t = 0.0;
+        let state = initial_state;
         for _ in 0..steps {
-            let energy = self.energy(&self.state).unwrap_or_default();
+            let energy = self.model.energy(state).unwrap_or_default();
 
-            history.push((t, self.state.clone(), energy));
-            let _ = self.step(None, dt);
+            history.push((t, state.clone(), energy));
+            let _ = self.step(state, None, dt);
             t += dt;
         }
         history
     }
 
-    fn step(&mut self, input: Option<&[f64]>, dt: f64) -> Result<&M::State, ModelError> {
-        self.state = self.discretizer.step(&self.model, &self.state, input, dt)?;
-        Ok(&self.state)
+    fn step(
+        &self,
+        state: &M::State,
+        input: Option<&[f64]>,
+        dt: f64,
+    ) -> Result<M::State, ModelError> {
+        let state = self.discretizer.step(&self.model, state, input, dt)?;
+        Ok(state)
     }
 
     fn model(&self) -> &Self::Model {
         &self.model
-    }
-
-    fn state(&self) -> &<Self::Model as Dynamics>::State {
-        &self.state
     }
 }

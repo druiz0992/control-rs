@@ -1,6 +1,6 @@
 use super::utils;
 use crate::common::Labelizable;
-use crate::numeric_services::solver::{KktConditionsStatus, NewtonSolverSymbolic, OptimizerConfig};
+use crate::numeric_services::solver::{NewtonSolverSymbolic, OptimizerConfig};
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::models::state::State;
@@ -11,9 +11,11 @@ use std::sync::Arc;
 
 // residual(x_next) = x_next - x_k - dt * f((x_k + x_next) / 2)
 
+const DEFAULT_TOLERANCE: f64 = 1e-3;
 pub struct ImplicitMidpoint<D: Dynamics> {
     registry: Arc<ExprRegistry>,
     solver: NewtonSolverSymbolic,
+    tol: f64,
     _phantom_data: PhantomData<D>,
 }
 
@@ -54,28 +56,31 @@ impl<D: SymbolicDynamics> ImplicitMidpoint<D> {
         Ok(ImplicitMidpoint {
             registry,
             solver,
+            tol: DEFAULT_TOLERANCE,
             _phantom_data: PhantomData,
         })
     }
-    pub fn solver_status(&self) -> &Option<KktConditionsStatus> {
-        self.solver.status()
+
+    pub fn set_tolerance(&mut self, tol: f64) {
+        self.tol = tol;
     }
 }
 
 impl<D: Dynamics> Discretizer<D> for ImplicitMidpoint<D> {
     fn step(
-        &mut self,
+        &self,
         _model: &D,
         state: &D::State,
         _input: Option<&[f64]>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
         let v_dims = D::State::dim_v();
-        let (next_v, _mus, _lambdas) =
-            utils::step_intrinsic(state, dt, &mut self.solver, &self.registry)?;
+        let (next_v, status, _mus, _lambdas) =
+            utils::step_intrinsic(state, dt, &self.solver, &self.registry)?;
         if v_dims == 0 {
             return Ok(D::State::from_vec(next_v));
         }
+        utils::check_convergence(status, self.tol)?;
 
         let labels = D::State::labels();
         let q_slice = &labels[..D::State::dim_q()];

@@ -37,9 +37,9 @@ fn main() {
     //let integrator = HermiteSimpson::new(&model, Arc::clone(&registry)).unwrap();
     let integrator =
         ImplicitMidpoint::new(&model, Arc::clone(&registry), Some(solver_options)).unwrap();
-    let mut sim = BasicSim::new(model, integrator, state0);
+    let sim = BasicSim::new(model, integrator);
 
-    let history = sim.simulate_steps(dt, steps);
+    let history = sim.rollout(&state0, dt, steps);
 
     let (times, states, energies) = utils::unzip3(history);
 

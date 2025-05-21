@@ -1,7 +1,8 @@
-use nalgebra::{DMatrix, DVector};
+use crate::numeric_services::solver::KktConditionsStatus;
 use crate::numeric_services::solver::dtos::{LagrangianMultiplier, SolverResult};
 use crate::physics::ModelError;
 use crate::solver::RootFinder;
+use nalgebra::{DMatrix, DVector};
 
 pub struct LinearSolver<'a> {
     residual: &'a Box<dyn Fn(&DVector<f64>) -> DVector<f64> + 'a>,
@@ -9,13 +10,16 @@ pub struct LinearSolver<'a> {
 }
 
 impl<'a> LinearSolver<'a> {
-    pub fn new(residual: &'a Box<dyn Fn(&DVector<f64>) -> DVector<f64> + 'a>, jacobian: &'a DMatrix<f64>) -> Self {
-        Self { residual, jacobian}
+    pub fn new(
+        residual: &'a Box<dyn Fn(&DVector<f64>) -> DVector<f64> + 'a>,
+        jacobian: &'a DMatrix<f64>,
+    ) -> Self {
+        Self { residual, jacobian }
     }
 }
 
 impl<'a> RootFinder for LinearSolver<'a> {
-    fn find_roots(&mut self, initial_guess: &[f64]) -> Result<SolverResult, ModelError> {
+    fn find_roots(&self, initial_guess: &[f64]) -> Result<SolverResult, ModelError> {
         let x = self
             .jacobian
             .clone()
@@ -24,6 +28,11 @@ impl<'a> RootFinder for LinearSolver<'a> {
             .ok_or(ModelError::EvaluationError)?;
         let lm_lambda_void = LagrangianMultiplier::Lambdas(vec![]);
         let lm_mu_void = LagrangianMultiplier::Lambdas(vec![]);
-        Ok((x.data.as_vec().clone(), lm_mu_void, lm_lambda_void))
+        Ok((
+            x.data.as_vec().clone(),
+            KktConditionsStatus::default(),
+            lm_mu_void,
+            lm_lambda_void,
+        ))
     }
 }

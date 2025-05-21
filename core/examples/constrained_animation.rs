@@ -27,8 +27,10 @@ async fn main() {
     solver_options.set_verbose(true);
 
     let integrator = BackwardEuler::new(&model, registry, Some(solver_options)).unwrap();
-    let sim = BasicSim::new(model, integrator, state0);
+    let sim = BasicSim::new(model, integrator);
 
     let animation_sim = Macroquad::new(sim);
-    animation_sim.run_animation((400.0, 300.0), Some(dt)).await;
+    animation_sim
+        .run_animation(&state0, (400.0, 300.0), Some(dt))
+        .await.unwrap();
 }

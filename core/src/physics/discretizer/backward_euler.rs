@@ -2,7 +2,7 @@ use nalgebra::{DMatrix, DVector};
 
 use super::utils;
 use crate::common::Labelizable;
-use crate::numeric_services::solver::{KktConditionsStatus, NewtonSolverSymbolic, OptimizerConfig};
+use crate::numeric_services::solver::{NewtonSolverSymbolic, OptimizerConfig};
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Discretizer, LinearDynamics, State};
@@ -11,6 +11,7 @@ use crate::solver::{LinearSolver, RootFinder};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+const DEFAULT_TOLERANCE: f64 = 1e-3;
 // Backward Euler residual:
 //
 // R(x_{k+1}) = x_{k+1} - x_k - dt * f(x_{k+1})
@@ -20,6 +21,7 @@ use std::sync::Arc;
 pub struct BackwardEuler<D: SymbolicDynamics> {
     registry: Arc<ExprRegistry>,
     solver: NewtonSolverSymbolic,
+    tol: f64,
     _phantom_data: PhantomData<D>,
 }
 
@@ -57,29 +59,32 @@ impl<D: SymbolicDynamics> BackwardEuler<D> {
         Ok(BackwardEuler {
             registry,
             solver,
+            tol: DEFAULT_TOLERANCE,
             _phantom_data: PhantomData,
         })
     }
 
-    pub fn solver_status(&self) -> &Option<KktConditionsStatus> {
-        self.solver.status()
+    pub fn set_tolerance(&mut self, tol: f64) {
+        self.tol = tol;
     }
 }
 
 impl<D: SymbolicDynamics> Discretizer<D> for BackwardEuler<D> {
     fn step(
-        &mut self,
+        &self,
         _model: &D,
         state: &D::State,
         _input: Option<&[f64]>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
         let v_dims = D::State::dim_v();
-        let (next_v, _mus, _lambdas) =
-            utils::step_intrinsic(state, dt, &mut self.solver, &self.registry)?;
+        let (next_v, status, _mus, _lambdas) =
+            utils::step_intrinsic(state, dt, &self.solver, &self.registry)?;
         if v_dims == 0 {
             return Ok(D::State::from_vec(next_v));
         }
+
+        utils::check_convergence(status, self.tol)?;
 
         let labels = D::State::labels();
         let q_slice = &labels[..D::State::dim_q()];
@@ -111,7 +116,7 @@ impl<D: LinearDynamics> BackwardEulerLinear<D> {
 
 impl<D: LinearDynamics> Discretizer<D> for BackwardEulerLinear<D> {
     fn step(
-        &mut self,
+        &self,
         model: &D,
         state: &D::State,
         input: Option<&[f64]>,
@@ -128,9 +133,8 @@ impl<D: LinearDynamics> Discretizer<D> for BackwardEulerLinear<D> {
         let residual: Box<dyn Fn(&DVector<f64>) -> DVector<f64>> =
             Box::new(|x_next: &DVector<f64>| j.clone() * x_next - rhs.clone());
 
-        let mut solver = LinearSolver::new(&residual, &j);
+        let solver = LinearSolver::new(&residual, &j);
         let r = solver.find_roots(state.as_slice())?;
         Ok(D::State::from_vec(r.0))
     }
-
 }

@@ -61,7 +61,7 @@ fn main() {
     options.set_max_iters(1).unwrap();
     options.set_verbose(true);
 
-    let mut solver = NewtonSolverSymbolic::new_minimization(
+    let solver = NewtonSolverSymbolic::new_minimization(
         &cost,
         Some(eq_constraints_expr.clone()),
         //None,
@@ -77,7 +77,7 @@ fn main() {
 
     loop {
         match solver.solve(&initial_guess) {
-            Ok((result, _, _)) => {
+            Ok((result, _, _, _)) => {
                 dbg!(&result);
                 history.push(result.clone());
                 initial_guess = result;

@@ -8,16 +8,17 @@ pub use basic_sim::simulator::BasicSim;
 pub trait PhysicsSim {
     type Model: Dynamics;
 
-    fn simulate_steps(
-        &mut self,
+    fn rollout(
+        &self,
+        initial_state: &<Self::Model as Dynamics>::State,
         dt: f64,
         steps: usize,
     ) -> Vec<(f64, <Self::Model as Dynamics>::State, Energy)>;
     fn step(
-        &mut self,
+        &self,
+        state: &<Self::Model as Dynamics>::State,
         input: Option<&[f64]>,
         dt: f64,
-    ) -> Result<&<Self::Model as Dynamics>::State, ModelError>;
+    ) -> Result<<Self::Model as Dynamics>::State, ModelError>;
     fn model(&self) -> &Self::Model;
-    fn state(&self) -> &<Self::Model as Dynamics>::State;
 }

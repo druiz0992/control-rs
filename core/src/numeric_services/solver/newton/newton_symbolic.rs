@@ -19,7 +19,6 @@ const MU: &str = "lagrangian_mu_";
 pub struct NewtonSolverSymbolic {
     options: OptimizerConfig,
     problem: ProblemSpec,
-    status: Option<KktConditionsStatus>,
     registry: Arc<ExprRegistry>,
 }
 
@@ -44,7 +43,6 @@ impl NewtonSolverSymbolic {
         Ok(Self {
             options,
             problem,
-            status: None,
             registry: Arc::clone(registry),
         })
     }
@@ -96,12 +94,8 @@ impl NewtonSolverSymbolic {
         }
     }
 
-    pub fn status(&self) -> &Option<KktConditionsStatus> {
-        &self.status
-    }
-
     /// solve problem
-    pub fn solve(&mut self, initial_guess: &[f64]) -> Result<SolverResult, ModelError> {
+    pub fn solve(&self, initial_guess: &[f64]) -> Result<SolverResult, ModelError> {
         // check if interior point minimization problem
         if self.problem.ip_residual.is_some() {
             return self.solve_ip(initial_guess);
@@ -113,7 +107,7 @@ impl NewtonSolverSymbolic {
         let mut alpha = 1.0;
 
         let ls = LineSearch::new(self.options.get_line_search_opts());
-        let mut status = Some(KktConditionsStatus::default());
+        let mut status = KktConditionsStatus::default();
         let registry = Arc::clone(&self.registry);
         let (n_eq, n_ineq) = (self.problem.n_eq, self.problem.n_ineq);
 
@@ -134,34 +128,24 @@ impl NewtonSolverSymbolic {
                 ))?;
 
             if let Some(merit_fn) = &self.problem.merit {
-                alpha = ls
-                    .run(merit_fn, &delta, &unknown_vals, None)
-                    .unwrap();
+                alpha = ls.run(merit_fn, &delta, &unknown_vals, None).unwrap();
             }
 
             for (val, delta_val) in unknown_vals.iter_mut().zip(delta.iter()) {
                 *val += alpha * delta_val;
             }
 
-            status = Some(utils::update_kkt_status(
-                &fx,
-                &unknown_vals,
-                0.0,
-                (n_eq, n_ineq),
-            ));
+            status = utils::update_kkt_status(&fx, &unknown_vals, 0.0, (n_eq, n_ineq));
 
             if self.options.get_verbose() {
-                info!(
-                    "iter: {}, kkt_status: {:?}, alpha: {}",
-                    i, self.status, alpha
-                );
+                info!("iter: {}, kkt_status: {:?}, alpha: {}", i, status, alpha);
             }
         }
-        self.status = status;
         let (result, mus, lambdas) =
             utils::into_raw_result(&unknown_vals, initial_guess.len(), n_eq, n_ineq)?;
         Ok((
             result,
+            status,
             LagrangianMultiplier::Mus(mus),
             LagrangianMultiplier::Lambdas(lambdas),
         ))
@@ -242,7 +226,6 @@ impl NewtonSolverSymbolic {
         Ok(Self {
             options,
             problem,
-            status: None,
             registry: Arc::clone(registry),
         })
     }
@@ -287,13 +270,12 @@ impl NewtonSolverSymbolic {
         Ok(Self {
             options,
             problem,
-            status: None,
             registry: Arc::clone(registry),
         })
     }
 
     /// solve interior point minimization problem
-    fn solve_ip(&mut self, initial_guess: &[f64]) -> Result<SolverResult, ModelError> {
+    fn solve_ip(&self, initial_guess: &[f64]) -> Result<SolverResult, ModelError> {
         let (residual_fn, ip_residual_fn, ip_jacobian_fn, unknown_expr) =
             self.problem.get_ip_params()?;
         let max_iters = self.options.get_max_iters();
@@ -304,9 +286,9 @@ impl NewtonSolverSymbolic {
 
         let mut rho = 0.1;
         let mut alpha = 1.0;
-        let mut status = Some(KktConditionsStatus::default());
         let (n_eq, n_ineq) = (self.problem.n_eq, self.problem.n_ineq);
         let registry = Arc::clone(&self.registry);
+        let mut status = KktConditionsStatus::default();
 
         for n_iter in 0..max_iters {
             registry.insert_var(LOG_DOMAIN_RHO, rho);
@@ -325,12 +307,7 @@ impl NewtonSolverSymbolic {
 
             if let Some(ip_merit_fn) = &self.problem.merit {
                 alpha = ls
-                    .run(
-                        ip_merit_fn,
-                        &delta,
-                        &unknown_vals,
-                        Some(ip_res.norm()),
-                    )
+                    .run(ip_merit_fn, &delta, &unknown_vals, Some(ip_res.norm()))
                     .unwrap();
             }
 
@@ -343,12 +320,7 @@ impl NewtonSolverSymbolic {
             let ip_res: DVector<f64> = ip_residual_fn.eval(&unknown_vals).try_into_eval_result()?;
             let ip_res_norm_inf = ip_res.amax();
 
-            status = Some(utils::update_kkt_status(
-                &residual,
-                &unknown_vals,
-                rho,
-                (n_eq, n_ineq),
-            ));
+            status = utils::update_kkt_status(&residual, &unknown_vals, rho, (n_eq, n_ineq));
 
             if self.options.get_verbose() {
                 info!(
@@ -364,13 +336,13 @@ impl NewtonSolverSymbolic {
             }
         }
 
-        self.status = status;
         let (result, mus, sigmas) =
             utils::into_raw_result(&unknown_vals, initial_guess.len(), n_eq, n_ineq)?;
         let lambdas: Vec<_> = sigmas.iter().map(|s| rho.sqrt() * (-s).exp()).collect();
 
         Ok((
             result,
+            status,
             LagrangianMultiplier::Mus(mus),
             LagrangianMultiplier::Lambdas(lambdas),
         ))

@@ -19,7 +19,6 @@ pub struct QP {
     pub(super) sigmai: std::ops::Range<usize>,
 
     pub(super) options: OptimizerConfig,
-    pub(super) status: Option<KktConditionsStatus>,
 }
 
 impl std::fmt::Debug for QP {
@@ -34,7 +33,6 @@ impl std::fmt::Debug for QP {
             .field("xi", &self.xi)
             .field("mui", &self.mui)
             .field("sigmai", &self.sigmai)
-            .field("status", &self.status)
             .finish()
     }
 }
@@ -48,7 +46,12 @@ impl QP {
         &self.g_mat * x - &self.h_vec
     }
 
-    fn kkt_conditions(&mut self, z: &DVector<f64>, rho: f64) -> DVector<f64> {
+    fn kkt_conditions(
+        &self,
+        z: &DVector<f64>,
+        rho: f64,
+        status: &mut KktConditionsStatus,
+    ) -> DVector<f64> {
         let x = z.rows(self.xi.start, self.xi.len());
         let mu = z.rows(self.mui.start, self.mui.len());
         let sigma = z.rows(self.sigmai.start, self.sigmai.len());
@@ -65,13 +68,13 @@ impl QP {
         let min_l = lambda.map(|l| l.min(0.0));
         let comp = lambda.component_mul(&h_vec);
 
-        self.status = Some(KktConditionsStatus {
+        *status = KktConditionsStatus {
             stationarity: grad.norm(),
             max_primal_feasibility_c: Some(ceq.amax()),
             min_primal_feasibility_h: Some(h_vec.min()),
             dual_feasibility: Some(lambda.amax()),
             complementary_slackness: Some(lambda.dot(&h_vec).abs()),
-        });
+        };
 
         DVector::from_iterator(
             grad.len() + ceq.len() + min_h.len() + min_l.len() + comp.len(),
@@ -132,7 +135,7 @@ impl QP {
         jac
     }
 
-    pub fn solve_qp(&mut self, initial_guess: &[f64]) -> Result<SolverResult, ModelError> {
+    pub fn solve_qp(&self, initial_guess: &[f64]) -> Result<SolverResult, ModelError> {
         let n = self.q_vec.len();
         let n_eq = self.b_vec.len();
         let n_ineq = self.h_vec.len();
@@ -141,17 +144,16 @@ impl QP {
 
         let mut rho = 0.1;
         let ls_options = self.options.get_line_search_opts();
+        let mut status = KktConditionsStatus::default();
 
         for main_iter in 0..self.options.get_max_iters() {
             let res = self.ip_kkt_conditions(&z, rho);
             let jac = self.ip_kkt_jacobian(&z, rho);
 
-            dbg!("OK");
             let dz = jac
                 .lu()
                 .solve(&(-&res))
                 .ok_or_else(|| ModelError::SolverError("Failed to solve linear problem".into()))?;
-            dbg!("OK2");
 
             let mut alpha = 1.0;
             for _ in 0..ls_options.get_max_iters() {
@@ -167,11 +169,12 @@ impl QP {
             if self.options.get_verbose() {
                 info!(
                     "iter: {}, kkt_status: {:?}, alpha: {}, rho: {}",
-                    main_iter, &self.status, alpha, rho
+                    main_iter, &status, alpha, rho
                 );
             }
 
-            if self.kkt_conditions(&z, rho).amax() < self.options.get_tolerance() {
+            let kkt_result = self.kkt_conditions(&z, rho, &mut status);
+            if kkt_result.amax() < self.options.get_tolerance() {
                 let x = z.rows(self.xi.start, self.xi.len());
                 let mu = z.rows(self.mui.start, self.mui.len());
                 let sigma = z.rows(self.sigmai.start, self.sigmai.len());
@@ -179,6 +182,7 @@ impl QP {
 
                 return Ok((
                     x.as_slice().to_vec(),
+                    status,
                     LagrangianMultiplier::Mus(mu.as_slice().to_vec()),
                     LagrangianMultiplier::Lambdas(lambda.as_slice().to_vec()),
                 ));
@@ -188,20 +192,14 @@ impl QP {
             dbg!(&z);
         }
 
-        self.status = Some(KktConditionsStatus::default());
-
         Err(ModelError::SolverError(
             "QP Solver did not converge.".into(),
         ))
     }
-
-    pub fn status(&self) -> &Option<KktConditionsStatus> {
-        &self.status
-    }
 }
 
 impl Minimizer for QP {
-    fn minimize(&mut self, initial_guess: &[f64]) -> Result<SolverResult, ModelError> {
+    fn minimize(&self, initial_guess: &[f64]) -> Result<SolverResult, ModelError> {
         self.solve_qp(initial_guess)
     }
 }
@@ -218,7 +216,7 @@ mod tests {
 
         let kkt_conditions_len = q_vec.len() + b_vec.len() + 3 * h_vec.len();
 
-        let mut qp = QP {
+        let qp = QP {
             q_mat: dmatrix![
                 2.0, 0.0;
                 0.0, 2.0
@@ -235,13 +233,13 @@ mod tests {
             mui: 2..3,
             sigmai: 3..5,
             options: OptimizerConfig::default(),
-            status: None,
         };
 
         let z = dvector![0.5, 0.5, 0.0, 0.0, 0.0];
         let rho = 0.1;
+        let mut status = KktConditionsStatus::default();
 
-        let kkt_res = qp.kkt_conditions(&z, rho);
+        let kkt_res = qp.kkt_conditions(&z, rho, &mut status);
 
         assert_eq!(kkt_res.len(), kkt_conditions_len);
     }
@@ -270,7 +268,6 @@ mod tests {
             mui: 2..3,
             sigmai: 3..5,
             options: OptimizerConfig::default(),
-            status: None,
         };
 
         let z = dvector![0.5, 0.5, 0.0, 0.0, 0.0];
@@ -299,7 +296,6 @@ mod tests {
             mui: 2..3,
             sigmai: 3..5,
             options: OptimizerConfig::default(),
-            status: None,
         };
 
         let ip_kkt_jacobian_cols = qp.q_mat.ncols() + qp.a_mat.nrows() + qp.g_mat.nrows();
@@ -322,7 +318,7 @@ mod tests {
             0.0, 1.0
         ];
         let h_vec = dvector![0.0, 0.0];
-        let mut qp = QP {
+        let qp = QP {
             q_mat: dmatrix![
                 2.0, 0.0;
                 0.0, 2.0
@@ -336,14 +332,13 @@ mod tests {
             mui: 2..3,
             sigmai: 3..5,
             options: OptimizerConfig::default(),
-            status: None,
         };
 
         let initial_guess = [0.5, 0.5];
         let result = qp.solve_qp(&initial_guess);
 
         assert!(result.is_ok());
-        let (x, _, _) = result.unwrap();
+        let (x, _status, _, _) = result.unwrap();
         let dv_x = DVector::from_vec(x);
         let tol = 1e-5;
         assert!((a_mat * &dv_x - b_vec).norm() <= tol);

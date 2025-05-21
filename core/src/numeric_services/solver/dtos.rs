@@ -6,7 +6,7 @@ use crate::{
 };
 use core::fmt;
 
-const DEFAULT_MAX_ITERS: usize = 100;
+const DEFAULT_MAX_ITERS: usize = 200;
 const DEFAULT_TOLERANCE: f64 = 1e-6;
 
 const MIN_ALLOWED_MAX_ITERS: usize = 1;
@@ -336,7 +336,12 @@ pub struct KktConditionsStatus {
     pub complementary_slackness: Option<f64>,
 }
 
-pub type SolverResult = (Vec<f64>, LagrangianMultiplier, LagrangianMultiplier);
+pub type SolverResult = (
+    Vec<f64>,
+    KktConditionsStatus,
+    LagrangianMultiplier,
+    LagrangianMultiplier,
+);
 pub enum LagrangianMultiplier {
     Lambdas(Vec<f64>),
     Mus(Vec<f64>),

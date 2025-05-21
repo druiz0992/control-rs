@@ -81,14 +81,14 @@ impl<D: SymbolicDynamics> HermiteSimpson<D> {
 
 impl<D: Dynamics> Discretizer<D> for HermiteSimpson<D> {
     fn step(
-        &mut self,
+        &self,
         _model: &D,
         state: &D::State,
         _input: Option<&[f64]>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
-        let (new_state, _mus, _lambdas) =
-            step_intrinsic(state, dt, &mut self.solver, &self.registry)?;
+        let (new_state, _status, _mus, _lambdas) =
+            step_intrinsic(state, dt, &self.solver, &self.registry)?;
         Ok(D::State::from_vec(new_state))
     }
 }

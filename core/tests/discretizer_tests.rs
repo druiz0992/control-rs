@@ -67,9 +67,8 @@ fn test_backward_euler_constrained_dynamics() {
     let (model, mut result, registry) = init_bouncing_ball();
 
     let dt = 0.01;
-    let tol = 0.3;
 
-    let mut integrator = BackwardEuler::new(&model, registry, None).unwrap();
+    let integrator = BackwardEuler::new(&model, registry, None).unwrap();
 
     for _ in 0..2000 {
         result = integrator.step(&model, &result, None, dt).unwrap();
@@ -77,11 +76,6 @@ fn test_backward_euler_constrained_dynamics() {
 
         // check constain is met
         assert!(pos_y >= 0.0);
-        let status = integrator.solver_status().clone().unwrap();
-        assert!(status.stationarity <= tol);
-        assert!(status.min_primal_feasibility_h.unwrap() >= -tol);
-        assert!(status.dual_feasibility.unwrap() >= -tol);
-        assert!(status.complementary_slackness.unwrap() <= tol);
     }
 }
 
@@ -92,7 +86,7 @@ fn test_implicit_midpoint_constrained_dynamics() {
     let dt = 0.01;
     let tol = 1e-1;
 
-    let mut integrator = ImplicitMidpoint::new(&model, registry, None).unwrap();
+    let integrator = ImplicitMidpoint::new(&model, registry, None).unwrap();
 
     for _ in 0..2000 {
         result = integrator.step(&model, &result, None, dt).unwrap();
@@ -100,11 +94,6 @@ fn test_implicit_midpoint_constrained_dynamics() {
 
         // check constain is met
         assert!(pos_y >= -tol);
-        let status = integrator.solver_status().clone().unwrap();
-        assert!(status.stationarity <= tol);
-        assert!(status.min_primal_feasibility_h.unwrap() >= -tol);
-        assert!(status.dual_feasibility.unwrap() >= -tol);
-        assert!(status.complementary_slackness.unwrap() <= tol);
     }
 }
 
@@ -123,9 +112,9 @@ fn test_linear_models() {
     let dv_state0 = DVector::from_vec(state0.to_vec());
     let dv_input0 = DVector::from_vec(input0.clone());
 
-    let mut fe = ForwardEuler::new(&model).unwrap();
-    let mut md = MidPoint::new(&model).unwrap();
-    let mut rk4 = RK4::new(&model).unwrap();
+    let fe = ForwardEuler::new(&model).unwrap();
+    let md = MidPoint::new(&model).unwrap();
+    let rk4 = RK4::new(&model).unwrap();
 
     let fe_result = fe.step(&model, &state0, Some(&input0), dt).unwrap();
     // r = (I + Ah)x + Bhu
@@ -188,8 +177,8 @@ fn test_rk4_vs_zoh() {
     let state0 = LtiState::<3, 0>::new([3.0, 2.0, 1.0]);
     let input0 = vec![1.0, 1.0];
 
-    let mut rk4 = RK4::new(&model).unwrap();
-    let mut zoh = ZOH::new(&model, dt).unwrap();
+    let rk4 = RK4::new(&model).unwrap();
+    let zoh = ZOH::new(&model, dt).unwrap();
 
     let rk4_result = rk4.step(&model, &state0, Some(&input0), dt).unwrap();
     let zoh_result = zoh.step(&model, &state0, Some(&input0), dt).unwrap();
