@@ -259,7 +259,6 @@ fn test_newton_minimization_ineq_constraint() {
 
 #[test]
 fn test_symbolic_qp() {
-    env_logger::init();
     let registry = Arc::new(ExprRegistry::new());
     let big_q_data = vec![
         1.0, 0.3, 0.0, 0.0, // row 1
@@ -409,7 +408,6 @@ fn test_symbolic_qp() {
 
 #[test]
 fn test_qp() {
-    env_logger::init();
     let big_q_data = vec![
         1.0, 0.3, 0.0, 0.0, // row 1
         0.3, 1.0, 0.0, 0.0, // row 2

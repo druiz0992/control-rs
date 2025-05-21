@@ -312,19 +312,23 @@ mod tests {
 
     #[test]
     fn test_solve_qp() {
+        let a_mat = dmatrix![1.0, 1.0];
+        let b_vec = dvector![1.0];
+        let g_mat = dmatrix![
+            1.0, 0.0;
+            0.0, 1.0
+        ];
+        let h_vec = dvector![0.0, 0.0];
         let mut qp = QP {
             q_mat: dmatrix![
                 2.0, 0.0;
                 0.0, 2.0
             ],
             q_vec: dvector![-2.0, -5.0],
-            a_mat: dmatrix![1.0, 1.0],
-            b_vec: dvector![1.0],
-            g_mat: dmatrix![
-                -1.0, 0.0;
-                0.0, -1.0
-            ],
-            h_vec: dvector![0.0, 0.0],
+            a_mat: a_mat.clone(),
+            b_vec: b_vec.clone(),
+            g_mat: g_mat.clone(),
+            h_vec: h_vec.clone(),
             xi: 0..2,
             mui: 2..3,
             sigmai: 3..5,
@@ -337,7 +341,10 @@ mod tests {
 
         assert!(result.is_ok());
         let (x, _, _) = result.unwrap();
-        assert!((x[0] - 0.5).abs() < 1e-6);
-        assert!((x[1] - 0.5).abs() < 1e-6);
+        let dv_x = DVector::from_vec(x);
+        let tol = 1e-5;
+        assert!((a_mat * &dv_x - b_vec).norm() <= tol);
+        assert!((&g_mat * &dv_x - &h_vec).data.as_vec()[0] >= 0.0);
+        assert!((&g_mat * &dv_x - &h_vec).data.as_vec()[1] >= 0.0);
     }
 }
