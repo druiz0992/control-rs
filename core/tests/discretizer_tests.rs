@@ -31,10 +31,10 @@ fn init_bouncing_ball() -> (BouncingBall, BouncingBallState, Arc<ExprRegistry>) 
 fn test_explicit_integrators_ko_with_constrained_dynamics() {
     let (model, _, registry) = init_bouncing_ball();
 
-    let rk4 = RK4::new(model.clone());
-    let fe = ForwardEuler::new(model.clone());
-    let mp = MidPoint::new(model.clone());
-    let rk4_symbolic = RK4Symbolic::new(model, registry);
+    let rk4 = RK4::new(&model);
+    let fe = ForwardEuler::new(&model);
+    let mp = MidPoint::new(&model);
+    let rk4_symbolic = RK4Symbolic::new(&model, registry);
 
     assert!(rk4.is_err());
     assert!(rk4_symbolic.is_err());
@@ -46,7 +46,7 @@ fn test_explicit_integrators_ko_with_constrained_dynamics() {
 fn test_hermite_simpson_ko_with_constrained_dynamics() {
     let (model, _, registry) = init_bouncing_ball();
 
-    let hs = HermiteSimpson::new(model, registry, None);
+    let hs = HermiteSimpson::new(&model, registry, None);
 
     assert!(hs.is_err());
 }
@@ -55,8 +55,8 @@ fn test_hermite_simpson_ko_with_constrained_dynamics() {
 fn test_implicit_ok_with_constrained_dynamics() {
     let (model, _, registry) = init_bouncing_ball();
 
-    let be = BackwardEuler::new(model.clone(), registry.clone(), None);
-    let imp = ImplicitMidpoint::new(model, registry, None);
+    let be = BackwardEuler::new(&model, registry.clone(), None);
+    let imp = ImplicitMidpoint::new(&model, registry, None);
 
     assert!(be.is_ok());
     assert!(imp.is_ok());
@@ -69,10 +69,10 @@ fn test_backward_euler_constrained_dynamics() {
     let dt = 0.01;
     let tol = 0.3;
 
-    let mut integrator = BackwardEuler::new(model, registry, None).unwrap();
+    let mut integrator = BackwardEuler::new(&model, registry, None).unwrap();
 
     for _ in 0..2000 {
-        result = integrator.step(&result, None, dt).unwrap();
+        result = integrator.step(&model, &result, None, dt).unwrap();
         let [pos_y] = result.extract(&["pos_y"]);
 
         // check constain is met
@@ -92,10 +92,10 @@ fn test_implicit_midpoint_constrained_dynamics() {
     let dt = 0.01;
     let tol = 1e-1;
 
-    let mut integrator = ImplicitMidpoint::new(model, registry, None).unwrap();
+    let mut integrator = ImplicitMidpoint::new(&model, registry, None).unwrap();
 
     for _ in 0..2000 {
-        result = integrator.step(&result, None, dt).unwrap();
+        result = integrator.step(&model, &result, None, dt).unwrap();
         let [pos_y] = result.extract(&["pos_y"]);
 
         // check constain is met
@@ -123,11 +123,11 @@ fn test_linear_models() {
     let dv_state0 = DVector::from_vec(state0.to_vec());
     let dv_input0 = DVector::from_vec(input0.clone());
 
-    let mut fe = ForwardEuler::new(model.clone()).unwrap();
-    let mut md = MidPoint::new(model.clone()).unwrap();
-    let mut rk4 = RK4::new(model.clone()).unwrap();
+    let mut fe = ForwardEuler::new(&model).unwrap();
+    let mut md = MidPoint::new(&model).unwrap();
+    let mut rk4 = RK4::new(&model).unwrap();
 
-    let fe_result = fe.step(&state0, Some(&input0), dt).unwrap();
+    let fe_result = fe.step(&model, &state0, Some(&input0), dt).unwrap();
     // r = (I + Ah)x + Bhu
     let fe_expected = &control_matrix * dt * dv_input0.clone()
         + (DMatrix::identity(3, 3) + &state_matrix * dt) * dv_state0.clone();
@@ -139,7 +139,7 @@ fn test_linear_models() {
     .sum();
     assert!(error < tol);
 
-    let md_result = md.step(&state0, Some(&input0), dt).unwrap();
+    let md_result = md.step(&model, &state0, Some(&input0), dt).unwrap();
     // r = (I + Ah + h^2/2 * A^2)x + (Bhu + h^2/2 * A*B)u = fe + (h^2/2 * A^2)x + (h^2/2 * A*B)*u
     let h2_2 = dt * dt / 2.0;
     let md_expected = fe_expected
@@ -153,7 +153,7 @@ fn test_linear_models() {
     .sum();
     assert!(error < tol);
 
-    let rk4_result = rk4.step(&state0, Some(&input0), dt).unwrap();
+    let rk4_result = rk4.step(&model, &state0, Some(&input0), dt).unwrap();
     // r = (I + Ah + h^2/2 * A^2 + h^3/6 * A^3 + h^4/24 * A^4)x + h(I + h/2*A + h^2/6 * A^2 + h^3/24 * A^3)*B*u =
     //   md + (h^3/6 * A^3 + h^4/24 * A^4)x +   h(h^2/6*A^2 + h^3/24 * A^3)Bu
     let h2_6 = dt * dt / 6.0;
@@ -188,11 +188,11 @@ fn test_rk4_vs_zoh() {
     let state0 = LtiState::<3, 0>::new([3.0, 2.0, 1.0]);
     let input0 = vec![1.0, 1.0];
 
-    let mut rk4 = RK4::new(model.clone()).unwrap();
-    let mut zoh = ZOH::new(model.clone(), dt).unwrap();
+    let mut rk4 = RK4::new(&model).unwrap();
+    let mut zoh = ZOH::new(&model, dt).unwrap();
 
-    let rk4_result = rk4.step(&state0, Some(&input0), dt).unwrap();
-    let zoh_result = zoh.step(&state0, Some(&input0), dt).unwrap();
+    let rk4_result = rk4.step(&model, &state0, Some(&input0), dt).unwrap();
+    let zoh_result = zoh.step(&model, &state0, Some(&input0), dt).unwrap();
 
     let error: f64 = (LtiState::<3, 0>::from_vec(rk4_result.to_vec())
         - LtiState::<3, 0>::from_vec(zoh_result.to_vec()))

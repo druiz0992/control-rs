@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use nalgebra::{DMatrix, DVector};
 
 use crate::physics::ModelError;
@@ -11,28 +13,28 @@ pub struct ZOH<D>
 where
     D: LinearDynamics,
 {
-    model: D,
     state_matrix_d: DMatrix<f64>,
     control_matrix_d: DMatrix<f64>,
     dt: f64,
+    _phantom_data: PhantomData<D>,
 }
 
 impl<D> ZOH<D>
 where
     D: LinearDynamics,
 {
-    pub fn new(model: D, dt: f64) -> Result<Self, ModelError> {
+    pub fn new(model: &D, dt: f64) -> Result<Self, ModelError> {
         let (_, v_dims) = model.state_dims();
         if v_dims > 0 {
             return Err(ModelError::Unexpected("Insuported Discretizer".into()));
         }
-        let (state_matrix_d, control_matrix_d) = discretize_a_b_matrices(&model, dt);
+        let (state_matrix_d, control_matrix_d) = discretize_a_b_matrices(model, dt);
 
         Ok(Self {
-            model,
             dt,
             state_matrix_d,
             control_matrix_d,
+            _phantom_data: PhantomData,
         })
     }
 
@@ -47,6 +49,7 @@ where
 {
     fn step(
         &mut self,
+        _model: &D,
         state: &D::State,
         input: Option<&[f64]>,
         dt: f64,
@@ -65,10 +68,6 @@ where
         let r = sm * dv_state + cm * dv_input;
 
         Ok(D::State::from_vec(r.as_slice().to_vec()))
-    }
-
-    fn get_model(&self) -> &D {
-        &self.model
     }
 }
 

@@ -1,10 +1,14 @@
+use nalgebra::{DMatrix, DVector};
+
 use super::utils;
 use crate::common::Labelizable;
 use crate::numeric_services::solver::{KktConditionsStatus, NewtonSolverSymbolic, OptimizerConfig};
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::models::dynamics::SymbolicDynamics;
-use crate::physics::traits::{Discretizer, Dynamics, State};
+use crate::physics::traits::{Discretizer, LinearDynamics, State};
 use crate::physics::{ModelError, constants as c};
+use crate::solver::{LinearSolver, RootFinder};
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 // Backward Euler residual:
@@ -13,15 +17,15 @@ use std::sync::Arc;
 //
 // The root of R(x_{k+1}) gives the next state satisfying the Backward Euler integration scheme.
 
-pub struct BackwardEuler<D: Dynamics> {
+pub struct BackwardEuler<D: SymbolicDynamics> {
     registry: Arc<ExprRegistry>,
     solver: NewtonSolverSymbolic,
-    model: D,
+    _phantom_data: PhantomData<D>,
 }
 
 impl<D: SymbolicDynamics> BackwardEuler<D> {
     pub fn new(
-        model: D,
+        model: &D,
         registry: Arc<ExprRegistry>,
         solver_options: Option<OptimizerConfig>,
     ) -> Result<Self, ModelError> {
@@ -53,7 +57,7 @@ impl<D: SymbolicDynamics> BackwardEuler<D> {
         Ok(BackwardEuler {
             registry,
             solver,
-            model,
+            _phantom_data: PhantomData,
         })
     }
 
@@ -62,9 +66,10 @@ impl<D: SymbolicDynamics> BackwardEuler<D> {
     }
 }
 
-impl<D: Dynamics> Discretizer<D> for BackwardEuler<D> {
+impl<D: SymbolicDynamics> Discretizer<D> for BackwardEuler<D> {
     fn step(
         &mut self,
+        _model: &D,
         state: &D::State,
         _input: Option<&[f64]>,
         dt: f64,
@@ -90,8 +95,42 @@ impl<D: Dynamics> Discretizer<D> for BackwardEuler<D> {
 
         Ok(D::State::from_vec(full_state))
     }
+}
 
-    fn get_model(&self) -> &D {
-        &self.model
+pub struct BackwardEulerLinear<D: LinearDynamics> {
+    _phantom_data: PhantomData<D>,
+}
+
+impl<D: LinearDynamics> BackwardEulerLinear<D> {
+    pub fn new() -> Self {
+        Self {
+            _phantom_data: PhantomData,
+        }
     }
+}
+
+impl<D: LinearDynamics> Discretizer<D> for BackwardEulerLinear<D> {
+    fn step(
+        &mut self,
+        model: &D,
+        state: &D::State,
+        input: Option<&[f64]>,
+        dt: f64,
+    ) -> Result<D::State, ModelError> {
+        let state_mat = model.get_state_slice();
+        let control_mat = model.get_control_slice();
+        let input_dims = control_mat.ncols();
+        let input = DVector::from_vec((input.unwrap_or(&vec![0.0; input_dims])).to_owned());
+        let state = DVector::from_vec(state.to_vec());
+
+        let j = DMatrix::identity(state_mat.nrows(), state_mat.ncols()) - dt * state_mat;
+        let rhs = &state + dt * model.get_control_slice() * input;
+        let residual: Box<dyn Fn(&DVector<f64>) -> DVector<f64>> =
+            Box::new(|x_next: &DVector<f64>| j.clone() * x_next - rhs.clone());
+
+        let mut solver = LinearSolver::new(&residual, &j);
+        let r = solver.find_roots(state.as_slice())?;
+        Ok(D::State::from_vec(r.0))
+    }
+
 }

@@ -20,9 +20,9 @@ pub use zero_order_hold::ZOH;
 pub trait Discretizer<D: Dynamics> {
     fn step(
         &mut self,
+        model: &D,
         state: &D::State,
         input: Option<&[f64]>,
         dt: f64,
     ) -> Result<D::State, ModelError>;
-    fn get_model(&self) -> &D;
 }

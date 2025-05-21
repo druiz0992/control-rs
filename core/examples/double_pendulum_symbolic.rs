@@ -32,12 +32,12 @@ fn main() {
     let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry));
     let mut solver_options = OptimizerConfig::default();
     solver_options.set_verbose(true);
-    //let integrator = RK4Symbolic::new(model, Arc::clone(&registry)).unwrap();
-    //let integrator = BackwardEuler::new(model, Arc::clone(&registry)).unwrap();
-    //let integrator = HermiteSimpson::new(model, Arc::clone(&registry)).unwrap();
+    //let integrator = RK4Symbolic::new&(model, Arc::clone(&registry)).unwrap();
+    //let integrator = BackwardEuler::new(&model, Arc::clone(&registry)).unwrap();
+    //let integrator = HermiteSimpson::new(&model, Arc::clone(&registry)).unwrap();
     let integrator =
-        ImplicitMidpoint::new(model, Arc::clone(&registry), Some(solver_options)).unwrap();
-    let mut sim = BasicSim::new(integrator, state0);
+        ImplicitMidpoint::new(&model, Arc::clone(&registry), Some(solver_options)).unwrap();
+    let mut sim = BasicSim::new(model, integrator, state0);
 
     let history = sim.simulate_steps(dt, steps);
 

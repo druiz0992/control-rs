@@ -4,6 +4,7 @@ use crate::numeric_services::symbolic::{ExprMatrix, ExprRegistry, ExprScalar, Ex
 use crate::physics::constants as c;
 use crate::physics::error::ModelError;
 use crate::physics::traits::State;
+use crate::solver::RootFinder;
 use std::sync::Arc;
 
 pub fn get_states(registry: &Arc<ExprRegistry>) -> Result<(ExprVector, ExprVector), ModelError> {
@@ -30,10 +31,10 @@ pub fn get_v_states(registry: &Arc<ExprRegistry>) -> Result<(ExprVector, ExprVec
     Ok((current_v_state, next_v_state))
 }
 
-pub fn step_intrinsic<S: State>(
+pub fn step_intrinsic<S: State, RF: RootFinder>(
     state: &S,
     dt: f64,
-    solver: &mut NewtonSolverSymbolic,
+    solver: &mut RF,
     registry: &Arc<ExprRegistry>,
 ) -> Result<SolverResult, ModelError> {
     registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
@@ -45,7 +46,7 @@ pub fn step_intrinsic<S: State>(
         S::dim_q()
     };
 
-    solver.solve(&state.to_vec()[start_dims..])
+    solver.find_roots(&state.to_vec()[start_dims..])
 }
 
 /// 1/2 * next_v_state * M * next_v_state + linear term * next_v_state
