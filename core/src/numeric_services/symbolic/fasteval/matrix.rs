@@ -1,8 +1,7 @@
 use super::ExprVector;
 use super::scalar::ExprScalar;
+use crate::numeric_services::symbolic::dtos::{ExprRecord, SymbolicEvalResult, SymbolicFn};
 use crate::numeric_services::symbolic::error::SymbolicError;
-use crate::numeric_services::symbolic::fasteval::ExprRecord;
-use crate::numeric_services::symbolic::models::{SymbolicEvalResult, SymbolicFn};
 use crate::numeric_services::symbolic::ports::{SymbolicExpr, SymbolicRegistry};
 use nalgebra::DMatrix;
 use std::collections::HashMap;
@@ -199,7 +198,7 @@ impl ExprMatrix {
             .iter()
             .map(|row| {
                 row.iter()
-                    .zip(&other.as_vec())
+                    .zip(&other.to_vec())
                     .map(|(matrix_elem, vector_elem)| matrix_elem.mul(vector_elem))
                     .fold(ExprScalar::default(), |acc, val| acc.add(&val))
             })
@@ -571,7 +570,7 @@ mod tests {
         let matrix = ExprMatrix::new(&vec![&["1", "2"], &["3", "4"]]);
         let vector = ExprVector::from_vec(vec![ExprScalar::new("5"), ExprScalar::new("6")]);
         let result = matrix.matmul_vec(&vector);
-        let result_vec = result.as_vec();
+        let result_vec = result.to_vec();
         assert_eq!(result_vec[0].to_string(), "0 + 1 * 5 + 2 * 6");
         assert_eq!(result_vec[1].to_string(), "0 + 3 * 5 + 4 * 6");
     }

@@ -1,9 +1,12 @@
-use control_rs::numeric_services::solver::{LineSeachConfig, NewtonSolver, OptimizerConfig};
+use control_rs::numeric_services::solver::{
+    LineSeachConfig, NewtonSolverSymbolic, OptimizerConfig,
+};
 use control_rs::numeric_services::symbolic::fasteval::ExprRegistry;
 use control_rs::numeric_services::symbolic::fasteval::utils::*;
 use control_rs::numeric_services::symbolic::{
     ExprScalar, ExprVector, SymbolicEvalResult, SymbolicExpr, SymbolicFunction,
 };
+use control_rs::solver::qp::QPBuilder;
 use nalgebra::{DMatrix, DVector};
 use std::sync::Arc;
 
@@ -75,8 +78,9 @@ fn test_newton_root_finding() {
     let initial_guess = vec![-1.742410372590328, 1.4020334125022704];
 
     let unknown_expr = ExprVector::new(&["x1", "x2"]);
-    let mut solver = NewtonSolver::new_root_solver(&expr, &unknown_expr, &registry, None).unwrap();
-    let result = solver.solve(&initial_guess, &registry).unwrap();
+    let solver =
+        NewtonSolverSymbolic::new_root_solver(&expr, &unknown_expr, &registry, None).unwrap();
+    let (result, _, _, _) = solver.solve(&initial_guess).unwrap();
 
     assert!(result[0].sin().abs() < 1e-6);
     assert!(result[1].cos().abs() < 1e-6);
@@ -96,9 +100,10 @@ fn test_newton_root_finding_norm1_line_search() {
     let mut options = OptimizerConfig::default();
     options.set_line_search_opts(ls_opts);
 
-    let mut solver =
-        NewtonSolver::new_root_solver(&expr, &unknown_expr, &registry, Some(options)).unwrap();
-    let result = solver.solve(&initial_guess, &registry).unwrap();
+    let solver =
+        NewtonSolverSymbolic::new_root_solver(&expr, &unknown_expr, &registry, Some(options))
+            .unwrap();
+    let (result, _, _, _) = solver.solve(&initial_guess).unwrap();
 
     assert!(result[0].sin().abs() < 1e-6);
     assert!(result[1].cos().abs() < 1e-6);
@@ -112,9 +117,10 @@ fn test_newton_minimization_no_constraints() {
     let registry = Arc::new(ExprRegistry::new());
     let initial_guess = vec![-0.1, 0.5];
 
-    let mut solver =
-        NewtonSolver::new_minimization(&cost, None, None, &unknown_expr, &registry, None).unwrap();
-    let result = solver.solve(&initial_guess, &registry).unwrap();
+    let solver =
+        NewtonSolverSymbolic::new_minimization(&cost, None, None, &unknown_expr, &registry, None)
+            .unwrap();
+    let (result, _, _, _) = solver.solve(&initial_guess).unwrap();
 
     let grad_cost_norm = grad_cost_norm(&result);
     assert!(grad_cost_norm < 1e-6);
@@ -130,10 +136,16 @@ fn test_gauss_newton_minimization_no_constraints() {
     let mut options = OptimizerConfig::default();
     options.set_gauss_newton(true);
 
-    let mut solver =
-        NewtonSolver::new_minimization(&cost, None, None, &unknown_expr, &registry, Some(options))
-            .unwrap();
-    let result = solver.solve(&initial_guess, &registry).unwrap();
+    let solver = NewtonSolverSymbolic::new_minimization(
+        &cost,
+        None,
+        None,
+        &unknown_expr,
+        &registry,
+        Some(options),
+    )
+    .unwrap();
+    let (result, _, _, _) = solver.solve(&initial_guess).unwrap();
 
     let grad_cost_norm = grad_cost_norm(&result);
     assert!(grad_cost_norm < 1e-6);
@@ -148,16 +160,16 @@ fn test_newton_minimization() {
     let initial_guess = vec![-0.1, 0.5];
     let eq_constraints_expr = get_eq_constraints_expr(&unknown_expr);
 
-    let mut solver = NewtonSolver::new_minimization(
+    let solver = NewtonSolverSymbolic::new_minimization(
         &cost,
-        Some(eq_constraints_expr),
+        Some(&eq_constraints_expr),
         None,
         &unknown_expr,
         &registry,
         None,
     )
     .unwrap();
-    let result = solver.solve(&initial_guess, &registry).unwrap();
+    let (result, _, _, _) = solver.solve(&initial_guess).unwrap();
 
     let constraint_eval = eval_eq_constraint(&result);
 
@@ -176,16 +188,16 @@ fn test_gauss_newton_minimization() {
     let mut options = OptimizerConfig::default();
     options.set_gauss_newton(true);
 
-    let mut solver = NewtonSolver::new_minimization(
+    let solver = NewtonSolverSymbolic::new_minimization(
         &cost,
-        Some(eq_constraints_expr),
+        Some(&eq_constraints_expr),
         None,
         &unknown_expr,
         &registry,
         Some(options),
     )
     .unwrap();
-    let result = solver.solve(&initial_guess, &registry).unwrap();
+    let (result, _, _, _) = solver.solve(&initial_guess).unwrap();
 
     let constraint_eval = eval_eq_constraint(&result);
 
@@ -202,16 +214,16 @@ fn test_newton_minimization_ineq_eq_constraint() {
     let eq_constraints_expr = get_eq_constraints_expr(&unknown_expr);
     let ineq_constraints_expr = get_ineq_constraints_expr(&unknown_expr);
 
-    let mut solver = NewtonSolver::new_minimization(
+    let solver = NewtonSolverSymbolic::new_minimization(
         &cost,
-        Some(eq_constraints_expr),
-        Some(ineq_constraints_expr),
+        Some(&eq_constraints_expr),
+        Some(&ineq_constraints_expr),
         &unknown_expr,
         &registry,
         None,
     )
     .unwrap();
-    let result = solver.solve(&initial_guess, &registry).unwrap();
+    let (result, _, _, _) = solver.solve(&initial_guess).unwrap();
 
     let eq_constraint_eval = eval_eq_constraint(&result);
     let ineq_constraint_eval = eval_ineq_constraint(&result);
@@ -229,16 +241,16 @@ fn test_newton_minimization_ineq_constraint() {
     let initial_guess = vec![-0.1, 0.5];
     let ineq_constraints_expr = get_ineq_constraints_expr(&unknown_expr);
 
-    let mut solver = NewtonSolver::new_minimization(
+    let solver = NewtonSolverSymbolic::new_minimization(
         &cost,
         None,
-        Some(ineq_constraints_expr),
+        Some(&ineq_constraints_expr),
         &unknown_expr,
         &registry,
         None,
     )
     .unwrap();
-    let result = solver.solve(&initial_guess, &registry).unwrap();
+    let (result, _, _, _) = solver.solve(&initial_guess).unwrap();
 
     let ineq_constraint_eval = eval_ineq_constraint(&result);
 
@@ -246,8 +258,7 @@ fn test_newton_minimization_ineq_constraint() {
 }
 
 #[test]
-fn test_qp() {
-    env_logger::init();
+fn test_symbolic_qp() {
     let registry = Arc::new(ExprRegistry::new());
     let big_q_data = vec![
         1.0, 0.3, 0.0, 0.0, // row 1
@@ -373,24 +384,77 @@ fn test_qp() {
     let mut solver_options = OptimizerConfig::default();
     solver_options.set_verbose(true);
 
-    let mut solver = NewtonSolver::new_minimization(
+    let solver = NewtonSolverSymbolic::new_minimization(
         &objective_expr,
-        Some(eq_constraints_expr),
-        Some(ineq_constraints_expr),
+        Some(&eq_constraints_expr),
+        Some(&ineq_constraints_expr),
         &unknown_vector_expr,
         &registry,
         Some(solver_options),
     )
     .unwrap();
-    solver.solve(&[0.0, 0.0, 0.0, 0.0], &registry).unwrap();
+    let (_, status, _, _) = solver.solve(&[0.0, 0.0, 0.0, 0.0]).unwrap();
 
-    assert!(solver.status().is_some());
-    if let Some(status) = solver.status() {
-        let tol = 1e-5;
-        assert!(status.stationarity < tol);
-        assert!(status.max_primal_feasibility_c.unwrap() < tol);
-        assert!(status.min_primal_feasibility_h.unwrap() > -tol);
-        assert!(status.dual_feasibility.unwrap() > -tol);
-        assert!(status.complementary_slackness.unwrap() < tol);
-    }
+    let tol = 1e-5;
+    assert!(status.stationarity < tol);
+    assert!(status.max_primal_feasibility_c.unwrap() < tol);
+    assert!(status.min_primal_feasibility_h.unwrap() > -tol);
+    assert!(status.dual_feasibility.unwrap() > -tol);
+    assert!(status.complementary_slackness.unwrap() < tol);
+}
+
+#[test]
+fn test_qp() {
+    let big_q_data = vec![
+        1.0, 0.3, 0.0, 0.0, // row 1
+        0.3, 1.0, 0.0, 0.0, // row 2
+        0.0, 0.0, 2.0, 0.0, // row 3
+        0.0, 0.0, 0.0, 4.0, // row 4
+    ];
+
+    let big_a_data = vec![0.0, 0.0, 1.0, 1.0, -1.0, 2.3, 1.0, -2.0];
+
+    let identity = DMatrix::<f64>::identity(4, 4);
+    let neg_identity = -&identity;
+
+    let primal_max = [1.0, 1.0, 1.0, 1.0];
+    let primal_min = [-0.5, -0.5, -1.0, -1.0];
+    let neg_primal_max: Vec<f64> = primal_max.iter().map(|x| -x).collect();
+    let mut h_data = neg_primal_max;
+    h_data.extend(primal_min);
+
+    // objective: 0.5 * X' * Q * X + q * X
+    let big_q = DMatrix::from_row_slice(4, 4, &big_q_data);
+    let q = DVector::from_vec(vec![-2.0, 3.4, 2.0, 4.0]);
+    // eq constraints: A * X - b
+    let big_a = DMatrix::from_row_slice(2, 4, &big_a_data);
+    let b = DVector::from_vec(vec![1.0, 3.0]);
+    // ineq constraints: G*x - h
+    let big_g = DMatrix::from_rows(
+        &neg_identity
+            .row_iter()
+            .chain(identity.row_iter())
+            .collect::<Vec<_>>(),
+    );
+    let h = DVector::from_vec(h_data);
+
+    let qp_builder = QPBuilder::new();
+    let solver = qp_builder
+        .q_mat(big_q)
+        .q_vec(q)
+        .a_mat(big_a)
+        .b_vec(b)
+        .g_mat(big_g)
+        .h_vec(h)
+        .build()
+        .unwrap();
+
+    let (_, status, _, _) = solver.solve_qp(&[0.0, 0.0, 0.0, 0.0]).unwrap();
+
+    let tol = 1e-5;
+    assert!(status.stationarity < tol);
+    assert!(status.max_primal_feasibility_c.unwrap() < tol);
+    assert!(status.min_primal_feasibility_h.unwrap() > -tol);
+    assert!(status.dual_feasibility.unwrap() > -tol);
+    assert!(status.complementary_slackness.unwrap() < tol);
 }

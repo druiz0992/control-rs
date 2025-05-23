@@ -1,9 +1,9 @@
-use super::KktConditionsStatus;
-use super::models::OptimizerConfig;
-use super::newton::LAMBDA;
+use super::newton_symbolic::LAMBDA;
+use crate::numeric_services::solver::dtos::RawSolverResult;
+use crate::numeric_services::solver::{KktConditionsStatus, OptimizerConfig};
 use crate::numeric_services::symbolic::fasteval::ExprRegistry;
 use crate::numeric_services::symbolic::ports::SymbolicExpr;
-use crate::numeric_services::symbolic::{ExprScalar, ExprVector, SymbolicFn};
+use crate::numeric_services::symbolic::{ExprRecord, ExprScalar, ExprVector, SymbolicFn};
 use crate::physics::ModelError;
 use nalgebra::DVector;
 use std::sync::Arc;
@@ -15,9 +15,9 @@ pub(crate) fn update_kkt_status(
     gradient: &DVector<f64>,
     z: &[f64],
     rho: f64,
-    n_eq: usize,
-    n_ineq: usize,
+    n_constraints: (usize, usize),
 ) -> KktConditionsStatus {
+    let (n_eq, n_ineq) = n_constraints;
     let unknown_dims = z.len() - n_eq - n_ineq;
     let sigmas = &z[unknown_dims + n_eq..];
     let lambdas: Vec<_> = sigmas.iter().map(|s| rho.sqrt() * (-s).exp()).collect();
@@ -68,12 +68,15 @@ pub(crate) fn get_merit_fn(
 ) -> Result<SymbolicFn, ModelError> {
     let merit_expr = options
         .get_line_search_merit()
-        .unwrap_or(residual_expr.norm2()?.wrap());
-    Ok(merit_expr.to_fn(registry)?)
+        .unwrap_or(ExprRecord::Scalar(residual_expr.norm2()?.wrap()));
+    if let ExprRecord::Scalar(func) = merit_expr {
+        return Ok(func.to_fn(registry)?);
+    }
+    Err(ModelError::Unexpected("Unexpected merit function.".into()))
 }
 
-pub(crate) fn get_constraints(expr: &Option<ExprVector>) -> ExprVector {
-    expr.as_ref().cloned().unwrap_or(ExprVector::new(&[]))
+pub(crate) fn get_constraints(expr: Option<&ExprVector>) -> ExprVector {
+    expr.cloned().unwrap_or(ExprVector::new(&[]))
 }
 
 /// add s = sqrt(rho) * exp(sigma), lambda = sqrt(rho) * exp(-sigma) to registry
@@ -108,7 +111,7 @@ pub(crate) fn build_ip_params(
             .enumerate()
             .map(|(i, c)| {
                 let sigma_expr = create_interior_point_symbols(sqrt_rho, i, registry);
-                sigmas = sigmas.extend(&sigma_expr.as_vec());
+                sigmas = sigmas.extend(&sigma_expr.to_vec());
                 let s_expr = sqrt_rho.mul(&sigma_expr.exp());
                 c.sub(&s_expr).wrap()
             })
@@ -123,4 +126,22 @@ pub(crate) fn extend_initial_guess(initial_guess: &[f64], unknown_expr: &[ExprSc
         unknown_vals.extend(vec![0.0; unknown_expr.len() - unknown_vals.len()]);
     }
     unknown_vals
+}
+
+pub(super) fn into_raw_result(
+    a: &[f64],
+    x: usize,
+    y: usize,
+    z: usize,
+) -> Result<RawSolverResult, ModelError> {
+    if a.len() != x + y + z {
+        return Err(ModelError::SolverError(
+            "Total split sizes must match vector length".into(),
+        ));
+    }
+
+    let (first, rest) = a.split_at(x);
+    let (second, third) = rest.split_at(y);
+
+    Ok((first.to_owned(), second.to_owned(), third.to_owned()))
 }

@@ -19,7 +19,7 @@ pub fn plot_states<S: State>(
 
     let (min_value, max_value) = states
         .iter()
-        .flat_map(|s| s.as_vec())
+        .flat_map(|s| s.to_vec())
         .fold((f64::INFINITY, f64::NEG_INFINITY), |(min, max), val| {
             (min.min(val), max.max(val))
         });
@@ -33,13 +33,13 @@ pub fn plot_states<S: State>(
 
     chart.configure_mesh().draw()?;
 
-    let num_states = states[0].as_vec().len();
+    let num_states = states[0].to_vec().len();
     let labels = <S as Labelizable>::labels();
     for i in 0..num_states {
         let series: Vec<(f64, f64)> = times
             .iter()
             .zip(states.iter())
-            .map(|(&t, s)| (t, s.as_vec()[i]))
+            .map(|(&t, s)| (t, s.to_vec()[i]))
             .collect();
 
         let label = labels.get(i).cloned().ok_or("Label index out of bounds")?;

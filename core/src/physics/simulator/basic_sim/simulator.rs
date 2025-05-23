@@ -1,13 +1,14 @@
+use crate::physics::ModelError;
 use crate::physics::traits::{Discretizer, Dynamics, PhysicsSim};
-use crate::physics::{Energy, ModelError};
 
+#[derive(Debug)]
 pub struct BasicSim<M, D>
 where
     M: Dynamics,
     D: Discretizer<M>,
 {
     discretizer: D,
-    state: M::State,
+    model: M,
 }
 
 impl<M, D> BasicSim<M, D>
@@ -15,15 +16,8 @@ where
     M: Dynamics,
     D: Discretizer<M>,
 {
-    pub fn new(discretizer: D, initial_state: M::State) -> Self {
-        BasicSim {
-            discretizer,
-            state: initial_state,
-        }
-    }
-
-    pub fn energy(&self, state: &M::State) -> Energy {
-        self.discretizer.get_model().energy(state)
+    pub fn new(model: M, discretizer: D) -> Self {
+        BasicSim { discretizer, model }
     }
 }
 
@@ -33,30 +27,41 @@ where
     D: Discretizer<M>,
 {
     type Model = M;
+    type Discretizer = D;
 
-    fn simulate_steps(&mut self, dt: f64, steps: usize) -> Vec<(f64, M::State, Energy)> {
+    fn rollout(
+        &self,
+        initial_state: &M::State,
+        input: Option<&Vec<M::Input>>,
+        dt: f64,
+        steps: usize,
+    ) -> Result<Vec<M::State>, ModelError> {
         let mut history = Vec::with_capacity(steps);
-        let mut t = 0.0;
-        for _ in 0..steps {
-            let energy = self.energy(&self.state);
+        let mut state = initial_state.clone();
+        history.push(state.clone());
+        for i in 0..steps {
+            let current_input = input.and_then(|inputs| inputs.get(i));
 
-            history.push((t, self.state.clone(), energy));
-            let _ = self.step(None, dt);
-            t += dt;
+            state = self.step(&state, current_input, dt)?;
+            history.push(state.clone());
         }
-        history
+        Ok(history)
     }
 
-    fn step(&mut self, input: Option<&[f64]>, dt: f64) -> Result<&M::State, ModelError> {
-        self.state = self.discretizer.step(&self.state, input, dt)?;
-        Ok(&self.state)
+    fn step(
+        &self,
+        state: &M::State,
+        input: Option<&M::Input>,
+        dt: f64,
+    ) -> Result<M::State, ModelError> {
+        let state = self.discretizer.step(&self.model, state, input, dt)?;
+        Ok(state)
     }
 
     fn model(&self) -> &Self::Model {
-        self.discretizer.get_model()
+        &self.model
     }
-
-    fn state(&self) -> &<Self::Model as Dynamics>::State {
-        &self.state
+    fn discretizer(&self) -> &Self::Discretizer {
+        &self.discretizer
     }
 }

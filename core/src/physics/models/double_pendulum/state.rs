@@ -31,9 +31,9 @@ mod tests {
     }
 
     #[test]
-    fn test_as_vec() {
+    fn test_to_vec() {
         let state = DoublePendulumState::new(1.0, 2.0, 3.0, 4.0);
-        assert_eq!(state.as_vec(), vec![1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(state.to_vec(), vec![1.0, 2.0, 3.0, 4.0]);
     }
 
     #[test]

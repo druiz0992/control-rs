@@ -1,8 +1,10 @@
-use crate::numeric_services::solver::{NewtonSolver, OptimizerConfig};
+use crate::numeric_services::solver::{NewtonSolverSymbolic, OptimizerConfig};
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
+use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::models::state::State;
-use crate::physics::traits::{Describable, Discretizer, Dynamics};
+use crate::physics::traits::{Discretizer, Dynamics};
 use crate::physics::{ModelError, constants as c};
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 use super::utils::{get_states, step_intrinsic};
@@ -21,13 +23,13 @@ use super::utils::{get_states, step_intrinsic};
 
 pub struct HermiteSimpson<D: Dynamics> {
     registry: Arc<ExprRegistry>,
-    solver: NewtonSolver,
-    model: D,
+    solver: NewtonSolverSymbolic,
+    _phantom_data: PhantomData<D>,
 }
 
-impl<D: Dynamics> HermiteSimpson<D> {
+impl<D: SymbolicDynamics> HermiteSimpson<D> {
     pub fn new(
-        model: D,
+        model: &D,
         registry: Arc<ExprRegistry>,
         solver_options: Option<OptimizerConfig>,
     ) -> Result<Self, ModelError> {
@@ -62,35 +64,31 @@ impl<D: Dynamics> HermiteSimpson<D> {
             .wrap()
             .scale(&dt6);
         residual = current_state.add(&residual).sub(&next_state).wrap();
-        let solver =
-            NewtonSolver::new_root_solver(&residual, &next_state, &registry, solver_options)?;
+        let solver = NewtonSolverSymbolic::new_root_solver(
+            &residual,
+            &next_state,
+            &registry,
+            solver_options,
+        )?;
 
         Ok(HermiteSimpson {
             registry,
             solver,
-            model: model.clone(),
+            _phantom_data: PhantomData,
         })
     }
 }
 
 impl<D: Dynamics> Discretizer<D> for HermiteSimpson<D> {
     fn step(
-        &mut self,
+        &self,
+        _model: &D,
         state: &D::State,
-        _input: Option<&[f64]>,
+        _input: Option<&D::Input>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
-        let (new_state, _multipliers) =
-            step_intrinsic(state, dt, &mut self.solver, &self.registry)?;
+        let (new_state, _status, _mus, _lambdas) =
+            step_intrinsic(state, dt, &self.solver, &self.registry)?;
         Ok(D::State::from_vec(new_state))
-    }
-    fn get_model(&self) -> &D {
-        &self.model
-    }
-}
-
-impl<D: Dynamics> Describable for HermiteSimpson<D> {
-    fn name(&self) -> &'static str {
-        "Hermite-Simpson"
     }
 }

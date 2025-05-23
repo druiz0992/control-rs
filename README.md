@@ -71,7 +71,7 @@ fn main() {
     let integrator = BackwardEuler::new(&model, Arc::clone(&registry)).unwrap();
     let mut sim = BasicSim::new(model, integrator, state0);
 
-    let history = sim.simulate_steps(dt, steps);
+    let history = sim.rollout(dt, steps);
 
     let (times, states, energies) = utils::unzip3(history);
 

@@ -1,12 +1,12 @@
 use crate::{
     numeric_services::symbolic::{
-        ExprMatrix, ExprScalar, ExprVector, SymbolicFn, SymbolicFunction,
+        ExprMatrix, ExprRecord, ExprScalar, ExprVector, SymbolicFn, SymbolicFunction,
     },
     physics::ModelError,
 };
 use core::fmt;
 
-const DEFAULT_MAX_ITERS: usize = 100;
+const DEFAULT_MAX_ITERS: usize = 200;
 const DEFAULT_TOLERANCE: f64 = 1e-6;
 
 const MIN_ALLOWED_MAX_ITERS: usize = 1;
@@ -103,7 +103,7 @@ impl ProblemSpec {
             ModelError::IncompleteConfiguration("Unknown variables not configured".to_string())
         })?;
 
-        Ok((residual_fn, jacobian_fn, unknown_vars.as_vec()))
+        Ok((residual_fn, jacobian_fn, unknown_vars.to_vec()))
     }
 
     pub fn get_ip_params(
@@ -138,7 +138,7 @@ impl ProblemSpec {
             residual_fn,
             ip_residual_fn,
             ip_jacobian_fn,
-            unknown_vars.as_vec(),
+            unknown_vars.to_vec(),
         ))
     }
 }
@@ -150,7 +150,7 @@ const MAX_LINESEARCH_ITERS: usize = 10;
 pub struct LineSeachConfig {
     factor: f64,
     max_iters: usize,
-    merit_expr: Option<ExprScalar>,
+    merit_expr: Option<ExprRecord>,
 }
 
 impl Default for LineSeachConfig {
@@ -210,7 +210,7 @@ impl LineSeachConfig {
     }
 
     pub fn set_merit(&mut self, merit_expr: ExprScalar) {
-        self.merit_expr = Some(merit_expr);
+        self.merit_expr = Some(ExprRecord::Scalar(merit_expr));
     }
 
     pub fn get_max_iters(&self) -> usize {
@@ -219,6 +219,16 @@ impl LineSeachConfig {
     pub fn get_factor(&self) -> f64 {
         self.factor
     }
+}
+
+pub struct OptimizerParams {
+    pub gradient: ExprVector,
+    pub eq_jacobian: ExprMatrix,
+    pub hessian: ExprMatrix,
+    pub eq_constraints: ExprVector,
+    pub ineq_constraints: ExprVector,
+    pub mus: ExprVector,
+    pub lambdas: ExprVector,
 }
 
 #[derive(Clone)]
@@ -263,7 +273,7 @@ impl OptimizerConfig {
         self.line_search = opts;
     }
 
-    pub fn get_line_search_merit(&self) -> Option<ExprScalar> {
+    pub fn get_line_search_merit(&self) -> Option<ExprRecord> {
         if let Some(merit_expr) = &self.line_search.merit_expr {
             return Some(merit_expr.clone());
         }
@@ -312,16 +322,6 @@ impl Default for OptimizerConfig {
     }
 }
 
-pub struct OptimizerParams {
-    pub gradient: ExprVector,
-    pub eq_jacobian: ExprMatrix,
-    pub hessian: ExprMatrix,
-    pub eq_constraints: ExprVector,
-    pub ineq_constraints: ExprVector,
-    pub mus: ExprVector,
-    pub lambdas: ExprVector,
-}
-
 #[derive(Clone, Debug, Default)]
 pub struct KktConditionsStatus {
     /// Lagragian gradient norm
@@ -335,3 +335,15 @@ pub struct KktConditionsStatus {
     /// lambda_j * ineq_j(x) = 0 => abs(dot(lambda, ineq))
     pub complementary_slackness: Option<f64>,
 }
+
+pub type SolverResult = (
+    Vec<f64>,
+    KktConditionsStatus,
+    LagrangianMultiplier,
+    LagrangianMultiplier,
+);
+pub enum LagrangianMultiplier {
+    Lambdas(Vec<f64>),
+    Mus(Vec<f64>),
+}
+pub type RawSolverResult = (Vec<f64>, Vec<f64>, Vec<f64>);

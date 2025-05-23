@@ -1,10 +1,11 @@
 use crate::numeric_services::differentiation::engine::DerivativeEngine;
 use crate::numeric_services::differentiation::error::DerivativeError;
-use crate::numeric_services::differentiation::models::{
+use crate::numeric_services::differentiation::dtos::{
     DerivativeRequest, DerivativeResponse, DerivativeType,
 };
 use crate::numeric_services::differentiation::sympy_engine::Sympy;
-use crate::numeric_services::symbolic::fasteval::{ExprRecord, ExprVector};
+use crate::numeric_services::symbolic::dtos::ExprRecord;
+use crate::numeric_services::symbolic::fasteval::ExprVector;
 
 pub fn compute_derivatives(
     expr: &ExprRecord,
@@ -19,11 +20,11 @@ pub fn compute_derivatives(
             functions
         }
         ExprRecord::Vector(vec) => {
-            let functions: Vec<String> = vec.as_vec().iter().map(|e| e.to_string()).collect();
+            let functions: Vec<String> = vec.to_vec().iter().map(|e| e.to_string()).collect();
             functions
         }
     };
-    let variables: Vec<String> = vars.as_vec().iter().map(|v| v.to_string()).collect();
+    let variables: Vec<String> = vars.to_vec().iter().map(|v| v.to_string()).collect();
 
     let req = DerivativeRequest {
         functions,

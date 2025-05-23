@@ -1,4 +1,4 @@
-use super::models::LineSeachConfig;
+use super::dtos::LineSeachConfig;
 use crate::numeric_services::symbolic::{SymbolicEvalResult, SymbolicFunction};
 use crate::physics::ModelError;
 use nalgebra::DVector;

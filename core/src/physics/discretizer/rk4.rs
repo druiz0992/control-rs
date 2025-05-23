@@ -1,63 +1,58 @@
 use crate::numeric_services::symbolic::{
-    ExprRegistry, ExprScalar, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
+    ExprMatrix, ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFunction,
+    TryIntoEvalResult,
 };
-use crate::physics::traits::{Describable, Discretizer, Dynamics, State};
+use crate::physics::models::dynamics::SymbolicDynamics;
+use crate::physics::traits::{Discretizer, Dynamics, State};
 use crate::physics::{ModelError, constants as c};
+use std::marker::PhantomData;
 use std::sync::Arc;
+
+use super::SymbolicDiscretizer;
 
 #[derive(Default)]
 pub struct RK4<D: Dynamics> {
-    model: D,
+    _phantom_data: PhantomData<D>,
 }
 
 impl<D: Dynamics> RK4<D> {
-    pub fn new(model: D) -> Result<Self, ModelError> {
+    pub fn new(model: &D) -> Result<Self, ModelError> {
         let (_, v_dims) = model.state_dims();
         if v_dims > 0 {
             return Err(ModelError::Unexpected("Insuported Discretizer".into()));
         }
-        Ok(Self { model })
+        Ok(Self {
+            _phantom_data: PhantomData,
+        })
     }
 }
 
 impl<D: Dynamics> Discretizer<D> for RK4<D> {
     fn step(
-        &mut self,
+        &self,
+        model: &D,
         state: &D::State,
-        input: Option<&[f64]>,
+        input: Option<&D::Input>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
-        let k1 = self.model.dynamics(state, input);
-        let k2 = self
-            .model
-            .dynamics(&(state.clone() + k1.clone() * (dt * 0.5)), input);
-        let k3 = self
-            .model
-            .dynamics(&(state.clone() + k2.clone() * (dt * 0.5)), input);
-        let k4 = self
-            .model
-            .dynamics(&(state.clone() + k3.clone() * dt), input);
+        let k1 = model.dynamics(state, input);
+        let k2 = model.dynamics(&(state.clone() + k1.clone() * (dt * 0.5)), input);
+        let k3 = model.dynamics(&(state.clone() + k2.clone() * (dt * 0.5)), input);
+        let k4 = model.dynamics(&(state.clone() + k3.clone() * dt), input);
 
         Ok(state.clone() + (k1 + k2 * 2.0 + k3 * 2.0 + k4) * (dt / 6.0))
     }
-    fn get_model(&self) -> &D {
-        &self.model
-    }
 }
 
-impl<D: Dynamics> Describable for RK4<D> {
-    fn name(&self) -> &'static str {
-        "RK4"
-    }
-}
-pub struct RK4Symbolic<D: Dynamics> {
+pub struct RK4Symbolic<D: SymbolicDynamics> {
     step_func: SymbolicFunction,
     registry: Arc<ExprRegistry>,
-    model: D,
+    dynamics: ExprVector,
+    _phantom_data: PhantomData<D>,
 }
 
-impl<D: Dynamics> RK4Symbolic<D> {
-    pub fn new(model: D, registry: Arc<ExprRegistry>) -> Result<Self, ModelError> {
+impl<D: SymbolicDynamics> RK4Symbolic<D> {
+    pub fn new(model: &D, registry: Arc<ExprRegistry>) -> Result<Self, ModelError> {
         let (_, v_dims) = model.state_dims();
         if v_dims > 0 {
             return Err(ModelError::Unexpected("Insuported Discretizer".into()));
@@ -79,54 +74,53 @@ impl<D: Dynamics> RK4Symbolic<D> {
         let k4_s = model
             .dynamics_symbolic(&k3_s.scale(&dt).add(&state).wrap(), &registry)
             .wrap();
-        let mut result_s = k1_s
+        let mut dynamics = k1_s
             .add(&k4_s)
             .add(&k2_s.scalef(2.0))
             .add(&k3_s.scalef(2.0))
             .wrap();
-        result_s = result_s.scale(&dt6);
-        result_s = result_s.add(&state);
-        let step_func = result_s.to_fn(&registry)?;
+        dynamics = dynamics.scale(&dt6);
+        dynamics = dynamics.add(&state).wrap();
+        let step_func = dynamics.to_fn(&registry)?;
 
         // if model allows inputs, redefine vars to include inputs
-        let mut vars = state.as_vec();
+        let mut vars = state.to_vec();
         if let Ok(input) = registry.get_vector(c::INPUT_SYMBOLIC) {
-            vars.extend_from_slice(&input.as_vec());
+            vars.extend_from_slice(&input.to_vec());
         }
         let step_func = SymbolicFunction::new(step_func, &vars);
 
         Ok(Self {
             step_func,
             registry,
-            model,
+            dynamics,
+            _phantom_data: PhantomData,
         })
     }
 }
 
-impl<D: Dynamics> Discretizer<D> for RK4Symbolic<D> {
+impl<D: SymbolicDynamics> Discretizer<D> for RK4Symbolic<D> {
     fn step(
-        &mut self,
+        &self,
+        _model: &D,
         state: &D::State,
-        input: Option<&[f64]>,
+        input: Option<&D::Input>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
         self.registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
 
-        let mut vals = state.as_vec();
+        let mut vals = state.to_vec();
         if let Some(u) = input {
-            vals.extend_from_slice(u);
+            vals.extend_from_slice(&u.to_vec());
         }
 
         Ok(self.step_func.eval(&vals).try_into_eval_result()?)
     }
-    fn get_model(&self) -> &D {
-        &self.model
-    }
 }
 
-impl<D: Dynamics> Describable for RK4Symbolic<D> {
-    fn name(&self) -> &'static str {
-        "RK4-Symbolic"
+impl<D: SymbolicDynamics> SymbolicDiscretizer<D> for RK4Symbolic<D> {
+    fn jacobian(&self, unknown: &ExprVector) -> Result<ExprMatrix, ModelError> {
+        Ok(self.dynamics.jacobian(unknown)?)
     }
 }
 
@@ -141,11 +135,11 @@ mod tests {
     #[test]
     fn test_rk4_step() {
         let dynamics = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, 0.0, None);
-        let mut rk4 = RK4::new(dynamics).unwrap();
+        let rk4 = RK4::new(&dynamics).unwrap();
         let initial_state = DoublePendulumState::new(0.0, 0.0, 0.0, 0.0);
         let dt = 0.1;
 
-        let next_state = rk4.step(&initial_state, None, dt).unwrap();
+        let next_state = rk4.step(&dynamics, &initial_state, None, dt).unwrap();
 
         assert!((next_state.omega1 - 0.0).abs() < 1e-6);
     }
@@ -161,10 +155,10 @@ mod tests {
         let omega2 = 0.0;
 
         let state = DoublePendulumState::new(theta1, omega1, theta2, omega2);
-        let mut rk4_symbolic = RK4Symbolic::new(dynamics, Arc::clone(&registry)).unwrap();
+        let rk4_symbolic = RK4Symbolic::new(&dynamics, Arc::clone(&registry)).unwrap();
         let dt = 0.1;
 
-        let next_state = rk4_symbolic.step(&state, None, dt).unwrap();
+        let next_state = rk4_symbolic.step(&dynamics, &state, None, dt).unwrap();
 
         assert!((next_state.omega1 - 0.0).abs() < 1e-6);
     }
@@ -185,16 +179,16 @@ mod tests {
             let registry = Arc::new(ExprRegistry::new());
             let dynamics = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry));
             let state = DoublePendulumState::new(theta1, omega1, theta2, omega2);
-            let mut rk4_symbolic = RK4Symbolic::new(dynamics.clone(), Arc::clone(&registry)).unwrap();
-            let mut rk4 = RK4::new(dynamics).unwrap();
+            let rk4_symbolic = RK4Symbolic::new(&dynamics, Arc::clone(&registry)).unwrap();
+            let rk4 = RK4::new(&dynamics).unwrap();
             let dt = 0.1;
 
 
             // Compare numeric and symbolic outputs approximately
             let tol = 1e-6; // tolerance for floating point comparison
 
-            let next_state_symbolic = rk4_symbolic.step(&state, None, dt).unwrap();
-            let next_state = rk4.step(&state, None, dt).unwrap();
+            let next_state_symbolic = rk4_symbolic.step(&dynamics, &state, None, dt).unwrap();
+            let next_state = rk4.step(&dynamics, &state, None, dt).unwrap();
 
             assert!(within_tolerance(next_state.theta1, next_state_symbolic.theta1, tol), "theta1 mismatch");
             assert!(within_tolerance(next_state.omega1, next_state_symbolic.omega1, tol), "omega1 mismatch");

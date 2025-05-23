@@ -16,7 +16,7 @@ use syn::{DeriveInput, parse_macro_input};
 ///
 /// 3. **State Trait Implementation**:
 ///    - Implements the `State` trait with the following methods:
-///      - `fn as_vec(&self) -> Vec<f64>`: Converts the struct's fields into a `Vec<f64>`.
+///      - `fn to_vec(&self) -> Vec<f64>`: Converts the struct's fields into a `Vec<f64>`.
 ///      - `fn from_vec(v: Vec<f64>) -> Self`: Constructs the struct from a `Vec<f64>`.
 ///        Ensures the vector has the correct number of elements.
 ///      - `fn labels() -> &'static [&'static str]`: Returns the names of the struct's fields as a slice of strings.
@@ -65,11 +65,14 @@ pub fn derive_state_ops_impl(input: TokenStream) -> TokenStream {
     let new_fn_init = field_names.iter().map(|f| quote! { #f });
 
     // For State trait
-    let as_vec_fields = field_names.iter().map(|f| quote! { self.#f });
-    let from_vec_fields = field_names
+    let to_vec_fields = field_names.iter().map(|f| quote! { self.#f });
+    let from_vec_fields_vec: Vec<_> = field_names
         .iter()
         .enumerate()
-        .map(|(i, f)| quote! { #f: v[#i] });
+        .map(|(i, f)| quote! { #f: v[#i] })
+        .collect();
+
+    let from_vec_fields_slice = from_vec_fields_vec.clone(); // requires Clone
 
     // For ops
     let add_fields = field_names.iter().map(|f| quote! { #f: self.#f + rhs.#f });
@@ -89,13 +92,28 @@ pub fn derive_state_ops_impl(input: TokenStream) -> TokenStream {
         }
 
         impl State for #name {
-            fn as_vec(&self) -> Vec<f64> {
-                vec![ #( #as_vec_fields ),* ]
+            fn to_vec(&self) -> Vec<f64> {
+                vec![ #( #to_vec_fields ),* ]
+            }
+
+            fn to_vector(&self) -> ::nalgebra::DVector<f64> {
+                ::nalgebra::DVector::from_vec(vec![ #( self.#field_names ),* ])
+            }
+
+            fn from_vector(vec: ::nalgebra::DVector<f64>) -> Self {
+                assert_eq!(vec.len(), #num_fields, "Expected {} elements", #num_fields);
+                let v = vec.as_slice();
+                Self { #( #from_vec_fields_slice ),* }
             }
 
             fn from_vec(v: Vec<f64>) -> Self {
                 assert_eq!(v.len(), #num_fields, "Expected {} elements", #num_fields);
-                Self { #( #from_vec_fields ),* }
+                Self { #( #from_vec_fields_vec ),* }
+            }
+
+            fn from_slice(v: &[f64]) -> Self {
+                assert_eq!(v.len(), #num_fields, "Expected {} elements", #num_fields);
+                Self { #( #from_vec_fields_slice ),* }
             }
 
             fn get_q(&self) -> Vec<f64> {
@@ -115,6 +133,13 @@ pub fn derive_state_ops_impl(input: TokenStream) -> TokenStream {
             }
         }
 
+        impl Default for #name {
+            fn default() -> Self {
+                Self {
+                    #( #field_names: 0.0 ),*
+                }
+            }
+        }
         impl std::ops::Add for #name {
             type Output = Self;
             fn add(self, rhs: Self) -> Self::Output {

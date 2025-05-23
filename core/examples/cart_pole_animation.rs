@@ -3,6 +3,7 @@ use control_rs::animation::macroquad::Macroquad;
 use control_rs::physics::discretizer::rk4::RK4;
 use control_rs::physics::models::{CartPole, CartPoleState};
 use control_rs::physics::simulator::BasicSim;
+use control_rs::physics::traits::PhysicsSim;
 use std::f64::consts::PI;
 
 #[macroquad::main("Physics Double Pendulum")]
@@ -20,11 +21,15 @@ async fn main() {
     let omega = 0.0;
 
     let model = CartPole::new(m, cart_mass, friction_coeff, air_resistance_coeff, l, None);
-    let state0 = CartPoleState::new(pos_x, v_x, omega, theta);
+    let state0 = CartPoleState::new(pos_x, v_x, theta, omega);
 
-    let integrator = RK4::<CartPole>::new(model).unwrap();
-    let sim = BasicSim::new(integrator, state0);
-    let animation_sim = Macroquad::new(sim);
+    let integrator = RK4::<CartPole>::new(&model).unwrap();
+    let sim = BasicSim::new(model.clone(), integrator);
+    let animation = Macroquad::new();
+    let states = sim.rollout(&state0, None, 0.01, 500).unwrap();
 
-    animation_sim.run_animation((400.0, 300.0), None).await;
+    animation
+        .run_animation(&model, &states, (400.0, 300.0))
+        .await
+        .unwrap();
 }

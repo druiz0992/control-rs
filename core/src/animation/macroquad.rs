@@ -1,5 +1,5 @@
 use super::Animation;
-use crate::physics::traits::{Dynamics, PhysicsSim, Renderable};
+use crate::physics::{ModelError, traits::Renderable};
 use async_trait::async_trait;
 use macroquad::prelude::*;
 
@@ -11,29 +11,21 @@ use macroquad::prelude::*;
 /// # Type Parameters
 /// - `S`: A type that implements the `PhysicsSim` trait, representing the physics simulation to be animated.
 #[derive(Clone, Debug, Default)]
-pub struct Macroquad<S: PhysicsSim> {
-    sim: S,
-}
+pub struct Macroquad;
 
-impl<S> Macroquad<S>
-where
-    S: PhysicsSim,
-{
+impl Macroquad {
     /// Creates a new instance of the `Macroquad` struct.
-    pub fn new(sim: S) -> Self {
-        Self { sim }
+    pub fn new() -> Self {
+        Self
     }
 }
 
 #[async_trait]
-impl<S> Animation for Macroquad<S>
+impl<M> Animation<M> for Macroquad
 where
-    S: PhysicsSim + Send,
-    S::Model: Renderable<State = <S::Model as Dynamics>::State>,
+    M: Renderable + Send + Sync,
+    M::State: Clone,
 {
-    /// The associated simulator type, which must implement the `PhysicsSim` trait.
-    type Simulator = S;
-
     /// Runs the animation loop using the `macroquad` library.
     ///
     /// This method continuously updates the physics simulation, renders the joints of the model,
@@ -49,14 +41,20 @@ where
     /// - Renders the joints of the model based on the current state and screen dimensions.
     /// - Draws lines connecting the joints and circles at each joint position.
     /// - Waits for the next frame before repeating the loop.
-    async fn run_animation(mut self, screen_dims: (f32, f32), dt: Option<f64>) {
-        loop {
-            clear_background(BLACK);
-            let dt = dt.unwrap_or(get_frame_time() as f64);
-            let _ = self.sim.step(None, dt);
+    async fn run_animation(
+        &self,
+        model: &M,
+        states: &[M::State],
+        screen_dims: (f32, f32),
+    ) -> Result<(), ModelError> {
+        if states.is_empty() {
+            return Err(ModelError::ConfigError(
+                "State vector cannot be empty".into(),
+            ));
+        }
 
-            let model = self.sim.model();
-            let state = self.sim.state();
+        for state in states {
+            clear_background(BLACK);
             let joints = model.render_joints(state, screen_dims);
 
             for win in joints.windows(2) {
@@ -69,5 +67,6 @@ where
 
             next_frame().await;
         }
+        Ok(())
     }
 }

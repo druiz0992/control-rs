@@ -1,5 +1,6 @@
 use crate::common::Labelizable;
 use crate::numeric_services::symbolic::{SymbolicError, SymbolicEvalResult, TryIntoEvalResult};
+use nalgebra::DVector;
 use std::ops::{Add, Div, Mul, Sub};
 
 /// A trait representing a state in a physical system, providing methods for
@@ -8,7 +9,7 @@ use std::ops::{Add, Div, Mul, Sub};
 ///
 /// # Required Methods
 ///
-/// - `as_vec`: Converts the state into a `Vec<f64>` representation.
+/// - `to_vec`: Converts the state into a `Vec<f64>` representation.
 /// - `from_vec`: Constructs a state from a `Vec<f64>` representation.
 /// - `labels`: Returns a static slice of string slices representing the labels
 ///   for each component of the state.
@@ -31,6 +32,7 @@ use std::ops::{Add, Div, Mul, Sub};
 pub trait State:
     Labelizable
     + std::fmt::Debug
+    + Default
     + Send
     + Sync
     + Sized
@@ -40,8 +42,11 @@ pub trait State:
     + Div<f64, Output = Self>
     + PartialEq
 {
-    fn as_vec(&self) -> Vec<f64>;
+    fn to_vec(&self) -> Vec<f64>;
     fn from_vec(v: Vec<f64>) -> Self;
+    fn from_slice(v: &[f64]) -> Self;
+    fn to_vector(&self) -> DVector<f64>;
+    fn from_vector(vec: DVector<f64>) -> Self;
 
     fn get_q(&self) -> Vec<f64>;
     fn get_v(&self) -> Vec<f64>;

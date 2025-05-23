@@ -1,4 +1,4 @@
-use super::state::SlidingBrickState;
+use super::state::BouncingBallState;
 use crate::common::Labelizable;
 use crate::numeric_services::symbolic::{ExprMatrix, ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::constants as c;
@@ -8,21 +8,21 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 #[derive(Debug, Serialize, Deserialize, Clone, LabelOps)]
-pub struct SlidingBrick {
+pub struct BouncingBall {
     m: f64,
     friction_coeff: f64,
 }
 
-impl SlidingBrick {
+impl BouncingBall {
     pub fn new(m: f64, friction_coeff: f64, registry: Option<&Arc<ExprRegistry>>) -> Self {
         if let Some(registry) = registry {
             registry.insert_scalar(c::MASS_SYMBOLIC, m);
             registry.insert_scalar(c::FRICTION_COEFF_SYMBOLIC, friction_coeff);
             registry.insert_scalar(c::GRAVITY_SYMBOLIC, c::GRAVITY);
-            let labels = SlidingBrickState::labels();
+            let labels = BouncingBallState::labels();
             registry.insert_vector(c::STATE_SYMBOLIC, labels);
 
-            let dim_q = SlidingBrickState::dim_q();
+            let dim_q = BouncingBallState::dim_q();
             registry.insert_vector(c::STATE_Q_SYMBOLIC, &labels[..dim_q]);
             registry.insert_vector(c::STATE_V_SYMBOLIC, &labels[dim_q..]);
 
@@ -38,6 +38,6 @@ impl SlidingBrick {
             );
         }
 
-        SlidingBrick { m, friction_coeff }
+        BouncingBall { m, friction_coeff }
     }
 }
