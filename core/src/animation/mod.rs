@@ -1,18 +1,16 @@
 use crate::physics::ModelError;
 use crate::physics::models::Dynamics;
-use crate::physics::simulator::PhysicsSim;
+use crate::physics::traits::Renderable;
 use async_trait::async_trait;
 
 pub mod macroquad;
 
 #[async_trait]
-pub trait Animation {
-    type Simulator: PhysicsSim;
-
+pub trait Animation<M: Renderable + Send + Sync> {
     async fn run_animation(
-        self,
-        initial_state: &<<Self::Simulator as PhysicsSim>::Model as Dynamics>::State,
+        &self,
+        model: &M,
+        states: &[<M as Dynamics>::State],
         screen_dims: (f32, f32),
-        dt: Option<f64>,
     ) -> Result<(), ModelError>;
 }

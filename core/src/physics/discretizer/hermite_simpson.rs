@@ -84,7 +84,7 @@ impl<D: Dynamics> Discretizer<D> for HermiteSimpson<D> {
         &self,
         _model: &D,
         state: &D::State,
-        _input: Option<&[f64]>,
+        _input: Option<&D::Input>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
         let (new_state, _status, _mus, _lambdas) =

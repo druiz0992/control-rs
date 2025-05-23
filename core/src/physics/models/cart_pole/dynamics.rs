@@ -1,3 +1,4 @@
+use super::input::CartPoleInput;
 use super::model::CartPole;
 use super::state::CartPoleState;
 use crate::common::Labelizable;
@@ -9,8 +10,9 @@ use std::sync::Arc;
 
 impl Dynamics for CartPole {
     type State = CartPoleState;
+    type Input = CartPoleInput;
 
-    fn dynamics(&self, state: &Self::State, input: Option<&[f64]>) -> Self::State {
+    fn dynamics(&self, state: &Self::State, input: Option<&Self::Input>) -> Self::State {
         let [m_p, m_c, friction_coeff, air_resistance_coeff, l] = self.extract(&[
             "pole_mass",
             "cart_mass",
@@ -19,7 +21,8 @@ impl Dynamics for CartPole {
             "l",
         ]);
         let [v_x, theta, omega] = state.extract(&["v_x", "theta", "omega"]);
-        let u = input.unwrap_or(&[0.0])[0];
+        let input = input.unwrap_or(&Self::Input::default()).clone();
+        let [u] = input.extract(&["u1"]);
 
         // damping
         let cart_friction = -friction_coeff * v_x;
@@ -32,7 +35,8 @@ impl Dynamics for CartPole {
         let denom = l * (4.0 / 3.0 - m_p * cos_theta * cos_theta / total_mass);
 
         let domega = (c::GRAVITY * sin_theta
-            + cos_theta * (-u - cart_friction - m_p * l * omega * omega * sin_theta) / total_mass
+            + cos_theta * (-1.0 * u - cart_friction - m_p * l * omega * omega * sin_theta)
+                / total_mass
             + pendulum_damping / (m_p + l))
             / denom;
 

@@ -75,8 +75,8 @@ pub(crate) fn get_merit_fn(
     Err(ModelError::Unexpected("Unexpected merit function.".into()))
 }
 
-pub(crate) fn get_constraints(expr: &Option<ExprVector>) -> ExprVector {
-    expr.as_ref().cloned().unwrap_or(ExprVector::new(&[]))
+pub(crate) fn get_constraints(expr: Option<&ExprVector>) -> ExprVector {
+    expr.cloned().unwrap_or(ExprVector::new(&[]))
 }
 
 /// add s = sqrt(rho) * exp(sigma), lambda = sqrt(rho) * exp(-sigma) to registry

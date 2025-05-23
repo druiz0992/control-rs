@@ -124,7 +124,7 @@ pub fn init_constrained_dynamics(
     NewtonSolverSymbolic::new_minimization(
         &objective_expr,
         None,
-        Some(ineq_constraints_expr),
+        Some(&ineq_constraints_expr),
         &next_v_state,
         registry,
         solver_options,

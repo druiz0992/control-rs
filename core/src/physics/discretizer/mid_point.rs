@@ -25,7 +25,7 @@ impl<D: Dynamics> Discretizer<D> for MidPoint<D> {
         &self,
         model: &D,
         state: &D::State,
-        input: Option<&[f64]>,
+        input: Option<&D::Input>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
         let x_m = state.clone() + model.dynamics(state, input) * (dt * 0.5);

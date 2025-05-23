@@ -96,6 +96,15 @@ pub fn derive_state_ops_impl(input: TokenStream) -> TokenStream {
                 vec![ #( #to_vec_fields ),* ]
             }
 
+            fn to_vector(&self) -> ::nalgebra::DVector<f64> {
+                ::nalgebra::DVector::from_vec(vec![ #( self.#field_names ),* ])
+            }
+
+            fn from_vector(vec: ::nalgebra::DVector<f64>) -> Self {
+                assert_eq!(vec.len(), #num_fields, "Expected {} elements", #num_fields);
+                let v = vec.as_slice();
+                Self { #( #from_vec_fields_slice ),* }
+            }
 
             fn from_vec(v: Vec<f64>) -> Self {
                 assert_eq!(v.len(), #num_fields, "Expected {} elements", #num_fields);
@@ -124,6 +133,13 @@ pub fn derive_state_ops_impl(input: TokenStream) -> TokenStream {
             }
         }
 
+        impl Default for #name {
+            fn default() -> Self {
+                Self {
+                    #( #field_names: 0.0 ),*
+                }
+            }
+        }
         impl std::ops::Add for #name {
             type Output = Self;
             fn add(self, rhs: Self) -> Self::Output {

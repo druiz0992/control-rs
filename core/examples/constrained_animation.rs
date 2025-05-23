@@ -5,12 +5,13 @@ use control_rs::numeric_services::symbolic::ExprRegistry;
 use control_rs::physics::discretizer::BackwardEuler;
 use control_rs::physics::models::{BouncingBall, BouncingBallState};
 use control_rs::physics::simulator::BasicSim;
+use control_rs::physics::traits::PhysicsSim;
 use std::sync::Arc;
 
 #[macroquad::main("Physics Double Pendulum")]
 async fn main() {
     env_logger::init();
-    let dt = 0.01;
+    let dt = 0.05;
     let m = 1.0;
     let friction_coeff = 0.0;
 
@@ -27,10 +28,12 @@ async fn main() {
     solver_options.set_verbose(true);
 
     let integrator = BackwardEuler::new(&model, registry, Some(solver_options)).unwrap();
-    let sim = BasicSim::new(model, integrator);
+    let sim = BasicSim::new(model.clone(), integrator);
+    let states = sim.rollout(&state0, None, dt, 1000).unwrap();
 
-    let animation_sim = Macroquad::new(sim);
-    animation_sim
-        .run_animation(&state0, (400.0, 300.0), Some(dt))
-        .await.unwrap();
+    let animation = Macroquad::new();
+    animation
+        .run_animation(&model, &states, (400.0, 300.0))
+        .await
+        .unwrap();
 }

@@ -3,6 +3,7 @@ use control_rs::numeric_services::symbolic::ExprRegistry;
 use control_rs::physics::discretizer::{
     BackwardEuler, ForwardEuler, HermiteSimpson, ImplicitMidpoint, MidPoint, RK4, RK4Symbolic, ZOH,
 };
+use control_rs::physics::models::linear_time_invariant::input::LtiInput;
 use control_rs::physics::models::linear_time_invariant::model::LtiModel;
 use control_rs::physics::models::linear_time_invariant::state::LtiState;
 use control_rs::physics::models::{BouncingBall, BouncingBallState};
@@ -101,16 +102,16 @@ fn test_implicit_midpoint_constrained_dynamics() {
 fn test_linear_models() {
     let state_matrix = DMatrix::from_vec(3, 3, vec![1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0]);
     let control_matrix = DMatrix::from_vec(3, 2, vec![1.0, 2.0, 0.0, 1.0, 2.0, 1.0]);
-    let model = LtiModel::<3, 0>::new(state_matrix.clone(), control_matrix.clone()).unwrap();
+    let model = LtiModel::<3, 0, 2>::new(state_matrix.clone(), control_matrix.clone()).unwrap();
 
     let tol = 1e-5;
     let dt = 0.01;
 
     let state0 = LtiState::<3, 0>::new([3.0, 2.0, 1.0]);
-    let input0 = vec![1.0, 1.0];
+    let input0 = LtiInput::<2, 0>::new([1.0, 1.0]);
 
     let dv_state0 = DVector::from_vec(state0.to_vec());
-    let dv_input0 = DVector::from_vec(input0.clone());
+    let dv_input0 = DVector::from_vec(input0.to_vec());
 
     let fe = ForwardEuler::new(&model).unwrap();
     let md = MidPoint::new(&model).unwrap();
@@ -169,13 +170,13 @@ fn test_linear_models() {
 fn test_rk4_vs_zoh() {
     let state_matrix = DMatrix::from_vec(3, 3, vec![1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0]);
     let control_matrix = DMatrix::from_vec(3, 2, vec![1.0, 2.0, 0.0, 1.0, 2.0, 1.0]);
-    let model = LtiModel::<3, 0>::new(state_matrix, control_matrix).unwrap();
+    let model = LtiModel::<3, 0,2>::new(state_matrix, control_matrix).unwrap();
 
     let tol = 1e-5;
     let dt = 0.01;
 
     let state0 = LtiState::<3, 0>::new([3.0, 2.0, 1.0]);
-    let input0 = vec![1.0, 1.0];
+    let input0 = LtiInput::<2,0>::new([1.0, 1.0]);
 
     let rk4 = RK4::new(&model).unwrap();
     let zoh = ZOH::new(&model, dt).unwrap();

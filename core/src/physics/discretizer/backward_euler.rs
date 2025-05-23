@@ -7,6 +7,7 @@ use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Discretizer, LinearDynamics, State};
 use crate::physics::{ModelError, constants as c};
+use crate::solver::linear_solver::LinearResidual;
 use crate::solver::{LinearSolver, RootFinder};
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -74,7 +75,7 @@ impl<D: SymbolicDynamics> Discretizer<D> for BackwardEuler<D> {
         &self,
         _model: &D,
         state: &D::State,
-        _input: Option<&[f64]>,
+        _input: Option<&D::Input>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
         let v_dims = D::State::dim_v();
@@ -102,6 +103,7 @@ impl<D: SymbolicDynamics> Discretizer<D> for BackwardEuler<D> {
     }
 }
 
+#[derive(Default)]
 pub struct BackwardEulerLinear<D: LinearDynamics> {
     _phantom_data: PhantomData<D>,
 }
@@ -119,19 +121,20 @@ impl<D: LinearDynamics> Discretizer<D> for BackwardEulerLinear<D> {
         &self,
         model: &D,
         state: &D::State,
-        input: Option<&[f64]>,
+        input: Option<&D::Input>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
         let state_mat = model.get_state_slice();
-        let control_mat = model.get_control_slice();
-        let input_dims = control_mat.ncols();
-        let input = DVector::from_vec((input.unwrap_or(&vec![0.0; input_dims])).to_owned());
+        let input = DVector::from_vec((input.unwrap_or(&D::Input::default())).to_vec().to_owned());
         let state = DVector::from_vec(state.to_vec());
 
         let j = DMatrix::identity(state_mat.nrows(), state_mat.ncols()) - dt * state_mat;
         let rhs = &state + dt * model.get_control_slice() * input;
-        let residual: Box<dyn Fn(&DVector<f64>) -> DVector<f64>> =
-            Box::new(|x_next: &DVector<f64>| j.clone() * x_next - rhs.clone());
+        let residual: LinearResidual = Box::new({
+            let j = j.clone();
+            let rhs = rhs.clone();
+            move |x_next: &DVector<f64>| j.clone() * x_next - rhs.clone()
+        });
 
         let solver = LinearSolver::new(&residual, &j);
         let r = solver.find_roots(state.as_slice())?;

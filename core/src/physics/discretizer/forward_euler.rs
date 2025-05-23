@@ -24,7 +24,7 @@ impl<D: Dynamics> Discretizer<D> for ForwardEuler<D> {
         &self,
         model: &D,
         state: &D::State,
-        input: Option<&[f64]>,
+        input: Option<&D::Input>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
         Ok(state.clone() + model.dynamics(state, input) * dt)

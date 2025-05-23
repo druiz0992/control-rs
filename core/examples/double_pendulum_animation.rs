@@ -3,6 +3,7 @@ use control_rs::animation::macroquad::Macroquad;
 use control_rs::physics::discretizer::rk4::RK4;
 use control_rs::physics::models::{DoublePendulum, DoublePendulumState};
 use control_rs::physics::simulator::BasicSim;
+use control_rs::physics::traits::PhysicsSim;
 use std::f64::consts::PI;
 
 #[macroquad::main("Physics Double Pendulum")]
@@ -23,11 +24,12 @@ async fn main() {
     let state0 = DoublePendulumState::new(theta1, omega1, theta2, omega2);
 
     let integrator = RK4::new(&model).unwrap();
-    let sim = BasicSim::new(model, integrator);
-    let animation_sim = Macroquad::new(sim);
+    let sim = BasicSim::new(model.clone(), integrator);
+    let states = sim.rollout(&state0, None, 0.01, 1000).unwrap();
+    let animation = Macroquad::new();
 
-    animation_sim
-        .run_animation(&state0, (400.0, 300.0), None)
+    animation
+        .run_animation(&model, &states, (400.0, 300.0))
         .await
         .unwrap();
 }

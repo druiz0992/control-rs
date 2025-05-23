@@ -5,8 +5,9 @@ use std::sync::Arc;
 
 pub trait Dynamics: Clone {
     type State: Clone + super::state::State;
+    type Input: Clone + super::state::State;
 
-    fn dynamics(&self, state: &Self::State, input: Option<&[f64]>) -> Self::State;
+    fn dynamics(&self, state: &Self::State, input: Option<&Self::Input>) -> Self::State;
     fn energy(&self, _state: &Self::State) -> Option<Energy> {
         None
     }

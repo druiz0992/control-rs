@@ -1,11 +1,14 @@
 use crate::numeric_services::symbolic::{
-    ExprRegistry, ExprScalar, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
+    ExprMatrix, ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFunction,
+    TryIntoEvalResult,
 };
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Discretizer, Dynamics, State};
 use crate::physics::{ModelError, constants as c};
 use std::marker::PhantomData;
 use std::sync::Arc;
+
+use super::SymbolicDiscretizer;
 
 #[derive(Default)]
 pub struct RK4<D: Dynamics> {
@@ -29,7 +32,7 @@ impl<D: Dynamics> Discretizer<D> for RK4<D> {
         &self,
         model: &D,
         state: &D::State,
-        input: Option<&[f64]>,
+        input: Option<&D::Input>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
         let k1 = model.dynamics(state, input);
@@ -44,6 +47,7 @@ impl<D: Dynamics> Discretizer<D> for RK4<D> {
 pub struct RK4Symbolic<D: SymbolicDynamics> {
     step_func: SymbolicFunction,
     registry: Arc<ExprRegistry>,
+    dynamics: ExprVector,
     _phantom_data: PhantomData<D>,
 }
 
@@ -70,14 +74,14 @@ impl<D: SymbolicDynamics> RK4Symbolic<D> {
         let k4_s = model
             .dynamics_symbolic(&k3_s.scale(&dt).add(&state).wrap(), &registry)
             .wrap();
-        let mut result_s = k1_s
+        let mut dynamics = k1_s
             .add(&k4_s)
             .add(&k2_s.scalef(2.0))
             .add(&k3_s.scalef(2.0))
             .wrap();
-        result_s = result_s.scale(&dt6);
-        result_s = result_s.add(&state);
-        let step_func = result_s.to_fn(&registry)?;
+        dynamics = dynamics.scale(&dt6);
+        dynamics = dynamics.add(&state).wrap();
+        let step_func = dynamics.to_fn(&registry)?;
 
         // if model allows inputs, redefine vars to include inputs
         let mut vars = state.to_vec();
@@ -89,6 +93,7 @@ impl<D: SymbolicDynamics> RK4Symbolic<D> {
         Ok(Self {
             step_func,
             registry,
+            dynamics,
             _phantom_data: PhantomData,
         })
     }
@@ -99,17 +104,23 @@ impl<D: SymbolicDynamics> Discretizer<D> for RK4Symbolic<D> {
         &self,
         _model: &D,
         state: &D::State,
-        input: Option<&[f64]>,
+        input: Option<&D::Input>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
         self.registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
 
         let mut vals = state.to_vec();
         if let Some(u) = input {
-            vals.extend_from_slice(u);
+            vals.extend_from_slice(&u.to_vec());
         }
 
         Ok(self.step_func.eval(&vals).try_into_eval_result()?)
+    }
+}
+
+impl<D: SymbolicDynamics> SymbolicDiscretizer<D> for RK4Symbolic<D> {
+    fn jacobian(&self, unknown: &ExprVector) -> Result<ExprMatrix, ModelError> {
+        Ok(self.dynamics.jacobian(unknown)?)
     }
 }
 

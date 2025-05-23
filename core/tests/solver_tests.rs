@@ -162,7 +162,7 @@ fn test_newton_minimization() {
 
     let solver = NewtonSolverSymbolic::new_minimization(
         &cost,
-        Some(eq_constraints_expr),
+        Some(&eq_constraints_expr),
         None,
         &unknown_expr,
         &registry,
@@ -190,7 +190,7 @@ fn test_gauss_newton_minimization() {
 
     let solver = NewtonSolverSymbolic::new_minimization(
         &cost,
-        Some(eq_constraints_expr),
+        Some(&eq_constraints_expr),
         None,
         &unknown_expr,
         &registry,
@@ -216,8 +216,8 @@ fn test_newton_minimization_ineq_eq_constraint() {
 
     let solver = NewtonSolverSymbolic::new_minimization(
         &cost,
-        Some(eq_constraints_expr),
-        Some(ineq_constraints_expr),
+        Some(&eq_constraints_expr),
+        Some(&ineq_constraints_expr),
         &unknown_expr,
         &registry,
         None,
@@ -244,7 +244,7 @@ fn test_newton_minimization_ineq_constraint() {
     let solver = NewtonSolverSymbolic::new_minimization(
         &cost,
         None,
-        Some(ineq_constraints_expr),
+        Some(&ineq_constraints_expr),
         &unknown_expr,
         &registry,
         None,
@@ -386,8 +386,8 @@ fn test_symbolic_qp() {
 
     let solver = NewtonSolverSymbolic::new_minimization(
         &objective_expr,
-        Some(eq_constraints_expr),
-        Some(ineq_constraints_expr),
+        Some(&eq_constraints_expr),
+        Some(&ineq_constraints_expr),
         &unknown_vector_expr,
         &registry,
         Some(solver_options),

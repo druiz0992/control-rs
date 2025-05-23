@@ -49,8 +49,8 @@ impl NewtonSolverSymbolic {
 
     pub fn new_minimization(
         objective_expr: &ExprScalar,
-        eq_constraints_expr: Option<ExprVector>,
-        ineq_constraints_expr: Option<ExprVector>,
+        eq_constraints_expr: Option<&ExprVector>,
+        ineq_constraints_expr: Option<&ExprVector>,
         unknown_expr: &ExprVector,
         registry: &Arc<ExprRegistry>,
         options: Option<OptimizerConfig>,
@@ -58,8 +58,8 @@ impl NewtonSolverSymbolic {
         let options = options.unwrap_or_default();
 
         // retrieve constraints
-        let eq_constraints = utils::get_constraints(&eq_constraints_expr);
-        let ineq_constraints = utils::get_constraints(&ineq_constraints_expr);
+        let eq_constraints = utils::get_constraints(eq_constraints_expr);
+        let ineq_constraints = utils::get_constraints(ineq_constraints_expr);
 
         // compute lagrangian L = objective + mu * eq_constraints - lambda * ineq_constraints
         let (lagrangian, mus, lambdas) =

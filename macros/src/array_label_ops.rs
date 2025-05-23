@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, DeriveInput};
+use syn::{parse_macro_input, DeriveInput, GenericParam, ConstParam};
 
 pub fn derive_label_ops_impl(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -8,6 +8,17 @@ pub fn derive_label_ops_impl(input: TokenStream) -> TokenStream {
 
     let generics = &input.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    // Find the first const generic identifier, like I or N
+    let first_const_generic_ident = generics.params.iter()
+        .find_map(|param| {
+            if let GenericParam::Const(ConstParam { ident, .. }) = param {
+                Some(ident)
+            } else {
+                None
+            }
+        })
+        .expect("Expected at least one const generic parameter");
 
     let data = match input.data {
         syn::Data::Struct(data) => data,
@@ -26,7 +37,7 @@ pub fn derive_label_ops_impl(input: TokenStream) -> TokenStream {
     let field = fields.iter().next().unwrap();
     let field_ident = field.ident.clone().unwrap();
 
-    // Prefix: lowercase of struct name
+    // prefix = lowercase struct name
     let prefix = name.to_string().to_lowercase();
 
     let expanded = quote! {
@@ -37,7 +48,7 @@ pub fn derive_label_ops_impl(input: TokenStream) -> TokenStream {
                 static INIT: std::sync::Once = std::sync::Once::new();
 
                 INIT.call_once(|| {
-                    let labels: Vec<&'static str> = (0..N)
+                    let labels: Vec<&'static str> = (0..#first_const_generic_ident)
                         .map(|i| {
                             let s = format!("{}_{}", #prefix, i);
                             Box::leak(s.into_boxed_str()) as &'static str

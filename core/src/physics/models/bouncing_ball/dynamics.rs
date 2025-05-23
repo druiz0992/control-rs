@@ -2,6 +2,7 @@ use super::model::BouncingBall;
 use super::state::BouncingBallState;
 use crate::common::Labelizable;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
+use crate::physics::models::NoInput;
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::State;
 use crate::physics::{Energy, constants as c, traits::Dynamics};
@@ -12,8 +13,9 @@ use std::sync::Arc;
 ///  f_friction = [ -mu * friction_coeff * sign(v_x), 0]
 impl Dynamics for BouncingBall {
     type State = BouncingBallState;
+    type Input = NoInput;
 
-    fn dynamics(&self, state: &Self::State, _input: Option<&[f64]>) -> Self::State {
+    fn dynamics(&self, state: &Self::State, _input: Option<&Self::Input>) -> Self::State {
         let [m, friction_coeff] = self.extract(&["m", "friction_coeff"]);
         let [pos_y, v_x, v_y] = state.extract(&["pos_y", "v_x", "v_y"]);
         let g = c::GRAVITY;

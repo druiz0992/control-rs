@@ -6,6 +6,7 @@ use control_rs::physics::discretizer::{
 };
 use control_rs::physics::models::{DoublePendulum, DoublePendulumState};
 use control_rs::physics::simulator::{BasicSim, PhysicsSim};
+use control_rs::physics::traits::Dynamics;
 use control_rs::{plotter, utils};
 use std::f64::consts::PI;
 use std::sync::Arc;
@@ -37,14 +38,14 @@ fn main() {
     //let integrator = HermiteSimpson::new(&model, Arc::clone(&registry)).unwrap();
     let integrator =
         ImplicitMidpoint::new(&model, Arc::clone(&registry), Some(solver_options)).unwrap();
-    let sim = BasicSim::new(model, integrator);
+    let sim = BasicSim::new(model.clone(), integrator);
 
-    let history = sim.rollout(&state0, dt, steps);
-
-    let (times, states, energies) = utils::unzip3(history);
+    let states = sim.rollout(&state0, None, dt, steps).unwrap();
+    let times: Vec<_> = (0..states.len()).map(|i| i as f64 * dt).collect();
+    let energy: Vec<_> = states.iter().filter_map(|s| model.energy(s)).collect();
 
     plotter::plot_states(&times, &states, "/tmp/plot1.png").unwrap();
-    plotter::plot_energy(&times, &energies, "/tmp/plot2.png").unwrap();
+    plotter::plot_energy(&times, &energy, "/tmp/plot2.png").unwrap();
 
     plotter::display("/tmp/plot1.png").unwrap();
     plotter::display("/tmp/plot2.png").unwrap();

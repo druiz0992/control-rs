@@ -63,9 +63,9 @@ fn main() {
 
     let solver = NewtonSolverSymbolic::new_minimization(
         &cost,
-        Some(eq_constraints_expr.clone()),
+        Some(&eq_constraints_expr),
         //None,
-        Some(ineq_constraints_expr.clone()),
+        Some(&ineq_constraints_expr),
         &unknown_expr,
         &registry,
         Some(options),

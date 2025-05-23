@@ -71,7 +71,7 @@ impl<D: Dynamics> Discretizer<D> for ImplicitMidpoint<D> {
         &self,
         _model: &D,
         state: &D::State,
-        _input: Option<&[f64]>,
+        _input: Option<&D::Input>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
         let v_dims = D::State::dim_v();

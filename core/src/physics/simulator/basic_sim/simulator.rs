@@ -1,6 +1,7 @@
+use crate::physics::ModelError;
 use crate::physics::traits::{Discretizer, Dynamics, PhysicsSim};
-use crate::physics::{Energy, ModelError};
 
+#[derive(Debug)]
 pub struct BasicSim<M, D>
 where
     M: Dynamics,
@@ -26,30 +27,31 @@ where
     D: Discretizer<M>,
 {
     type Model = M;
+    type Discretizer = D;
 
     fn rollout(
         &self,
         initial_state: &M::State,
+        input: Option<&Vec<M::Input>>,
         dt: f64,
         steps: usize,
-    ) -> Vec<(f64, M::State, Energy)> {
+    ) -> Result<Vec<M::State>, ModelError> {
         let mut history = Vec::with_capacity(steps);
-        let mut t = 0.0;
-        let state = initial_state;
-        for _ in 0..steps {
-            let energy = self.model.energy(state).unwrap_or_default();
+        let mut state = initial_state.clone();
+        history.push(state.clone());
+        for i in 0..steps {
+            let current_input = input.and_then(|inputs| inputs.get(i));
 
-            history.push((t, state.clone(), energy));
-            let _ = self.step(state, None, dt);
-            t += dt;
+            state = self.step(&state, current_input, dt)?;
+            history.push(state.clone());
         }
-        history
+        Ok(history)
     }
 
     fn step(
         &self,
         state: &M::State,
-        input: Option<&[f64]>,
+        input: Option<&M::Input>,
         dt: f64,
     ) -> Result<M::State, ModelError> {
         let state = self.discretizer.step(&self.model, state, input, dt)?;
@@ -58,5 +60,8 @@ where
 
     fn model(&self) -> &Self::Model {
         &self.model
+    }
+    fn discretizer(&self) -> &Self::Discretizer {
+        &self.discretizer
     }
 }

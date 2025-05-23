@@ -51,7 +51,7 @@ where
         &self,
         _model: &D,
         state: &D::State,
-        input: Option<&[f64]>,
+        input: Option<&D::Input>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
         if dt != self.dt {
@@ -63,7 +63,8 @@ where
         let sm = self.state_matrix_d.clone();
         let cm = self.control_matrix_d.clone();
         let dv_state = DVector::from_vec(state.to_vec());
-        let dv_input = DVector::from_row_slice(input.unwrap_or(&vec![0.0; cm.ncols()]));
+        let dv_input =
+            DVector::from_vec((input.unwrap_or(&D::Input::default())).to_vec().to_owned());
 
         let r = sm * dv_state + cm * dv_input;
 

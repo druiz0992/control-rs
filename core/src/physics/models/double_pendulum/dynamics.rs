@@ -1,3 +1,4 @@
+use super::input::DoublePendulumInput;
 use super::model::DoublePendulum;
 use super::state::DoublePendulumState;
 use crate::common::Labelizable;
@@ -10,12 +11,19 @@ use std::sync::Arc;
 
 impl Dynamics for DoublePendulum {
     type State = DoublePendulumState;
+    type Input = DoublePendulumInput;
 
-    fn dynamics(&self, s: &DoublePendulumState, input: Option<&[f64]>) -> DoublePendulumState {
+    fn dynamics(
+        &self,
+        s: &DoublePendulumState,
+        input: Option<&Self::Input>,
+    ) -> DoublePendulumState {
         let [m1, m2, l1, l2, air_resistance_coeff] =
             self.extract(&["m1", "m2", "l1", "l2", "air_resistance_coeff"]);
         let [theta1, omega1, theta2, omega2] = s.extract(&["theta1", "omega1", "theta2", "omega2"]);
-        let u = input.unwrap_or(&[0.0, 0.0]);
+        let input = input.unwrap_or(&Self::Input::default()).clone();
+        let [u1, u2] = input.extract(&["u1", "u2"]);
+
         let g = c::GRAVITY;
 
         let c = (theta1 - theta2).cos();
@@ -28,12 +36,12 @@ impl Dynamics for DoublePendulum {
         let dω1 = (m2 * g * theta2.sin() * c
             - m2 * s * (l1 * c * omega1.powi(2) + l2 * omega2.powi(2))
             - (m1 + m2) * g * theta1.sin()
-            + (u[0] + damping1))
+            + (u1 + damping1))
             / (l1 * (m1 + m2 * s * s));
         let dtheta2 = omega2;
         let dω2 = ((m1 + m2) * (l1 * omega1.powi(2) * s - g * theta2.sin() + g * theta1.sin() * c)
             + m2 * l2 * omega2.powi(2) * s * c
-            + (u[1] + damping2))
+            + (u2 + damping2))
             / (l2 * (m1 + m2 * s * s));
 
         DoublePendulumState {
