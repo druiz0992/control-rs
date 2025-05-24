@@ -36,10 +36,10 @@ where
         dt: f64,
         steps: usize,
     ) -> Result<Vec<M::State>, ModelError> {
-        let mut history = Vec::with_capacity(steps);
+        let mut history = Vec::with_capacity(steps - 1);
         let mut state = initial_state.clone();
         history.push(state.clone());
-        for i in 0..steps {
+        for i in 0..steps - 1 {
             let current_input = input.and_then(|inputs| inputs.get(i));
 
             state = self.step(&state, current_input, dt)?;

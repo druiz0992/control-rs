@@ -1,19 +1,13 @@
-use crate::cost::CostFunction;
+use crate::controllers::{ControllerInput, ControllerState, CostFn, InputTrajectory};
 use crate::numeric_services::symbolic::{
     ExprRegistry, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
 };
 use crate::physics::ModelError;
 use crate::physics::constants as c;
 use crate::physics::discretizer::SymbolicDiscretizer;
-use crate::physics::models::Dynamics;
 use crate::physics::traits::{PhysicsSim, State, SymbolicDynamics};
 use nalgebra::DMatrix;
 use std::sync::Arc;
-
-type IndirectShootingState<S> = <<S as PhysicsSim>::Model as Dynamics>::State;
-type IndirectShootingInput<S> = <<S as PhysicsSim>::Model as Dynamics>::Input;
-type CostFn<S> =
-    Box<dyn CostFunction<State = IndirectShootingState<S>, Input = IndirectShootingInput<S>>>;
 
 /// Indirect Shooting controller follows Potryagin's Minimum Principle, which are the first
 /// order necessary conditions for a deterministic optimal control problem.
@@ -31,22 +25,6 @@ type CostFn<S> =
 ///   lambda_n = grad running_cost/x_n + lambda_n+1 * grad f/x_n
 ///   lambda_N = grad final_cost/x_N
 ///   u_n = argmin H(x_n, u_n, lambda_n+1)
-pub struct InputTrajectory<S: PhysicsSim>(Vec<IndirectShootingInput<S>>);
-
-impl<S: PhysicsSim> InputTrajectory<S> {
-    pub fn as_slice(&self) -> &[IndirectShootingInput<S>] {
-        &self.0
-    }
-    pub fn as_vec(&self) -> &Vec<IndirectShootingInput<S>> {
-        &self.0
-    }
-    pub fn as_mut_vec(&mut self) -> &Vec<IndirectShootingInput<S>> {
-        &self.0
-    }
-    pub fn to_vec(&self) -> Vec<IndirectShootingInput<S>> {
-        self.0.clone()
-    }
-}
 
 pub struct IndirectShooting<S: PhysicsSim> {
     sim: S,
@@ -62,36 +40,6 @@ pub struct IndirectShooting<S: PhysicsSim> {
     jacobian_x_fn: SymbolicFunction,
 }
 
-impl<S: PhysicsSim> From<&InputTrajectory<S>> for DMatrix<f64> {
-    fn from(value: &InputTrajectory<S>) -> DMatrix<f64> {
-        if value.0.is_empty() {
-            return DMatrix::from_column_slice(0, 0, &[]);
-        }
-        let input_dims = value.0[0].to_vec().len();
-        let mut mat = DMatrix::<f64>::zeros(input_dims, value.0.len());
-        value.0.iter().enumerate().for_each(|(i, v)| {
-            mat.set_column(i, &v.to_vector());
-        });
-        mat
-    }
-}
-impl<S: PhysicsSim> TryFrom<&DMatrix<f64>> for InputTrajectory<S> {
-    type Error = ModelError;
-    fn try_from(value: &DMatrix<f64>) -> Result<Self, Self::Error> {
-        if value.is_empty() {
-            return Err(ModelError::ConfigError(
-                "Input matrix cannot be empty".into(),
-            ));
-        }
-
-        Ok(InputTrajectory(
-            value
-                .column_iter()
-                .map(|v| IndirectShootingInput::<S>::from_slice(v.as_slice()))
-                .collect(),
-        ))
-    }
-}
 impl<S> IndirectShooting<S>
 where
     S: PhysicsSim,
@@ -110,9 +58,9 @@ where
                 "Incorrect time configuration".into(),
             ));
         }
-        let n_steps = (time_horizon / dt) as usize;
+        let n_steps = (time_horizon / dt) as usize + 1;
 
-        let u = IndirectShootingInput::<S>::default().to_vector();
+        let u = ControllerInput::<S>::default().to_vector();
         let mut u_traj = DMatrix::zeros(u.len(), n_steps - 1);
         for i in 0..n_steps - 1 {
             u_traj.set_column(i, &u);
@@ -138,10 +86,15 @@ where
         })
     }
 
+    pub fn get_u_traj(&self) -> Vec<ControllerInput<S>> {
+        let traj = InputTrajectory::<S>::try_from(&self.u_traj).unwrap();
+        traj.0.clone()
+    }
+
     fn rollout(
         &self,
-        initial_state: &IndirectShootingState<S>,
-    ) -> Result<Vec<IndirectShootingState<S>>, ModelError> {
+        initial_state: &ControllerState<S>,
+    ) -> Result<Vec<ControllerState<S>>, ModelError> {
         let u_traj = InputTrajectory::<S>::try_from(&self.u_traj)?;
         self.sim
             .rollout(initial_state, Some(u_traj.as_vec()), self.dt, self.n_steps)
@@ -149,7 +102,7 @@ where
 
     fn backward_pass(
         &self,
-        states: &[IndirectShootingState<S>],
+        states: &[ControllerState<S>],
     ) -> Result<DMatrix<f64>, ModelError> {
         if states.is_empty() {
             return Err(ModelError::ConfigError("Empty states".into()));
@@ -158,7 +111,7 @@ where
         let terminal_state = states.last().unwrap();
         let mut lambda = self.cost_fn.terminal_cost_gradient(terminal_state);
 
-        let input_dims = IndirectShootingInput::<S>::dim_q();
+        let input_dims = ControllerInput::<S>::dim_q();
         let r_matrix = self
             .cost_fn
             .get_r()
@@ -192,11 +145,11 @@ where
 
     pub fn step(
         &mut self,
-        states: &[IndirectShootingState<S>],
+        states: &mut Vec<ControllerState<S>>,
     ) -> Result<(&DMatrix<f64>, f64), ModelError> {
         let u_traj_delta = self.backward_pass(states)?;
 
-        let mut alpha = 0.1;
+        let mut alpha = 1.0;
         let b = 1e-2;
 
         let old_u_traj = self.u_traj.clone();
@@ -205,25 +158,26 @@ where
 
         while self.cost_fn.cost(&x_traj, &self.u_traj).unwrap()
             > self.cost_fn.cost(states, &old_u_traj).unwrap()
-                - b * alpha * (&u_traj_delta.transpose() * &u_traj_delta)[(0, 0)]
+                - b * alpha * &u_traj_delta.iter().map(|x| x * x).sum::<f64>()
         {
             alpha *= 0.5;
             self.u_traj = &old_u_traj + &u_traj_delta * alpha;
             x_traj = self.rollout(&states[0])?;
         }
+        *states = x_traj;
 
         Ok((&self.u_traj, u_traj_delta.abs().max()))
     }
 
     pub fn solve(
         &mut self,
-        initial_state: &IndirectShootingState<S>,
-    ) -> Result<Vec<IndirectShootingInput<S>>, ModelError> {
-        let old_states = self.rollout(initial_state)?;
+        initial_state: &ControllerState<S>,
+    ) -> Result<Vec<ControllerInput<S>>, ModelError> {
+        let mut states = self.rollout(initial_state)?;
         let mut grad_magnitude = 1.0;
 
         while grad_magnitude >= 1e-2 {
-            let r = self.step(&old_states)?;
+            let r = self.step(&mut states)?;
             grad_magnitude = r.1;
         }
 
@@ -233,7 +187,6 @@ where
     }
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -284,12 +237,12 @@ mod tests {
         let mut controller =
             IndirectShooting::new(sim, Box::new(cost), 5.0, dt, &registry).unwrap();
 
-        let old_states = controller.rollout(&initial_state).unwrap();
+        let mut states = controller.rollout(&initial_state).unwrap();
         let mut grad_magnitude = 1.0;
         let mut iter = 0;
 
         while grad_magnitude >= 1e-2 {
-            let r = controller.step(&old_states).unwrap();
+            let r = controller.step(&mut states).unwrap();
             grad_magnitude = r.1;
 
             let x_traj = controller.rollout(&initial_state).unwrap();
@@ -305,4 +258,3 @@ mod tests {
         }
     }
 }
-*/

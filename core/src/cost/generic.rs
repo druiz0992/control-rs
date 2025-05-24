@@ -3,6 +3,7 @@ use crate::physics::{ModelError, traits::State};
 use nalgebra::{DMatrix, DVector};
 use std::marker::PhantomData;
 
+#[derive(Clone)]
 pub struct GenericCost<S, I>
 where
     S: State,
