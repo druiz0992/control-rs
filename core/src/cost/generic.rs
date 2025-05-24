@@ -84,7 +84,7 @@ where
     type Input = I;
 
     fn cost(&self, state: &[S], input: &DMatrix<f64>) -> Result<f64, ModelError> {
-        if input.len() + 1 != state.len() {
+        if input.ncols() + 1 != state.len() {
             return Err(ModelError::ConfigError(
                 "State trajectory needs to have one more element than input trajectory".into(),
             ));
