@@ -7,18 +7,19 @@ pub mod rk4;
 pub mod utils;
 pub mod zero_order_hold;
 
-use crate::numeric_services::symbolic::ExprMatrix;
+use crate::numeric_services::symbolic::SymbolicFunction;
+use crate::physics::ModelError;
 use crate::physics::traits::Dynamics;
-use crate::{numeric_services::symbolic::ExprVector, physics::ModelError};
 pub use backward_euler::BackwardEuler;
 pub use forward_euler::ForwardEuler;
 pub use hermite_simpson::HermiteSimpson;
 pub use implicit_midpoint::ImplicitMidpoint;
 pub use mid_point::MidPoint;
+use nalgebra::DMatrix;
 pub use rk4::{RK4, RK4Symbolic};
 pub use zero_order_hold::ZOH;
 
-use super::traits::SymbolicDynamics;
+use super::traits::{LinearDynamics, SymbolicDynamics};
 
 pub trait Discretizer<D: Dynamics> {
     fn step(
@@ -31,5 +32,11 @@ pub trait Discretizer<D: Dynamics> {
 }
 
 pub trait SymbolicDiscretizer<D: SymbolicDynamics>: Discretizer<D> {
-    fn jacobian(&self, unknown: &ExprVector) -> Result<ExprMatrix, ModelError>;
+    fn jacobian_x(&self) -> Result<SymbolicFunction, ModelError>;
+    fn jacobian_u(&self) -> Result<SymbolicFunction, ModelError>;
+}
+
+pub trait LinearDiscretizer<D: LinearDynamics>: Discretizer<D> {
+    fn jacobian_x(&self) -> &DMatrix<f64>;
+    fn jacobian_u(&self) -> &DMatrix<f64>;
 }

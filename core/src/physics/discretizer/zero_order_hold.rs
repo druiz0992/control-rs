@@ -1,9 +1,11 @@
 use std::marker::PhantomData;
 
-use nalgebra::{DMatrix, DVector};
+use nalgebra::{DMatrix};
 
 use crate::physics::ModelError;
 use crate::physics::traits::{Discretizer, LinearDynamics, State};
+
+use super::LinearDiscretizer;
 
 const EXPM_TOL: f64 = 1e-6;
 const EXPM_MAX_ITERATIONS: usize = 50;
@@ -60,15 +62,14 @@ where
                 self.dt
             )));
         }
-        let sm = self.state_matrix_d.clone();
-        let cm = self.control_matrix_d.clone();
-        let dv_state = DVector::from_vec(state.to_vec());
-        let dv_input =
-            DVector::from_vec((input.unwrap_or(&D::Input::default())).to_vec().to_owned());
+        let sm = &self.state_matrix_d;
+        let cm = &self.control_matrix_d;
+        let dv_state = state.to_vector();
+        let dv_input = input.unwrap_or(&D::Input::default()).to_vector();
 
         let r = sm * dv_state + cm * dv_input;
 
-        Ok(D::State::from_vec(r.as_slice().to_vec()))
+        Ok(D::State::from_slice(r.as_slice()))
     }
 }
 
@@ -120,4 +121,13 @@ fn matrix_exponential(mat: &DMatrix<f64>) -> DMatrix<f64> {
     }
 
     result
+}
+
+impl<D: LinearDynamics> LinearDiscretizer<D> for ZOH<D> {
+    fn jacobian_x(&self) -> &DMatrix<f64> {
+        &self.state_matrix_d
+    }
+    fn jacobian_u(&self) -> &DMatrix<f64> {
+        &self.control_matrix_d
+    }
 }

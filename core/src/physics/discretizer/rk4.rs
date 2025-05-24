@@ -1,6 +1,5 @@
 use crate::numeric_services::symbolic::{
-    ExprMatrix, ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFunction,
-    TryIntoEvalResult,
+    ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
 };
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Discretizer, Dynamics, State};
@@ -119,8 +118,28 @@ impl<D: SymbolicDynamics> Discretizer<D> for RK4Symbolic<D> {
 }
 
 impl<D: SymbolicDynamics> SymbolicDiscretizer<D> for RK4Symbolic<D> {
-    fn jacobian(&self, unknown: &ExprVector) -> Result<ExprMatrix, ModelError> {
-        Ok(self.dynamics.jacobian(unknown)?)
+    fn jacobian_x(&self) -> Result<SymbolicFunction, ModelError> {
+        let state_symbol = self.registry.get_vector(c::STATE_SYMBOLIC).unwrap();
+        let input_symbol = self.registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
+        let jacobian_symbols = state_symbol.extend(&input_symbol);
+
+        let jacobian_x = self
+            .dynamics
+            .jacobian(&state_symbol)?
+            .to_fn(&self.registry)?;
+        Ok(SymbolicFunction::new(jacobian_x, &jacobian_symbols))
+    }
+
+    fn jacobian_u(&self) -> Result<SymbolicFunction, ModelError> {
+        let state_symbol = self.registry.get_vector(c::STATE_SYMBOLIC).unwrap();
+        let input_symbol = self.registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
+        let jacobian_symbols = state_symbol.extend(&input_symbol);
+
+        let jacobian_u = self
+            .dynamics
+            .jacobian(&input_symbol)?
+            .to_fn(&self.registry)?;
+        Ok(SymbolicFunction::new(jacobian_u, &jacobian_symbols))
     }
 }
 
