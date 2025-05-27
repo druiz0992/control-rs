@@ -1,6 +1,6 @@
 use super::model::DoublePendulum;
 use crate::{
-    common::Labelizable,
+    utils::Labelizable,
     physics::traits::{Renderable, State},
 };
 use nalgebra::Vector2;

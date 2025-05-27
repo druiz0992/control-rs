@@ -1,5 +1,6 @@
 use control_rs::controllers::Controller;
-use control_rs::controllers::IndirectShootingLQR;
+use control_rs::controllers::RicattiRecursionLQR;
+use control_rs::controllers::ricatti_lqr::options::RicattiLQROptions;
 use control_rs::cost::generic::GenericCost;
 use control_rs::physics::discretizer::ZOH;
 use control_rs::physics::models::{LtiInput, LtiModel, LtiState};
@@ -27,12 +28,12 @@ fn main() {
     let zero_x: Vec<_> = (0..n_steps).map(|_| LtiState::default()).collect();
     let cost = GenericCost::<_, LtiInput<1, 0>>::new(q_matrix, qn_matrix, r_matrix, zero_x.clone())
         .unwrap();
-
+    let options = RicattiLQROptions::enable_inifinte_horizon();
     let mut controller =
-        IndirectShootingLQR::new(sim, Box::new(cost.clone()), sim_time, dt).unwrap();
+        RicattiRecursionLQR::new(sim, Box::new(cost.clone()), sim_time, dt, options).unwrap();
 
     controller.solve(&initial_state).unwrap();
-    let x_traj = controller.rollout(&initial_state).unwrap();
+    let x_traj = controller.rollout_with_noise(&initial_state, 1e-2);
     let u_traj = controller.get_u_traj();
 
     let times: Vec<_> = (0..x_traj.len()).map(|i| i as f64 * dt).collect();

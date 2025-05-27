@@ -133,11 +133,11 @@ pub fn init_constrained_dynamics(
 
 #[cfg(test)]
 mod tests {
+    use crate::utils::helpers::within_tolerance;
     use crate::numeric_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
     use crate::physics::constants as c;
     use crate::physics::models::BouncingBall;
     use crate::physics::models::dynamics::SymbolicDynamics;
-    use crate::utils::within_tolerance;
 
     use super::*;
     use nalgebra::{DMatrix, DVector};

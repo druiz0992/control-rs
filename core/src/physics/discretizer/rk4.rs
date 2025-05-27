@@ -146,8 +146,8 @@ impl<D: SymbolicDynamics> SymbolicDiscretizer<D> for RK4Symbolic<D> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::helpers::within_tolerance;
     use crate::physics::models::{DoublePendulum, DoublePendulumState};
-    use crate::utils::within_tolerance;
     use proptest::prelude::*;
     use std::f64::consts::PI;
 

@@ -1,5 +1,5 @@
-use crate::common::Labelizable;
 use crate::numeric_services::symbolic::{SymbolicError, SymbolicEvalResult, TryIntoEvalResult};
+use crate::utils::Labelizable;
 use nalgebra::DVector;
 use std::ops::{Add, Div, Mul, Sub};
 
@@ -21,7 +21,7 @@ use std::ops::{Add, Div, Mul, Sub};
 /// ```rust
 /// use control_rs::physics::traits::State;
 /// use macros::{StateOps,LabelOps};
-/// use control_rs::common::Labelizable;
+/// use control_rs::utils::Labelizable;
 ///
 /// #[derive(Clone, Debug, StateOps, LabelOps)]
 /// struct MyState {

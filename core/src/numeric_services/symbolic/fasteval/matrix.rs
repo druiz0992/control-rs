@@ -1,8 +1,10 @@
 use super::ExprVector;
 use super::scalar::ExprScalar;
+use super::slab::ExprSlab;
 use crate::numeric_services::symbolic::dtos::{ExprRecord, SymbolicEvalResult, SymbolicFn};
 use crate::numeric_services::symbolic::error::SymbolicError;
 use crate::numeric_services::symbolic::ports::{SymbolicExpr, SymbolicRegistry};
+use fasteval::{Instruction, Slab};
 use nalgebra::DMatrix;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -354,6 +356,26 @@ impl ExprMatrix {
         } else {
             ExprMatrix::vstack(&[top, bottom])
         }
+    }
+
+    pub fn get_slab(&self) -> Result<ExprSlab, SymbolicError> {
+        let compiled_expr: Result<Vec<Vec<(Instruction, Slab)>>, SymbolicError> = self
+            .matrix
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .map(|e| e.compile_with_retry())
+                    .collect::<Result<Vec<_>, _>>() // collect inner row
+            })
+            .collect(); // 
+
+        let compiled_expr = compiled_expr?;
+        let slabs: Vec<Vec<Slab>> = compiled_expr
+            .into_iter()
+            .map(|row| row.into_iter().map(|(_, slab)| slab).collect())
+            .collect();
+
+        Ok(ExprSlab::Matrix(slabs))
     }
 }
 

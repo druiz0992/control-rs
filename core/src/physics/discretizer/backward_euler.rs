@@ -1,7 +1,7 @@
 use nalgebra::{DMatrix, DVector};
 
 use super::utils;
-use crate::common::Labelizable;
+use crate::utils::Labelizable;
 use crate::numeric_services::solver::{NewtonSolverSymbolic, OptimizerConfig};
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::models::dynamics::SymbolicDynamics;

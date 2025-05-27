@@ -3,6 +3,7 @@ pub mod macros;
 pub mod matrix;
 pub mod registry;
 pub mod scalar;
+pub mod slab;
 pub mod utils;
 pub mod vector;
 

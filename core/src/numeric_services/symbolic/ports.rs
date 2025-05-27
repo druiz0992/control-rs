@@ -1,5 +1,5 @@
-use super::error::SymbolicError;
 use super::dtos::SymbolicFn;
+use super::error::SymbolicError;
 use std::sync::Arc;
 
 /// A trait that defines a registry for managing symbolic expressions.
@@ -39,6 +39,7 @@ where
 {
     fn clone_box(&self) -> Box<dyn SymbolicExpr<R>>;
     fn to_fn(&self, registry: &Arc<R>) -> Result<SymbolicFn, SymbolicError>;
+    //fn to_closure(&self) -> Result<SymbolicClosure, SymbolicError>;
 }
 
 /// Implements the `Clone` trait for boxed `SymbolicExpr` objects.

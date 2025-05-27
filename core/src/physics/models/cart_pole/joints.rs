@@ -1,5 +1,5 @@
 use super::model::CartPole;
-use crate::{common::Labelizable, physics::traits::Renderable};
+use crate::{utils::Labelizable, physics::traits::Renderable};
 use nalgebra::Vector2;
 
 impl Renderable for CartPole {

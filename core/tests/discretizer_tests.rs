@@ -1,4 +1,4 @@
-use control_rs::common::Labelizable;
+use control_rs::utils::Labelizable;
 use control_rs::numeric_services::symbolic::ExprRegistry;
 use control_rs::physics::discretizer::{
     BackwardEuler, ForwardEuler, HermiteSimpson, ImplicitMidpoint, MidPoint, RK4, RK4Symbolic, ZOH,

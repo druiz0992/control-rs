@@ -1,4 +1,5 @@
 use super::derivatives::compute_derivatives;
+use super::slab::ExprSlab;
 use crate::numeric_services::differentiation::dtos::DerivativeType;
 use crate::numeric_services::symbolic::dtos::{ExprRecord, SymbolicEvalResult, SymbolicFn};
 use crate::numeric_services::symbolic::error::SymbolicError;
@@ -244,38 +245,44 @@ impl ExprScalar {
 
         Ok((lagrangian, mus, lambdas))
     }
+
+    pub fn compile_with_retry(&self) -> Result<(Instruction, Slab), SymbolicError> {
+        let expr_str = self.as_str();
+        let parser = Parser {
+            expr_depth_limit: DEFAULT_EXPR_DEPTH_LIMIT * 10,
+            expr_len_limit: DEFAULT_EXPR_LEN_LIMIT * 100,
+        };
+        let mut capacity = SLAB_DEFAULT_CAPACITY;
+        let mut slab = Slab::with_capacity(capacity);
+
+        loop {
+            if capacity > SLAB_MAX_CAPACITY {
+                return Err(SymbolicError::Other("Slab reached maximum capacity".into()));
+            }
+            match parser.parse(expr_str, &mut slab.ps) {
+                Ok(p) => {
+                    let instruction = p.from(&slab.ps).compile(&slab.ps, &mut slab.cs);
+                    break Ok((instruction, slab));
+                }
+                Err(Error::SlabOverflow) => {
+                    capacity *= 2;
+                    slab = Slab::with_capacity(capacity);
+                    continue;
+                }
+                Err(e) => return Err(SymbolicError::Other(e.to_string())),
+            };
+        }
+    }
+
+    pub fn get_slab(&self) -> Result<ExprSlab, SymbolicError> {
+        let (_, slab) = self.compile_with_retry()?;
+        Ok(ExprSlab::Scalar(Box::new(slab)))
+    }
 }
 
 impl std::fmt::Display for ExprScalar {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
-    }
-}
-
-fn compile_with_retry(expr_str: &str) -> Result<(Instruction, Slab), SymbolicError> {
-    let parser = Parser {
-        expr_depth_limit: DEFAULT_EXPR_DEPTH_LIMIT * 10,
-        expr_len_limit: DEFAULT_EXPR_LEN_LIMIT * 100,
-    };
-    let mut capacity = SLAB_DEFAULT_CAPACITY;
-    let mut slab = Slab::with_capacity(capacity);
-
-    loop {
-        if capacity > SLAB_MAX_CAPACITY {
-            return Err(SymbolicError::Other("Slab reached maximum capacity".into()));
-        }
-        match parser.parse(expr_str, &mut slab.ps) {
-            Ok(p) => {
-                let instruction = p.from(&slab.ps).compile(&slab.ps, &mut slab.cs);
-                break Ok((instruction, slab));
-            }
-            Err(Error::SlabOverflow) => {
-                capacity *= 2;
-                slab = Slab::with_capacity(capacity);
-                continue;
-            }
-            Err(e) => return Err(SymbolicError::Other(e.to_string())),
-        };
     }
 }
 
@@ -288,10 +295,9 @@ where
     }
 
     fn to_fn(&self, registry: &Arc<R>) -> Result<SymbolicFn, SymbolicError> {
-        let expr_str = self.to_string();
         let registry = Arc::clone(registry);
 
-        let (compiled, slab) = compile_with_retry(&expr_str)?;
+        let (compiled, slab) = self.compile_with_retry()?;
         Ok(Box::new(move |vars_opt: Option<&HashMap<String, f64>>| {
             compiled
                 .eval(&slab, &mut {

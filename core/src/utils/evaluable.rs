@@ -25,3 +25,5 @@ impl Evaluable for SymbolicFunction {
         Ok(self.eval(vals).try_into_eval_result()?)
     }
 }
+
+pub type EvaluableDMatrix = Box<dyn Evaluable<Output = DMatrix<f64>>>;

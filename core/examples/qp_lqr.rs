@@ -1,5 +1,5 @@
 use control_rs::controllers::Controller;
-use control_rs::controllers::IndirectShootingLQR;
+use control_rs::controllers::QPLQR;
 use control_rs::cost::generic::GenericCost;
 use control_rs::physics::discretizer::ZOH;
 use control_rs::physics::models::{LtiInput, LtiModel, LtiState};
@@ -27,9 +27,17 @@ fn main() {
     let zero_x: Vec<_> = (0..n_steps).map(|_| LtiState::default()).collect();
     let cost = GenericCost::<_, LtiInput<1, 0>>::new(q_matrix, qn_matrix, r_matrix, zero_x.clone())
         .unwrap();
-
-    let mut controller =
-        IndirectShootingLQR::new(sim, Box::new(cost.clone()), sim_time, dt).unwrap();
+    let u_limits = (-1.0, 1.0);
+    let mut controller = QPLQR::new(
+        sim,
+        Box::new(cost.clone()),
+        &initial_state,
+        Some(u_limits),
+        //None,
+        sim_time,
+        dt,
+    )
+    .unwrap();
 
     controller.solve(&initial_state).unwrap();
     let x_traj = controller.rollout(&initial_state).unwrap();
