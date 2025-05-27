@@ -342,6 +342,8 @@ pub type SolverResult = (
     LagrangianMultiplier,
     LagrangianMultiplier,
 );
+
+#[derive(Debug)]
 pub enum LagrangianMultiplier {
     Lambdas(Vec<f64>),
     Mus(Vec<f64>),

@@ -6,6 +6,8 @@ use control_rs::numeric_services::symbolic::fasteval::utils::*;
 use control_rs::numeric_services::symbolic::{
     ExprScalar, ExprVector, SymbolicEvalResult, SymbolicExpr, SymbolicFunction,
 };
+use control_rs::solver::Minimizer;
+use control_rs::solver::osqp::builder::OSQPBuilder;
 use control_rs::solver::qp::QPBuilder;
 use nalgebra::{DMatrix, DVector};
 use std::sync::Arc;
@@ -452,9 +454,140 @@ fn test_qp() {
     let (_, status, _, _) = solver.solve_qp(&[0.0, 0.0, 0.0, 0.0]).unwrap();
 
     let tol = 1e-5;
+    dbg!(&status);
     assert!(status.stationarity < tol);
     assert!(status.max_primal_feasibility_c.unwrap() < tol);
     assert!(status.min_primal_feasibility_h.unwrap() > -tol);
     assert!(status.dual_feasibility.unwrap() > -tol);
     assert!(status.complementary_slackness.unwrap() < tol);
+}
+
+#[test]
+fn test_osqp_handle() {
+    let big_q_data = vec![
+        1.0, 0.3, 0.0, 0.0, // row 1
+        0.3, 1.0, 0.0, 0.0, // row 2
+        0.0, 0.0, 2.0, 0.0, // row 3
+        0.0, 0.0, 0.0, 4.0, // row 4
+    ];
+
+    let big_a_data = vec![0.0, 0.0, 1.0, 1.0, -1.0, 2.3, 1.0, -2.0];
+
+    let identity = DMatrix::<f64>::identity(4, 4);
+    let neg_identity = -&identity;
+
+    let primal_max = [1.0, 1.0, 1.0, 1.0];
+    let primal_min = [-0.5, -0.5, -1.0, -1.0];
+    let neg_primal_max: Vec<f64> = primal_max.iter().map(|x| -x).collect();
+    let mut h_data = neg_primal_max;
+    h_data.extend(primal_min);
+
+    // objective: 0.5 * X' * Q * X + q * X
+    let big_q = DMatrix::from_row_slice(4, 4, &big_q_data);
+    let q = DVector::from_vec(vec![-2.0, 3.4, 2.0, 4.0]);
+    // eq constraints: A * X - b
+    let big_a = DMatrix::from_row_slice(2, 4, &big_a_data);
+    let b = DVector::from_vec(vec![1.0, 3.0]);
+    // ineq constraints: G*x - h
+    let big_g = DMatrix::from_rows(
+        &neg_identity
+            .row_iter()
+            .chain(identity.row_iter())
+            .collect::<Vec<_>>(),
+    );
+    let h = DVector::from_vec(h_data);
+
+    let qp_builder = OSQPBuilder::new();
+    let solver = qp_builder
+        .q_mat(big_q)
+        .q_vec(q)
+        .a_mat(big_a)
+        .b_vec(b)
+        .g_mat(big_g)
+        .h_vec(h)
+        .build()
+        .unwrap();
+
+    let (_, status, _, _) = solver.minimize(&[]).unwrap();
+    let tol = 1e-5;
+    assert!(status.min_primal_feasibility_h.unwrap() > -tol);
+    assert!(status.dual_feasibility.unwrap() > -tol);
+}
+
+#[test]
+fn test_osqp_handle_no_eq() {
+    let big_q_data = vec![
+        1.0, 0.3, 0.0, 0.0, // row 1
+        0.3, 1.0, 0.0, 0.0, // row 2
+        0.0, 0.0, 2.0, 0.0, // row 3
+        0.0, 0.0, 0.0, 4.0, // row 4
+    ];
+
+    let identity = DMatrix::<f64>::identity(4, 4);
+    let neg_identity = -&identity;
+
+    let primal_max = [1.0, 1.0, 1.0, 1.0];
+    let primal_min = [-0.5, -0.5, -1.0, -1.0];
+    let neg_primal_max: Vec<f64> = primal_max.iter().map(|x| -x).collect();
+    let mut h_data = neg_primal_max;
+    h_data.extend(primal_min);
+
+    // objective: 0.5 * X' * Q * X + q * X
+    let big_q = DMatrix::from_row_slice(4, 4, &big_q_data);
+    let q = DVector::from_vec(vec![-2.0, 3.4, 2.0, 4.0]);
+    // ineq constraints: G*x - h
+    let big_g = DMatrix::from_rows(
+        &neg_identity
+            .row_iter()
+            .chain(identity.row_iter())
+            .collect::<Vec<_>>(),
+    );
+    let h = DVector::from_vec(h_data);
+
+    let qp_builder = OSQPBuilder::new();
+    let solver = qp_builder
+        .q_mat(big_q)
+        .q_vec(q)
+        .g_mat(big_g)
+        .h_vec(h)
+        .build()
+        .unwrap();
+
+    let (_, status, _, _) = solver.minimize(&[]).unwrap();
+    let tol = 1e-5;
+    assert!(status.min_primal_feasibility_h.unwrap() > -tol);
+    assert!(status.dual_feasibility.unwrap() > -tol);
+}
+
+#[test]
+fn test_osqp_handle_no_ineq() {
+    let big_q_data = vec![
+        1.0, 0.3, 0.0, 0.0, // row 1
+        0.3, 1.0, 0.0, 0.0, // row 2
+        0.0, 0.0, 2.0, 0.0, // row 3
+        0.0, 0.0, 0.0, 4.0, // row 4
+    ];
+
+    let big_a_data = vec![0.0, 0.0, 1.0, 1.0, -1.0, 2.3, 1.0, -2.0];
+
+    // objective: 0.5 * X' * Q * X + q * X
+    let big_q = DMatrix::from_row_slice(4, 4, &big_q_data);
+    let q = DVector::from_vec(vec![-2.0, 3.4, 2.0, 4.0]);
+    // eq constraints: A * X - b
+    let big_a = DMatrix::from_row_slice(2, 4, &big_a_data);
+    let b = DVector::from_vec(vec![1.0, 3.0]);
+
+    let qp_builder = OSQPBuilder::new();
+    let solver = qp_builder
+        .q_mat(big_q)
+        .q_vec(q)
+        .a_mat(big_a)
+        .b_vec(b)
+        .build()
+        .unwrap();
+
+    let (_, status, _, _) = solver.minimize(&[]).unwrap();
+    let tol = 1e-5;
+    assert!(status.min_primal_feasibility_h.unwrap() > -tol);
+    assert!(status.dual_feasibility.unwrap() > -tol);
 }

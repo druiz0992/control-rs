@@ -1,14 +1,12 @@
 pub mod lqr;
 pub mod symbolic;
 
-use crate::common::evaluable::Evaluable;
 use crate::controllers::{ControllerInput, ControllerState, CostFn, InputTrajectory};
 use crate::physics::ModelError;
 use crate::physics::models::Dynamics;
 use crate::physics::traits::{Discretizer, PhysicsSim, State};
+use crate::utils::evaluable::EvaluableDMatrix;
 use nalgebra::DMatrix;
-
-type EvaluableDMatrix = Box<dyn Evaluable<Output = DMatrix<f64>>>;
 
 /// Indirect Shooting controller follows Potryagin's Minimum Principle, which are the first
 /// order necessary conditions for a deterministic optimal control problem.
@@ -26,6 +24,7 @@ type EvaluableDMatrix = Box<dyn Evaluable<Output = DMatrix<f64>>>;
 ///   lambda_n = grad running_cost/x_n + lambda_n+1 * grad f/x_n
 ///   lambda_N = grad final_cost/x_N
 ///   u_n = argmin H(x_n, u_n, lambda_n+1)
+///
 struct IndirectShootingGeneric<S: PhysicsSim> {
     sim: S,
     cost_fn: CostFn<S>,

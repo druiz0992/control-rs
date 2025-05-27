@@ -189,7 +189,6 @@ impl QP {
             } else if self.ip_kkt_conditions(&z, rho).amax() < self.options.get_tolerance() {
                 rho *= 0.1;
             }
-            dbg!(&z);
         }
 
         Err(ModelError::SolverError(

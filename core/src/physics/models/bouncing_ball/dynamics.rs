@@ -1,6 +1,6 @@
 use super::model::BouncingBall;
 use super::state::BouncingBallState;
-use crate::common::Labelizable;
+use crate::utils::Labelizable;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::models::NoInput;
 use crate::physics::models::dynamics::SymbolicDynamics;
@@ -111,8 +111,8 @@ impl SymbolicDynamics for BouncingBall {
 
 #[cfg(test)]
 mod tests {
+    use crate::utils::helpers::within_tolerance;
     use crate::numeric_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
-    use crate::utils::within_tolerance;
 
     use super::*;
     use proptest::prelude::*;

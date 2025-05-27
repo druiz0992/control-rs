@@ -1,5 +1,5 @@
 use super::state::DoublePendulumState;
-use crate::common::Labelizable;
+use crate::utils::Labelizable;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
 use crate::physics::constants as c;
 use macros::LabelOps;

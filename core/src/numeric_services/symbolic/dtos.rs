@@ -56,6 +56,9 @@ pub type SymbolicFn = Box<
         + Sync,
 >;
 
+pub type SymbolicClosure =
+    Box<dyn Fn(&[f64]) -> Result<SymbolicEvalResult, SymbolicError> + Send + Sync>;
+
 pub struct SymbolicFunction {
     func: SymbolicFn,
     param_names: Vec<String>,

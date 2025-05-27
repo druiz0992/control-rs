@@ -7,7 +7,7 @@ use control_rs::physics::discretizer::{
 use control_rs::physics::models::{DoublePendulum, DoublePendulumState};
 use control_rs::physics::simulator::{BasicSim, PhysicsSim};
 use control_rs::physics::traits::Dynamics;
-use control_rs::{plotter, utils};
+use control_rs::{utils::helpers, plotter};
 use std::f64::consts::PI;
 use std::sync::Arc;
 

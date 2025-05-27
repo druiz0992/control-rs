@@ -1,8 +1,10 @@
 pub mod linear_solver;
+pub mod osqp;
 pub mod qp;
 pub mod symbolic_solver;
 
 pub use linear_solver::LinearSolver;
+pub use osqp::{OSQPBuilder, OSQPSolver};
 pub use qp::{QP, QPBuilder};
 
 use crate::{numeric_services::solver::dtos::SolverResult, physics::ModelError};

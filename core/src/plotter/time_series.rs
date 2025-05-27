@@ -1,4 +1,4 @@
-use crate::common::Labelizable;
+use crate::utils::Labelizable;
 use crate::numeric_services::symbolic::{
     ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
 };

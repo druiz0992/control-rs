@@ -1,14 +1,25 @@
-use nalgebra::DMatrix;
-
-use crate::{cost::CostFunction, physics::{models::Dynamics, traits::{PhysicsSim, State}, ModelError}};
-
 pub mod indirect_shooting;
+pub mod qp_lqr;
+pub mod ricatti_lqr;
 
+pub use indirect_shooting::lqr::IndirectShootingLQR;
+pub use indirect_shooting::symbolic::IndirectShootingSymbolic;
+pub use qp_lqr::lqr::QPLQR;
+pub use ricatti_lqr::lqr::RicattiRecursionLQR;
+
+use crate::{
+    cost::CostFunction,
+    physics::{
+        ModelError,
+        models::Dynamics,
+        traits::{PhysicsSim, State},
+    },
+};
+use nalgebra::DMatrix;
 
 type ControllerState<S> = <<S as PhysicsSim>::Model as Dynamics>::State;
 type ControllerInput<S> = <<S as PhysicsSim>::Model as Dynamics>::Input;
-type CostFn<S> =
-    Box<dyn CostFunction<State = ControllerState<S>, Input = ControllerInput<S>>>;
+type CostFn<S> = Box<dyn CostFunction<State = ControllerState<S>, Input = ControllerInput<S>>>;
 
 pub struct InputTrajectory<S: PhysicsSim>(Vec<ControllerInput<S>>);
 
@@ -26,7 +37,7 @@ impl<S: PhysicsSim> InputTrajectory<S> {
         self.0.clone()
     }
 }
-    
+
 impl<S: PhysicsSim> From<&InputTrajectory<S>> for DMatrix<f64> {
     fn from(value: &InputTrajectory<S>) -> DMatrix<f64> {
         if value.0.is_empty() {
@@ -57,4 +68,18 @@ impl<S: PhysicsSim> TryFrom<&DMatrix<f64>> for InputTrajectory<S> {
                 .collect(),
         ))
     }
+}
+
+pub trait Controller<S: PhysicsSim> {
+    fn get_u_traj(&self) -> Vec<ControllerInput<S>>;
+
+    fn rollout(
+        &self,
+        initial_state: &ControllerState<S>,
+    ) -> Result<Vec<ControllerState<S>>, ModelError>;
+
+    fn solve(
+        &mut self,
+        initial_state: &ControllerState<S>,
+    ) -> Result<Vec<ControllerInput<S>>, ModelError>;
 }
