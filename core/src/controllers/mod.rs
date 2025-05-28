@@ -1,11 +1,11 @@
 pub mod indirect_shooting;
 pub mod qp_lqr;
-pub mod ricatti_lqr;
+pub mod riccati_lqr;
 
 pub use indirect_shooting::lqr::IndirectShootingLQR;
 pub use indirect_shooting::symbolic::IndirectShootingSymbolic;
 pub use qp_lqr::lqr::QPLQR;
-pub use ricatti_lqr::lqr::RicattiRecursionLQR;
+pub use riccati_lqr::lqr::RiccatiRecursionLQR;
 
 use crate::{
     cost::CostFunction,

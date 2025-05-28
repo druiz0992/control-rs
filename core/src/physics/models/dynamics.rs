@@ -1,5 +1,10 @@
-use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
-use crate::physics::Energy;
+use crate::numeric_services::symbolic::{
+    ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFunction,
+};
+use crate::physics::constants as c;
+use crate::physics::traits::State;
+use crate::physics::{Energy, ModelError};
+use crate::utils::evaluable::Evaluable;
 use nalgebra::{DMatrix, Vector2};
 use std::sync::Arc;
 
@@ -22,6 +27,34 @@ pub trait SymbolicDynamics: Dynamics {
         _registry: &Arc<ExprRegistry>,
     ) -> Option<ExprVector> {
         None
+    }
+    fn linearize(
+        &self,
+        x_ref: &[f64],
+        u_ref: &[f64],
+        registry: &Arc<ExprRegistry>,
+    ) -> Result<(DMatrix<f64>, DMatrix<f64>), ModelError> {
+        let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
+        let input_symbol = registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
+        let jacobian_symbols = state_symbol.extend(&input_symbol);
+        let mut vals = x_ref.to_vec();
+        vals.extend(u_ref.to_vec());
+
+        let jacobian_x = self
+            .dynamics_symbolic(&state_symbol, registry)
+            .jacobian(&state_symbol)?
+            .to_fn(registry)?;
+        let df_dx = SymbolicFunction::new(jacobian_x, &jacobian_symbols);
+        let a_mat: DMatrix<f64> = df_dx.evaluate(&vals)?;
+
+        let jacobian_u = self
+            .dynamics_symbolic(&state_symbol, registry)
+            .jacobian(&input_symbol)?
+            .to_fn(registry)?;
+        let df_du = SymbolicFunction::new(jacobian_u, &jacobian_symbols);
+        let b_mat: DMatrix<f64> = df_du.evaluate(&vals)?;
+
+        Ok((a_mat, b_mat))
     }
 }
 

@@ -1,25 +1,26 @@
 use nalgebra::DMatrix;
 
-use super::options::RicattiLQROptions;
-use crate::controllers::ricatti_lqr::recursion;
+use super::options::RiccatiLQROptions;
+use crate::controllers::riccati_lqr::recursion;
 use crate::controllers::{Controller, ControllerInput, ControllerState, CostFn, InputTrajectory};
 use crate::physics::ModelError;
 use crate::physics::discretizer::LinearDiscretizer;
 use crate::physics::traits::{LinearDynamics, PhysicsSim, State};
 
-pub struct RicattiRecursionLQR<S: PhysicsSim> {
+pub struct RiccatiRecursionLQR<S: PhysicsSim> {
     sim: S,
     cost_fn: CostFn<S>,
     u_traj: InputTrajectory<S>,
     k_seq: Vec<DMatrix<f64>>,
+    p_seq: Vec<DMatrix<f64>>,
 
     n_steps: usize,
     dt: f64,
 
-    options: RicattiLQROptions,
+    options: RiccatiLQROptions<S>,
 }
 
-impl<S> RicattiRecursionLQR<S>
+impl<S> RiccatiRecursionLQR<S>
 where
     S: PhysicsSim,
     S::Model: LinearDynamics,
@@ -30,7 +31,7 @@ where
         cost_fn: CostFn<S>,
         time_horizon: f64,
         dt: f64,
-        options: RicattiLQROptions,
+        options: RiccatiLQROptions<S>,
     ) -> Result<Self, ModelError> {
         if time_horizon <= 0.0 || dt <= 0.0 {
             return Err(ModelError::ConfigError(
@@ -41,11 +42,12 @@ where
 
         let u_traj = InputTrajectory(vec![ControllerInput::<S>::default(); n_steps - 1]);
 
-        Ok(RicattiRecursionLQR {
+        Ok(RiccatiRecursionLQR {
             sim,
             cost_fn,
             options,
             k_seq: Vec::new(),
+            p_seq: Vec::new(),
             u_traj,
             n_steps,
             dt,
@@ -83,7 +85,7 @@ where
     }
 }
 
-impl<S> Controller<S> for RicattiRecursionLQR<S>
+impl<S> Controller<S> for RiccatiRecursionLQR<S>
 where
     S: PhysicsSim,
     S::Model: LinearDynamics,
@@ -92,7 +94,7 @@ where
     fn get_u_traj(&self) -> Vec<ControllerInput<S>> {
         self.u_traj.0.clone()
     }
-
+    /*
     fn rollout(
         &self,
         initial_state: &ControllerState<S>,
@@ -103,6 +105,25 @@ where
             self.dt,
             self.n_steps,
         )
+    }
+    */
+    fn rollout(
+        &self,
+        initial_state: &ControllerState<S>,
+    ) -> Result<Vec<ControllerState<S>>, ModelError> {
+        let mut state = vec![initial_state.clone(); self.n_steps];
+        let input = self.u_traj.to_vec();
+        for k in 0..self.n_steps {
+            let next_input = ControllerInput::<S>::from_vector(input[k].to_vector() * 12.0);
+            if let Some(next_state) = self
+                .sim
+                .rollout(&state[k], Some(&vec![next_input]), self.dt, 1)?
+                .first()
+            {
+                state[k + 1] = next_state.clone();
+            }
+        }
+        Ok(state)
     }
 
     fn solve(
@@ -130,12 +151,13 @@ where
             .cloned()
             .unwrap_or(DMatrix::zeros(input_dim, input_dim));
 
-        self.k_seq = if self.options.get_steady_state() {
-            let k_ss =
+        (self.k_seq, self.p_seq) = if self.options.get_steady_state() {
+            let (p_ss, k_ss) =
                 recursion::solve_steady_state_lqr(a_mat, b_mat, &q_mat, &r_mat, &self.options)?;
-            vec![k_ss; self.n_steps - 1]
+            (vec![k_ss; self.n_steps - 1], vec![p_ss; self.n_steps - 1])
         } else {
-            let mut p_mat = self
+            let mut p_seq = vec![DMatrix::zeros(input_dim, state_dim); self.n_steps];
+            p_seq[self.n_steps] = self
                 .cost_fn
                 .get_qn()
                 .cloned()
@@ -143,17 +165,20 @@ where
             let mut k_seq = vec![DMatrix::zeros(input_dim, state_dim); self.n_steps - 1];
             for k in (0..self.n_steps - 1).rev() {
                 let (p, k_gain) =
-                    recursion::ricatti_recursion(a_mat, b_mat, &q_mat, &r_mat, &p_mat)?;
+                    recursion::riccati_recursion(a_mat, b_mat, &q_mat, &r_mat, &p_seq[k + 1])?;
                 k_seq[k] = k_gain;
-                p_mat = p;
+                p_seq[k] = p;
             }
-            k_seq
+            (k_seq, p_seq)
         };
+
+        let x_ref = self.options.get_x_ref().to_vector();
+        let u_equlibrium = self.options.get_u_equilibrium().to_vector();
 
         // Common rollout using `k_seq`
         for k in 0..self.n_steps - 1 {
             let x_k_vec = x_traj[k].to_vector();
-            let u_k_vec = -&self.k_seq[k] * &x_k_vec;
+            let u_k_vec = &u_equlibrium - &self.k_seq[k] * (&x_k_vec - &x_ref);
             let u_k = ControllerInput::<S>::from_vector(u_k_vec.clone());
             u_traj[k] = u_k;
 

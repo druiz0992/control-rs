@@ -1,6 +1,6 @@
 use control_rs::controllers::Controller;
-use control_rs::controllers::RicattiRecursionLQR;
-use control_rs::controllers::ricatti_lqr::options::RicattiLQROptions;
+use control_rs::controllers::RiccatiRecursionLQR;
+use control_rs::controllers::riccati_lqr::options::RiccatiLQROptions;
 use control_rs::cost::generic::GenericCost;
 use control_rs::physics::discretizer::ZOH;
 use control_rs::physics::models::{LtiInput, LtiModel, LtiState};
@@ -28,9 +28,9 @@ fn main() {
     let zero_x: Vec<_> = (0..n_steps).map(|_| LtiState::default()).collect();
     let cost = GenericCost::<_, LtiInput<1, 0>>::new(q_matrix, qn_matrix, r_matrix, zero_x.clone())
         .unwrap();
-    let options = RicattiLQROptions::enable_inifinte_horizon();
+    let options = RiccatiLQROptions::enable_inifinte_horizon();
     let mut controller =
-        RicattiRecursionLQR::new(sim, Box::new(cost.clone()), sim_time, dt, options).unwrap();
+        RiccatiRecursionLQR::new(sim, Box::new(cost.clone()), sim_time, dt, options).unwrap();
 
     controller.solve(&initial_state).unwrap();
     let x_traj = controller.rollout_with_noise(&initial_state, 1e-2);
