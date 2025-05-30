@@ -2,7 +2,6 @@ use crate::numeric_services::symbolic::{
     ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFunction,
 };
 use crate::physics::constants as c;
-use crate::physics::traits::State;
 use crate::physics::{Energy, ModelError};
 use crate::utils::evaluable::Evaluable;
 use nalgebra::{DMatrix, Vector2};
@@ -28,6 +27,8 @@ pub trait SymbolicDynamics: Dynamics {
     ) -> Option<ExprVector> {
         None
     }
+
+    /*
     fn linearize(
         &self,
         x_ref: &[f64],
@@ -56,6 +57,7 @@ pub trait SymbolicDynamics: Dynamics {
 
         Ok((a_mat, b_mat))
     }
+    */
 }
 
 pub trait LinearDynamics: Dynamics {

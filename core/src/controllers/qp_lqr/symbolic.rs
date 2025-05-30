@@ -2,18 +2,18 @@ use super::common::QPLQRGeneric;
 use crate::controllers::options::ControllerOptions;
 use crate::controllers::{Controller, ControllerInput, ControllerState, CostFn};
 use crate::physics::ModelError;
-use crate::physics::discretizer::LinearDiscretizer;
-use crate::physics::traits::{LinearDynamics, PhysicsSim};
+use crate::physics::discretizer::SymbolicDiscretizer;
+use crate::physics::traits::{PhysicsSim, SymbolicDynamics};
 use crate::solver::OSQPBuilder;
 use crate::solver::osqp::builder::QPParams;
 
-pub struct QPLQR<S: PhysicsSim>(QPLQRGeneric<S>);
+pub struct QPLQRSymbolic<S: PhysicsSim>(QPLQRGeneric<S>);
 
-impl<S> QPLQR<S>
+impl<S> QPLQRSymbolic<S>
 where
     S: PhysicsSim,
-    S::Model: LinearDynamics,
-    S::Discretizer: LinearDiscretizer<S::Model>,
+    S::Model: SymbolicDynamics,
+    S::Discretizer: SymbolicDiscretizer<S::Model>,
 {
     pub fn new(
         sim: S,
@@ -23,13 +23,8 @@ where
         dt: f64,
         options: Option<ControllerOptions<S>>,
     ) -> Result<(Self, QPParams), ModelError> {
-        if time_horizon <= 0.0 || dt <= 0.0 {
-            return Err(ModelError::ConfigError(
-                "Incorrect time configuration".into(),
-            ));
-        }
-        let jacobian_u = Box::new(sim.discretizer().jacobian_u().clone());
-        let jacobian_x = Box::new(sim.discretizer().jacobian_x().clone());
+        let jacobian_u = Box::new(sim.discretizer().jacobian_u()?);
+        let jacobian_x = Box::new(sim.discretizer().jacobian_x()?);
 
         let options = options.unwrap_or_default();
 
@@ -44,14 +39,14 @@ where
             options,
         )?;
 
-        Ok((QPLQR(controller), updatable_qp_params))
+        Ok((QPLQRSymbolic(controller), updatable_qp_params))
     }
     pub fn update(&self, builder: OSQPBuilder) {
         self.0.update(builder);
     }
 }
 
-impl<S: PhysicsSim> Controller<S> for QPLQR<S> {
+impl<S: PhysicsSim> Controller<S> for QPLQRSymbolic<S> {
     fn get_u_traj(&self) -> Vec<ControllerInput<S>> {
         self.0.get_u_traj()
     }

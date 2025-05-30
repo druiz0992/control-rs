@@ -91,8 +91,8 @@ pub(super) fn check_convergence(status: KktConditionsStatus, tol: f64) -> Result
     let complementary_cond = status.complementary_slackness.unwrap_or(0.0) <= tol;
     if !complementary_cond {
         return Err(ModelError::SolverError(format!(
-            "Complementary Condition failed: {:?}",
-            status.complementary_slackness
+            "Complementary Condition failed: {:?} {}",
+            status.complementary_slackness, tol
         )));
     }
 
@@ -133,11 +133,11 @@ pub fn init_constrained_dynamics(
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::helpers::within_tolerance;
     use crate::numeric_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
     use crate::physics::constants as c;
     use crate::physics::models::BouncingBall;
     use crate::physics::models::dynamics::SymbolicDynamics;
+    use crate::utils::helpers::within_tolerance;
 
     use super::*;
     use nalgebra::{DMatrix, DVector};

@@ -1,11 +1,11 @@
 use super::utils;
-use crate::utils::Labelizable;
 use crate::numeric_services::solver::{NewtonSolverSymbolic, OptimizerConfig};
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::models::state::State;
 use crate::physics::traits::{Discretizer, Dynamics};
 use crate::physics::{ModelError, constants as c};
+use crate::utils::Labelizable;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -28,6 +28,10 @@ impl<D: SymbolicDynamics> ImplicitMidpoint<D> {
         let solver;
         let dt_expr = ExprScalar::new(c::TIME_DELTA_SYMBOLIC);
         let (current_state, next_state) = utils::get_states(&registry)?;
+
+        let tol = solver_options
+            .as_ref()
+            .map_or(DEFAULT_TOLERANCE, |options| options.get_tolerance());
 
         if let Some(linear_term) = model.cost_linear_term(&dt_expr, &registry) {
             solver = utils::init_constrained_dynamics(
@@ -56,7 +60,7 @@ impl<D: SymbolicDynamics> ImplicitMidpoint<D> {
         Ok(ImplicitMidpoint {
             registry,
             solver,
-            tol: DEFAULT_TOLERANCE,
+            tol,
             _phantom_data: PhantomData,
         })
     }

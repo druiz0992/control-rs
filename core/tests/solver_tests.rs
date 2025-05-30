@@ -96,11 +96,8 @@ fn test_newton_root_finding_norm1_line_search() {
     let initial_guess = vec![-1.742410372590328, 1.4020334125022704];
 
     let unknown_expr = ExprVector::new(&["x1", "x2"]);
-    let mut ls_opts = LineSeachConfig::default();
-    ls_opts.set_merit(expr.norm1().unwrap());
-
-    let mut options = OptimizerConfig::default();
-    options.set_line_search_opts(ls_opts);
+    let ls_opts = LineSeachConfig::default().set_merit(Some(expr.norm1().unwrap()));
+    let options = OptimizerConfig::default().set_line_search_opts(ls_opts);
 
     let solver =
         NewtonSolverSymbolic::new_root_solver(&expr, &unknown_expr, &registry, Some(options))
@@ -135,8 +132,7 @@ fn test_gauss_newton_minimization_no_constraints() {
 
     let registry = Arc::new(ExprRegistry::new());
     let initial_guess = vec![-0.1, 0.5];
-    let mut options = OptimizerConfig::default();
-    options.set_gauss_newton(true);
+    let options = OptimizerConfig::default().set_gauss_newton(true);
 
     let solver = NewtonSolverSymbolic::new_minimization(
         &cost,
@@ -187,8 +183,7 @@ fn test_gauss_newton_minimization() {
     let initial_guess = vec![-0.1, 0.5];
     let eq_constraints_expr = get_eq_constraints_expr(&unknown_expr);
 
-    let mut options = OptimizerConfig::default();
-    options.set_gauss_newton(true);
+    let options = OptimizerConfig::default().set_gauss_newton(true);
 
     let solver = NewtonSolverSymbolic::new_minimization(
         &cost,
@@ -383,8 +378,7 @@ fn test_symbolic_qp() {
         panic!("Unexpected result for inequality constraints");
     }
 
-    let mut solver_options = OptimizerConfig::default();
-    solver_options.set_verbose(true);
+    let solver_options = OptimizerConfig::default().set_verbose(true);
 
     let solver = NewtonSolverSymbolic::new_minimization(
         &objective_expr,
@@ -498,7 +492,7 @@ fn test_osqp_handle() {
     let h = DVector::from_vec(h_data);
 
     let qp_builder = OSQPBuilder::new();
-    let solver = qp_builder
+    let (solver, _) = qp_builder
         .q_mat(big_q)
         .q_vec(q)
         .a_mat(big_a)
@@ -545,7 +539,7 @@ fn test_osqp_handle_no_eq() {
     let h = DVector::from_vec(h_data);
 
     let qp_builder = OSQPBuilder::new();
-    let solver = qp_builder
+    let (solver, _) = qp_builder
         .q_mat(big_q)
         .q_vec(q)
         .g_mat(big_g)
@@ -578,7 +572,7 @@ fn test_osqp_handle_no_ineq() {
     let b = DVector::from_vec(vec![1.0, 3.0]);
 
     let qp_builder = OSQPBuilder::new();
-    let solver = qp_builder
+    let (solver, _) = qp_builder
         .q_mat(big_q)
         .q_vec(q)
         .a_mat(big_a)

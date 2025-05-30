@@ -2,16 +2,16 @@ use super::common::RiccatiRecursionGeneric;
 use super::options::RiccatiLQROptions;
 use crate::controllers::{Controller, ControllerInput, ControllerState, CostFn};
 use crate::physics::ModelError;
-use crate::physics::discretizer::LinearDiscretizer;
-use crate::physics::traits::{LinearDynamics, PhysicsSim};
+use crate::physics::discretizer::SymbolicDiscretizer;
+use crate::physics::traits::{PhysicsSim, SymbolicDynamics};
 
-pub struct RiccatiRecursionLQR<S: PhysicsSim>(RiccatiRecursionGeneric<S>);
+pub struct RiccatiRecursionSymbolic<S: PhysicsSim>(RiccatiRecursionGeneric<S>);
 
-impl<S> RiccatiRecursionLQR<S>
+impl<S> RiccatiRecursionSymbolic<S>
 where
     S: PhysicsSim,
-    S::Model: LinearDynamics,
-    S::Discretizer: LinearDiscretizer<S::Model>,
+    S::Model: SymbolicDynamics,
+    S::Discretizer: SymbolicDiscretizer<S::Model>,
 {
     pub fn new(
         sim: S,
@@ -20,8 +20,8 @@ where
         dt: f64,
         options: Option<RiccatiLQROptions<S>>,
     ) -> Result<Self, ModelError> {
-        let jacobian_x_fn = Box::new(sim.discretizer().jacobian_x().clone());
-        let jacobian_u_fn = Box::new(sim.discretizer().jacobian_u().clone());
+        let jacobian_x_fn = Box::new(sim.discretizer().jacobian_x()?);
+        let jacobian_u_fn = Box::new(sim.discretizer().jacobian_u()?);
 
         let options = options.unwrap_or_default();
 
@@ -35,15 +35,15 @@ where
             options,
         )?;
 
-        Ok(RiccatiRecursionLQR(controller))
+        Ok(RiccatiRecursionSymbolic(controller))
     }
 }
 
-impl<S> Controller<S> for RiccatiRecursionLQR<S>
+impl<S> Controller<S> for RiccatiRecursionSymbolic<S>
 where
     S: PhysicsSim,
-    S::Model: LinearDynamics,
-    S::Discretizer: LinearDiscretizer<S::Model>,
+    S::Model: SymbolicDynamics,
+    S::Discretizer: SymbolicDiscretizer<S::Model>,
 {
     fn get_u_traj(&self) -> Vec<ControllerInput<S>> {
         self.0.get_u_traj()

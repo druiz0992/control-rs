@@ -15,3 +15,4 @@ pub use double_pendulum::{
 pub use dynamics::Dynamics;
 pub use linear_time_invariant::{input::LtiInput, model::LtiModel, state::LtiState};
 pub use no_input::NoInput;
+pub use quadrotor_2d::{input::Quadrotor2DInput, model::Quadrotor2D, state::Quadrotor2DState};

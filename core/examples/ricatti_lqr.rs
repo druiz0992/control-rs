@@ -28,12 +28,13 @@ fn main() {
     let zero_x: Vec<_> = (0..n_steps).map(|_| LtiState::default()).collect();
     let cost = GenericCost::<_, LtiInput<1, 0>>::new(q_matrix, qn_matrix, r_matrix, zero_x.clone())
         .unwrap();
-    let options = RiccatiLQROptions::enable_inifinte_horizon();
+    let options = RiccatiLQROptions::enable_infinite_horizon();
     let mut controller =
-        RiccatiRecursionLQR::new(sim, Box::new(cost.clone()), sim_time, dt, options).unwrap();
+        RiccatiRecursionLQR::new(sim, Box::new(cost.clone()), sim_time, dt, Some(options)).unwrap();
 
     controller.solve(&initial_state).unwrap();
-    let x_traj = controller.rollout_with_noise(&initial_state, 1e-2);
+    controller.get_u_traj();
+    let x_traj = controller.rollout(&initial_state).unwrap();
     let u_traj = controller.get_u_traj();
 
     let times: Vec<_> = (0..x_traj.len()).map(|i| i as f64 * dt).collect();

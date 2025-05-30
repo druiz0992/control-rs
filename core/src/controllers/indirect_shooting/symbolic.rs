@@ -1,4 +1,4 @@
-use super::IndirectShootingGeneric;
+use super::common::IndirectShootingGeneric;
 use crate::controllers::{Controller, ControllerInput, ControllerState, CostFn};
 use crate::physics::ModelError;
 use crate::physics::discretizer::SymbolicDiscretizer;

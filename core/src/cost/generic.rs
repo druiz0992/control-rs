@@ -172,8 +172,8 @@ where
 mod tests {
     use super::*;
 
-    use crate::utils::Labelizable;
     use crate::physics::traits::State;
+    use crate::utils::Labelizable;
     use macros::{LabelOps, StateOps};
 
     #[derive(Clone, Debug, StateOps, LabelOps)]

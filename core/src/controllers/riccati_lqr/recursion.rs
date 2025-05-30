@@ -1,6 +1,6 @@
 use nalgebra::DMatrix;
 
-use crate::physics::{traits::PhysicsSim, ModelError};
+use crate::physics::{ModelError, traits::PhysicsSim};
 
 use super::options::RiccatiLQROptions;
 
@@ -32,7 +32,7 @@ pub(super) fn riccati_recursion(
     Ok((p, k))
 }
 
-pub(crate) fn solve_steady_state_lqr<S: PhysicsSim>(
+pub fn solve_steady_state_lqr<S: PhysicsSim>(
     a: &DMatrix<f64>,
     b: &DMatrix<f64>,
     q: &DMatrix<f64>,

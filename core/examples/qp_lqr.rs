@@ -1,4 +1,5 @@
 use control_rs::controllers::Controller;
+use control_rs::controllers::ControllerOptions;
 use control_rs::controllers::QPLQR;
 use control_rs::cost::generic::GenericCost;
 use control_rs::physics::discretizer::ZOH;
@@ -27,15 +28,15 @@ fn main() {
     let zero_x: Vec<_> = (0..n_steps).map(|_| LtiState::default()).collect();
     let cost = GenericCost::<_, LtiInput<1, 0>>::new(q_matrix, qn_matrix, r_matrix, zero_x.clone())
         .unwrap();
-    let u_limits = (-1.0, 1.0);
-    let mut controller = QPLQR::new(
+    let options = ControllerOptions::<BasicSim<LtiModel<2, 0, 1>, ZOH<_>>>::default()
+        .set_u_limits((-0.5, 0.1));
+    let (mut controller, _) = QPLQR::new(
         sim,
         Box::new(cost.clone()),
         &initial_state,
-        Some(u_limits),
-        //None,
         sim_time,
         dt,
+        Some(options),
     )
     .unwrap();
 
