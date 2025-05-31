@@ -8,7 +8,7 @@ use crate::solver::osqp::builder::QPParams;
 use crate::solver::osqp::solver::OSQPSolverHandle;
 use crate::solver::{Minimizer, OSQPBuilder};
 use crate::utils::evaluable::EvaluableDMatrix;
-use nalgebra::{DVector};
+use nalgebra::DVector;
 
 pub struct QPLQRGeneric<S: PhysicsSim> {
     sim: S,
@@ -41,12 +41,12 @@ where
                 "Incorrect time configuration".into(),
             ));
         }
+
         let n_steps = (time_horizon / dt) as usize + 1;
 
         let u_traj = InputTrajectory::new(vec![ControllerInput::<S>::default(); n_steps - 1]);
 
-        let mut vals = options.get_x_equilibrium().to_vec();
-        vals.extend(options.get_u_equilibrium().to_vec());
+        let vals = options.concatenate_operating_point();
 
         let control_mat = jacobian_u_fn.evaluate(&vals)?;
         let state_mat = jacobian_x_fn.evaluate(&vals)?;
@@ -54,9 +54,14 @@ where
         let state_dim = ControllerState::<S>::dim_q() + ControllerState::<S>::dim_v();
         let input_dim = ControllerInput::<S>::dim_q();
 
-        let h = utils::build_h::<S>(&cost_fn, state_dim, input_dim, n_steps);
-        let q = DVector::zeros((n_steps - 1) * (state_dim + input_dim));
-        let c = utils::build_c(&state_mat, &control_mat, n_steps);
+        let h = utils::build_h::<S>(&cost_fn, state_dim, input_dim, n_steps - 1);
+        let q = utils::build_q_vec::<S>(
+            &cost_fn,
+            options.get_x_ref(),
+            options.get_u_ref(),
+            n_steps - 1,
+        );
+        let c = utils::build_c(&state_mat, &control_mat, n_steps - 1);
         let d = utils::build_d(x0.to_vector(), &state_mat, c.nrows());
         let (g_opt, h_vec_opt) = if let Some((u_min_val, u_max_val)) = options.get_u_limits() {
             let u_min = DVector::from_element(input_dim, u_min_val);

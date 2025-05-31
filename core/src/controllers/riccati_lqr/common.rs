@@ -71,8 +71,7 @@ where
         let state_dim = ControllerState::<S>::dim_q() + ControllerState::<S>::dim_v();
         let input_dim = ControllerInput::<S>::dim_q();
 
-        let mut vals = self.options.general.get_x_equilibrium().to_vec();
-        vals.extend(self.options.general.get_u_equilibrium().to_vec());
+        let vals = self.options.general.concatenate_operating_point();
 
         let a_mat = self.jacobian_x_fn.evaluate(&vals)?;
         let b_mat = self.jacobian_u_fn.evaluate(&vals)?;
@@ -142,8 +141,9 @@ where
     ) -> Result<Vec<ControllerInput<S>>, ModelError> {
         let k_seq = self.compute_gain()?;
 
-        let x_ref = self.options.general.get_x_ref().to_vector();
-        let u_equilibrium = self.options.general.get_u_equilibrium().to_vector();
+        // TODO >>> review
+        let x_ref = self.options.general.get_x_ref()[0].to_vector();
+        let u_op = self.options.general.get_u_operating().to_vector();
 
         let mut x_traj = vec![initial_state.clone(); self.n_steps];
         let mut u_traj = vec![ControllerInput::<S>::default(); self.n_steps - 1];
@@ -159,8 +159,7 @@ where
 
         // Common rollout using `k_seq`
         for k in 0..self.n_steps - 1 {
-            let current_input =
-                gain_to_input_vector(&current_state, &k_seq[k], &x_ref, &u_equilibrium);
+            let current_input = gain_to_input_vector(&current_state, &k_seq[k], &x_ref, &u_op);
             u_traj[k] = into_clamped_input::<S>(current_input, u_limits);
 
             let x_next = self.sim.step(&x_traj[k], Some(&u_traj[k]), self.dt)?;
@@ -178,8 +177,8 @@ where
 fn gain_to_input_vector(
     x_current: &DVector<f64>,
     k_gain: &DMatrix<f64>,
-    x_eq: &DVector<f64>,
-    u_eq: &DVector<f64>,
+    x_ref: &DVector<f64>,
+    u_op: &DVector<f64>,
 ) -> DVector<f64> {
-    u_eq - k_gain * (x_current - x_eq)
+    u_op - k_gain * (x_current - x_ref)
 }

@@ -1,5 +1,5 @@
-use crate::controllers::CostFn;
-use crate::physics::traits::PhysicsSim;
+use crate::controllers::{ControllerInput, ControllerState, CostFn};
+use crate::physics::traits::{PhysicsSim, State};
 use crate::utils::matrix;
 use nalgebra::{DMatrix, DVector};
 use osqp::CscMatrix;
@@ -34,16 +34,16 @@ pub(super) fn build_c(a: &DMatrix<f64>, b: &DMatrix<f64>, n_steps: usize) -> DMa
 
     // Kronecker product: kron(I(N-1), [B -I])
     let kron_block = matrix::kron(
-        &DMatrix::<f64>::identity(n_steps - 1, n_steps - 1),
+        &DMatrix::<f64>::identity(n_steps, n_steps),
         &b_minus_i,
     );
 
     let mut c = kron_block;
 
     // Insert A blocks into the correct offsets
-    for k in 1..(n_steps - 1) {
+    for k in 0..(n_steps - 1) {
         let row_start = k * n;
-        let col_start = k * (n + m) - n;
+        let col_start = k * (n + m) + m;
 
         c.view_mut((row_start, col_start), (n, n)).copy_from(a);
     }
@@ -70,10 +70,10 @@ pub(super) fn build_h<'a, S: PhysicsSim>(
         .cloned()
         .unwrap_or_else(|| DMatrix::zeros(state_dim, state_dim));
 
-    let z_dim = (n - 1) * (input_dim + state_dim); // total size of z
+    let z_dim = n * (input_dim + state_dim); // total size of z
     let mut h = DMatrix::<f64>::zeros(z_dim, z_dim);
 
-    for k in 0..(n - 1) {
+    for k in 0..n {
         let u_start = k * (input_dim + state_dim);
         let x_start = u_start + input_dim;
 
@@ -82,7 +82,7 @@ pub(super) fn build_h<'a, S: PhysicsSim>(
             .copy_from(&r_mat);
 
         // Apply Q to x_{k+1}, or QN at final step
-        let qk = if k == n - 2 { &qn_mat } else { &q_mat };
+        let qk = if k == n - 1 { &qn_mat } else { &q_mat };
         h.view_mut((x_start, x_start), (state_dim, state_dim))
             .copy_from(qk);
     }
@@ -135,13 +135,67 @@ pub fn build_h_vec(u_min: &DVector<f64>, u_max: &DVector<f64>, n_steps: usize) -
     h_vec
 }
 
+pub fn build_q_vec<S: PhysicsSim>(
+    cost_fn: &CostFn<S>,
+    x_trajectory: &[ControllerState<S>],
+    u_trajectory: &[ControllerInput<S>],
+    n_steps: usize,
+) -> DVector<f64> {
+    let state_dims = ControllerState::<S>::dim_v() + ControllerState::<S>::dim_q();
+    let input_dims = ControllerInput::<S>::dim_q();
+
+    let r_mat = cost_fn
+        .get_r()
+        .cloned()
+        .unwrap_or_else(|| DMatrix::zeros(input_dims, input_dims));
+    let q_mat = cost_fn
+        .get_q()
+        .cloned()
+        .unwrap_or_else(|| DMatrix::zeros(state_dims, state_dims));
+    let qn_mat = cost_fn
+        .get_qn()
+        .cloned()
+        .unwrap_or_else(|| DMatrix::zeros(state_dims, state_dims));
+
+    let mut q = DVector::zeros((n_steps) * (state_dims + input_dims));
+    let default_running_input_cost = -&r_mat * u_trajectory[0].to_vector();
+    let default_running_state_cost = -&q_mat * x_trajectory[0].to_vector();
+
+    //let offset = input_dims + (j - 1) * (state_dims + input_dims);
+    //b_vec.rows_mut(offset, state_dims).copy_from(&q_x);
+    for i in 0..n_steps - 1 {
+        let offset_input = i * (state_dims + input_dims);
+        let running_input_cost = if u_trajectory.len() == 1 {
+            &default_running_input_cost
+        } else {
+            &(-&r_mat * u_trajectory[i].to_vector())
+        };
+        q.rows_mut(offset_input, input_dims)
+            .copy_from(&running_input_cost);
+
+        let offset_state = i * (state_dims + input_dims) + input_dims;
+        let running_state_cost = if x_trajectory.len() == 1 {
+            &default_running_state_cost
+        } else {
+            &(-&q_mat * x_trajectory[i].to_vector())
+        };
+        q.rows_mut(offset_state, state_dims)
+            .copy_from(&running_state_cost);
+    }
+    let offset = (n_steps - 1) * (state_dims + input_dims) + input_dims;
+    let terminal_cost = -qn_mat * x_trajectory.last().unwrap().to_vector();
+    q.rows_mut(offset, state_dims).copy_from(&terminal_cost);
+
+    q
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
         cost::{CostFunction, generic::GenericCost},
         physics::{
             discretizer::ZOH,
-            models::{LtiInput, LtiModel, LtiState},
+            models::{LtiInput, LtiModel},
             simulator::BasicSim,
         },
     };
@@ -156,7 +210,6 @@ mod tests {
 
         // d = [-A*x0; zeros(size(C,1)-n)]
         let d = build_d(x0, &a, c);
-        dbg!(&d);
 
         assert_eq!(d.len(), c);
         assert_eq!(d[0], -1.0);
@@ -209,14 +262,13 @@ mod tests {
         let q_matrix = DMatrix::<f64>::identity(state_dim, state_dim) * q_factor;
         let qn_matrix = DMatrix::<f64>::identity(state_dim, state_dim) * qn_factor;
         let r_matrix = DMatrix::<f64>::identity(input_dim, input_dim) * r_factor;
-        let zero_x: Vec<_> = (0..n).map(|_| LtiState::default()).collect();
 
         let cost: Box<dyn CostFunction<Input = _, State = _>> = Box::new(
             GenericCost::<_, LtiInput<1, 0>>::new(
                 q_matrix.clone(),
                 qn_matrix,
                 r_matrix.clone(),
-                zero_x.clone(),
+                None,
             )
             .unwrap(),
         );

@@ -230,6 +230,8 @@ impl<'a> OSQPBuilder<'a> {
         let l = self.build_lower_bound();
         let u = self.build_upper_bound();
 
+        dbg!(&l, &u);
+
         (q_csc, q_vec, a_csc, l, u, n_eq, n_ineq)
     }
 }

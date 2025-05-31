@@ -3,7 +3,7 @@ use control_rs::controllers::qp_lqr::symbolic::QPLQRSymbolic;
 use control_rs::controllers::riccati_lqr::options::RiccatiLQROptions;
 use control_rs::controllers::riccati_lqr::symbolic::RiccatiRecursionSymbolic;
 use control_rs::controllers::{Controller, ControllerOptions};
-use control_rs::cost::generic::GenericCost;
+use control_rs::cost::generic::{GenericCost, GenericCostOptions};
 use control_rs::numeric_services::symbolic::ExprRegistry;
 use control_rs::physics::constants as c;
 use control_rs::physics::discretizer::RK4Symbolic;
@@ -48,9 +48,17 @@ fn main() {
         .collect();
     reference_traj[n_steps] = state_ref.clone();
 
-    let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, reference_traj.clone()).unwrap();
+    /*
+    let options = GenericCostOptions::new().set_reference_state_trajectory(&reference_traj);
+    let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, Some(options)).unwrap();
+    */
+    let options = GenericCostOptions::new().set_linear_term(true);
+    let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, Some(options)).unwrap();
 
-    let options = ControllerOptions::<BasicSim<Quadrotor2D, RK4Symbolic<_>>>::default();
+    let general_options = ControllerOptions::<BasicSim<Quadrotor2D, RK4Symbolic<_>>>::default()
+        .set_x_ref(&vec![state_ref.clone()])
+        .set_u_operating(&input_hover)
+        .set_x_operating(&state_hover);
     //options.set_u_limits((-0.5, 0.1));
     let (mut controller, _) = QPLQRSymbolic::new(
         sim,
@@ -58,7 +66,7 @@ fn main() {
         &state_0,
         sim_time,
         dt,
-        Some(options),
+        Some(general_options),
     )
     .unwrap();
     /*

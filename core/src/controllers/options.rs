@@ -1,14 +1,15 @@
 use crate::{
     controllers::{ControllerInput, ControllerState},
-    physics::traits::PhysicsSim,
+    physics::traits::{PhysicsSim, State},
 };
 
 pub struct ControllerOptions<S: PhysicsSim> {
-    x_ref: ControllerState<S>,
+    x_ref: Vec<ControllerState<S>>,
+    u_ref: Vec<ControllerInput<S>>,
 
-    /// linearization points
-    u_equilibrium: ControllerInput<S>,
-    x_equilibrium: ControllerState<S>,
+    /// Operating points => linearization points
+    u_op: ControllerInput<S>,
+    x_op: ControllerState<S>,
 
     /// closed loop options
     noise: Option<(f64, f64)>,
@@ -19,9 +20,10 @@ impl<S: PhysicsSim> Clone for ControllerOptions<S> {
     fn clone(&self) -> Self {
         Self {
             x_ref: self.x_ref.clone(),
+            u_ref: self.u_ref.clone(),
 
-            u_equilibrium: self.u_equilibrium.clone(),
-            x_equilibrium: self.x_equilibrium.clone(),
+            u_op: self.u_op.clone(),
+            x_op: self.x_op.clone(),
 
             noise: self.noise.clone(),
             u_limits: self.u_limits.clone(),
@@ -32,10 +34,11 @@ impl<S: PhysicsSim> Clone for ControllerOptions<S> {
 impl<S: PhysicsSim> Default for ControllerOptions<S> {
     fn default() -> Self {
         Self {
-            x_ref: ControllerState::<S>::default(),
+            x_ref: vec![ControllerState::<S>::default(); 1],
+            u_ref: vec![ControllerInput::<S>::default(); 1],
 
-            u_equilibrium: ControllerInput::<S>::default(),
-            x_equilibrium: ControllerState::<S>::default(),
+            u_op: ControllerInput::<S>::default(),
+            x_op: ControllerState::<S>::default(),
 
             noise: None,
             u_limits: None,
@@ -46,16 +49,19 @@ impl<S> ControllerOptions<S>
 where
     S: PhysicsSim,
 {
-    pub fn get_u_equilibrium(&self) -> &ControllerInput<S> {
-        &self.u_equilibrium
+    pub fn get_u_operating(&self) -> &ControllerInput<S> {
+        &self.u_op
     }
 
-    pub fn get_x_equilibrium(&self) -> &ControllerState<S> {
-        &self.x_equilibrium
+    pub fn get_x_operating(&self) -> &ControllerState<S> {
+        &self.x_op
     }
 
-    pub fn get_x_ref(&self) -> &ControllerState<S> {
+    pub fn get_x_ref(&self) -> &[ControllerState<S>] {
         &self.x_ref
+    }
+    pub fn get_u_ref(&self) -> &[ControllerInput<S>] {
+        &self.u_ref
     }
 
     pub fn get_noise(&self) -> Option<(f64, f64)> {
@@ -66,21 +72,34 @@ where
         self.u_limits
     }
 
-    pub fn set_u_equilibrium(self, u_equilibrium: &ControllerInput<S>) -> Self {
+    pub fn concatenate_operating_point(&self) -> Vec<f64> {
+        let mut vals = self.get_x_operating().to_vec();
+        vals.extend(self.get_u_operating().to_vec());
+
+        vals
+    }
+
+    pub fn set_u_operating(self, u_op: &ControllerInput<S>) -> Self {
         let mut new = self;
-        new.u_equilibrium = u_equilibrium.clone();
+        new.u_op = u_op.clone();
         new
     }
 
-    pub fn set_x_equilibrium(self, x_equilibrium: &ControllerState<S>) -> Self {
+    pub fn set_x_operating(self, x_op: &ControllerState<S>) -> Self {
         let mut new = self;
-        new.x_equilibrium = x_equilibrium.clone();
+        new.x_op = x_op.clone();
         new
     }
 
-    pub fn set_x_ref(self, x_ref: &ControllerState<S>) -> Self {
+    pub fn set_x_ref(self, x_ref: &Vec<ControllerState<S>>) -> Self {
         let mut new = self;
         new.x_ref = x_ref.clone();
+        new
+    }
+
+    pub fn set_u_ref(self, u_ref: &Vec<ControllerInput<S>>) -> Self {
+        let mut new = self;
+        new.u_ref = u_ref.clone();
         new
     }
 

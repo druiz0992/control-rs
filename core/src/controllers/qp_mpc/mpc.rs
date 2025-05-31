@@ -79,8 +79,7 @@ where
         let jacobian_x_fn = Box::new(sim.discretizer().jacobian_x()?);
         let jacobian_u_fn = Box::new(sim.discretizer().jacobian_u()?);
 
-        let mut vals = options.general.get_x_equilibrium().to_vec();
-        vals.extend(options.general.get_u_equilibrium().to_vec());
+        let vals = options.general.concatenate_operating_point();
 
         let a_mat = jacobian_x_fn.evaluate(&vals)?;
         let b_mat = jacobian_u_fn.evaluate(&vals)?;
@@ -127,7 +126,8 @@ where
         // update vector b with
         let state_dims = state.len();
         let input_dims = ControllerInput::<S>::dim_q();
-        let state_ref = self.options.general.get_x_ref().to_vector();
+        // TODO >>> review
+        let state_ref = self.options.general.get_x_ref()[0].to_vector();
         let q_x = -&self.running_cost * &state_ref;
         let qn_x = -&self.terminal_cost * &state_ref;
 

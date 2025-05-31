@@ -25,11 +25,9 @@ fn main() {
     let q_matrix = DMatrix::<f64>::identity(2, 2);
     let qn_matrix = DMatrix::<f64>::identity(2, 2);
     let r_matrix = DMatrix::<f64>::identity(1, 1) * 0.1;
-    let zero_x: Vec<_> = (0..n_steps).map(|_| LtiState::default()).collect();
-    let cost = GenericCost::<_, LtiInput<1, 0>>::new(q_matrix, qn_matrix, r_matrix, zero_x.clone())
-        .unwrap();
+    let cost = GenericCost::<_, LtiInput<1, 0>>::new(q_matrix, qn_matrix, r_matrix, None).unwrap();
     let options = ControllerOptions::<BasicSim<LtiModel<2, 0, 1>, ZOH<_>>>::default()
-        .set_u_limits((-0.5, 0.1));
+        .set_u_limits((-1.0, 1.0));
     let (mut controller, _) = QPLQR::new(
         sim,
         Box::new(cost.clone()),

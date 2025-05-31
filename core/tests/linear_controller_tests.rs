@@ -2,7 +2,7 @@ use control_rs::controllers::riccati_lqr::options::RiccatiLQROptions;
 use control_rs::controllers::{
     Controller, ControllerOptions, IndirectShootingLQR, QPLQR, RiccatiRecursionLQR,
 };
-use control_rs::cost::generic::GenericCost;
+use control_rs::cost::generic::{GenericCost, GenericCostOptions};
 use control_rs::physics::discretizer::ZOH;
 use control_rs::physics::models::{LtiInput, LtiModel, LtiState};
 use control_rs::physics::simulator::BasicSim;
@@ -37,13 +37,10 @@ fn linear_controller_setup(controller_type: LinearControllerType) {
     let qn_matrix = DMatrix::<f64>::identity(2, 2);
     let r_matrix = DMatrix::<f64>::identity(1, 1) * 0.1;
     let expected_trajectory: Vec<_> = (0..n_steps).map(|_| LtiState::default()).collect();
-    let cost = GenericCost::<_, LtiInput<1, 0>>::new(
-        q_matrix,
-        qn_matrix,
-        r_matrix,
-        expected_trajectory.clone(),
-    )
-    .unwrap();
+
+    let options = GenericCostOptions::new().set_reference_state_trajectory(&expected_trajectory);
+    let cost = GenericCost::<_, LtiInput<1, 0>>::new(q_matrix, qn_matrix, r_matrix, Some(options))
+        .unwrap();
 
     let mut controller: LinearContoller = match controller_type {
         LinearControllerType::IndirectShootingLQR => {
@@ -62,7 +59,8 @@ fn linear_controller_setup(controller_type: LinearControllerType) {
             Box::new(controller)
         }
         LinearControllerType::QPLQRUlimits(lower, upper) => {
-            let options = ControllerOptions::<BasicSim<LtiModel<2, 0, 1>, ZOH<_>>>::default().set_u_limits((lower, upper));
+            let options = ControllerOptions::<BasicSim<LtiModel<2, 0, 1>, ZOH<_>>>::default()
+                .set_u_limits((lower, upper));
             let (controller, _) = QPLQR::new(
                 sim,
                 Box::new(cost.clone()),

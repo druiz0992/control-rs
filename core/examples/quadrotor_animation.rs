@@ -42,14 +42,12 @@ async fn main() {
     let qn_matrix = DMatrix::<f64>::identity(6, 6);
     let r_matrix = DMatrix::<f64>::identity(2, 2) * 0.01;
 
-    let zero_x: Vec<_> = (0..n_steps).map(|_| Quadrotor2DState::default()).collect();
-
-    let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, zero_x.clone()).unwrap();
+    let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, None).unwrap();
 
     let general_options = ControllerOptions::<BasicSim<Quadrotor2D, RK4Symbolic<_>>>::default()
-        .set_x_ref(&state_ref)
-        .set_u_equilibrium(&input_hover)
-        .set_x_equilibrium(&state_hover);
+        .set_x_ref(&vec![state_ref])
+        .set_u_operating(&input_hover)
+        .set_x_operating(&state_hover);
     let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
 
     let mut lqr_riccati =

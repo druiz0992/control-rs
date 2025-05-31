@@ -1,9 +1,7 @@
 use crate::numeric_services::symbolic::{
-    ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFunction,
+    ExprRegistry, ExprScalar, ExprVector
 };
-use crate::physics::constants as c;
-use crate::physics::{Energy, ModelError};
-use crate::utils::evaluable::Evaluable;
+use crate::physics::{Energy};
 use nalgebra::{DMatrix, Vector2};
 use std::sync::Arc;
 
