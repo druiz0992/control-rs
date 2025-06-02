@@ -1,11 +1,10 @@
-use nalgebra::DVector;
-
+use super::{ControllerInput, ControllerState};
 use crate::physics::ModelError;
 use crate::physics::traits::{PhysicsSim, State};
 use crate::utils::NoiseSource;
+use nalgebra::DVector;
 
-use super::{ControllerInput, ControllerState};
-
+/// Clamps an input vector within given limits
 pub fn clamp_input_vector(input: DVector<f64>, limits: Option<(f64, f64)>) -> DVector<f64> {
     if let Some((lower, upper)) = limits {
         input.map(|xi| xi.clamp(lower, upper))
@@ -14,6 +13,7 @@ pub fn clamp_input_vector(input: DVector<f64>, limits: Option<(f64, f64)>) -> DV
     }
 }
 
+/// Adds gaussian noise to controller input and returns the updated input sample
 pub fn add_noise_to_inputs<S: PhysicsSim>(
     mean: f64,
     std_dev: f64,
@@ -27,6 +27,7 @@ pub fn add_noise_to_inputs<S: PhysicsSim>(
         .collect())
 }
 
+/// Adds gaussian noise to controller state and returns the updated state sample
 pub fn add_noise_to_states<S: PhysicsSim>(
     mean: f64,
     std_dev: f64,

@@ -1,8 +1,20 @@
-use crate::{
-    controllers::{ControllerInput, ControllerState},
-    physics::traits::{PhysicsSim, State},
-};
+use crate::controllers::{ControllerInput, ControllerState};
+use crate::physics::traits::PhysicsSim;
+use crate::physics::traits::State;
 
+/// Represents the configuration options for a controller.
+///
+/// # Type Parameters
+/// - `S`: A type that implements the `PhysicsSim` trait, representing the physics simulation.
+///
+/// # Fields
+/// - `x_ref`: A vector of reference states for the controller.
+/// - `u_ref`: A vector of reference inputs for the controller.
+/// - `u_op`: The operating point for the controller input, used for linearization.
+/// - `x_op`: The operating point for the controller state, used for linearization.
+/// - `noise`: Optional noise parameters `(mean, variance)` for the closed-loop system.
+/// - `u_limits`: Optional limits `(min, max)` for the controller input.
+/// - `x_limits`: Optional limits `(min, max)` for the controller state.
 pub struct ControllerOptions<S: PhysicsSim> {
     x_ref: Vec<ControllerState<S>>,
     u_ref: Vec<ControllerInput<S>>,
@@ -48,6 +60,7 @@ impl<S: PhysicsSim> Default for ControllerOptions<S> {
         }
     }
 }
+
 impl<S> ControllerOptions<S>
 where
     S: PhysicsSim,

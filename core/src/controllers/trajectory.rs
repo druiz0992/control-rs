@@ -1,9 +1,19 @@
+
 use crate::physics::ModelError;
 use crate::physics::traits::{PhysicsSim, State};
 use nalgebra::DMatrix;
-
 use super::ControllerInput;
 
+/// Represents a trajectory of controller inputs for a physics simulation.
+///
+/// This struct encapsulates a sequence of `ControllerInput` instances, which can be used
+/// to define a trajectory for controlling a physics simulation.
+///
+/// # Type Parameters
+/// - `S`: A type that implements the `PhysicsSim` trait, representing the physics simulation.
+///
+/// # Errors
+/// - `ModelError::ConfigError`: Raised when attempting to convert an empty matrix into an `InputTrajectory`.
 pub struct InputTrajectory<S: PhysicsSim>(Vec<ControllerInput<S>>);
 
 impl<S: PhysicsSim> InputTrajectory<S> {
