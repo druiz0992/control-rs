@@ -24,18 +24,12 @@ type ControllerState<S> = <<S as PhysicsSim>::Model as Dynamics>::State;
 type ControllerInput<S> = <<S as PhysicsSim>::Model as Dynamics>::Input;
 type CostFn<S> = Box<dyn CostFunction<State = ControllerState<S>, Input = ControllerInput<S>>>;
 
+pub type TrajectoryHistory<S> = (Vec<ControllerState<S>>, Vec<ControllerInput<S>>);
 pub trait Controller<S: PhysicsSim> {
-    fn get_u_traj(&self) -> Vec<ControllerInput<S>>;
-
-    fn rollout(
-        &self,
-        initial_state: &ControllerState<S>,
-    ) -> Result<Vec<ControllerState<S>>, ModelError>;
-
     fn solve(
         &mut self,
         initial_state: &ControllerState<S>,
-    ) -> Result<Vec<ControllerInput<S>>, ModelError>;
+    ) -> Result<TrajectoryHistory<S>, ModelError>;
 }
 
 fn input_from_slice<S: PhysicsSim>(slice: &[f64]) -> ControllerInput<S> {

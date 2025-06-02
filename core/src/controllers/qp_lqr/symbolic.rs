@@ -1,6 +1,6 @@
 use super::common::QPLQRGeneric;
-use crate::controllers::options::ControllerOptions;
-use crate::controllers::{Controller, ControllerInput, ControllerState, CostFn};
+use super::options::QPOptions;
+use crate::controllers::{Controller, ControllerState, CostFn, TrajectoryHistory};
 use crate::physics::ModelError;
 use crate::physics::discretizer::SymbolicDiscretizer;
 use crate::physics::traits::{PhysicsSim, SymbolicDynamics};
@@ -21,7 +21,7 @@ where
         x0: &ControllerState<S>,
         time_horizon: f64,
         dt: f64,
-        options: Option<ControllerOptions<S>>,
+        options: Option<QPOptions<S>>,
     ) -> Result<(Self, QPParams), ModelError> {
         let jacobian_u = Box::new(sim.discretizer().jacobian_u()?);
         let jacobian_x = Box::new(sim.discretizer().jacobian_x()?);
@@ -47,21 +47,10 @@ where
 }
 
 impl<S: PhysicsSim> Controller<S> for QPLQRSymbolic<S> {
-    fn get_u_traj(&self) -> Vec<ControllerInput<S>> {
-        self.0.get_u_traj()
-    }
-
-    fn rollout(
-        &self,
-        initial_state: &ControllerState<S>,
-    ) -> Result<Vec<ControllerState<S>>, ModelError> {
-        self.0.rollout(initial_state)
-    }
-
     fn solve(
         &mut self,
         initial_state: &ControllerState<S>,
-    ) -> Result<Vec<ControllerInput<S>>, ModelError> {
+    ) -> Result<TrajectoryHistory<S>, ModelError> {
         self.0.solve(initial_state)
     }
 }

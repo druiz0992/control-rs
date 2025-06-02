@@ -121,30 +121,24 @@ where
             }
         }
 
-        if let Some(_) = options.state_traj_ref.as_ref() {
-            if options.linear_term_flag {
+        if options.state_traj_ref.as_ref().is_some() && options.linear_term_flag {
                 return Err(ModelError::ConfigError(
                     "Can't provide reference state if linear term flag is enabled".into(),
                 ));
-            }
         }
-        if let Some(_) = options.input_traj_ref.as_ref() {
-            if options.linear_term_flag {
-                return Err(ModelError::ConfigError(
-                    "Can't provide reference input if linear term flag is enabled".into(),
-                ));
-            }
+        if options.input_traj_ref.as_ref().is_some() && options.linear_term_flag {
+            return Err(ModelError::ConfigError(
+                "Can't provide reference input if linear term flag is enabled".into(),
+            ));
         }
 
-        let state_traj_ref_vec: Option<Vec<DVector<f64>>> = match options.state_traj_ref {
-            Some(traj) => Some(traj.iter().map(|s| s.to_vector()).collect()),
-            None => None,
-        };
+        let state_traj_ref_vec: Option<Vec<DVector<f64>>> = options
+            .state_traj_ref
+            .map(|traj| traj.iter().map(|s| s.to_vector()).collect());
 
-        let input_traj_ref_vec: Option<Vec<DVector<f64>>> = match options.input_traj_ref {
-            Some(traj) => Some(traj.iter().map(|s| s.to_vector()).collect()),
-            None => None,
-        };
+        let input_traj_ref_vec: Option<Vec<DVector<f64>>> = options
+            .input_traj_ref
+            .map(|traj| traj.iter().map(|s| s.to_vector()).collect());
 
         Ok(Self {
             qn_matrix,
@@ -201,7 +195,7 @@ where
                     &DVector::zeros(v.len())
                 };
 
-                let diff = &v - ref_input;
+                let diff = v - ref_input;
                 let grad = &self.r_matrix * &diff;
                 (v.transpose() * &grad)[(0, 0)]
             })
@@ -271,7 +265,7 @@ where
     fn terminal_cost_gradient(&self, state: &Self::State) -> DVector<f64> {
         let v = state.to_vector();
         let final_ref_state = if let Some(ref_vec) = self.state_traj_ref_vec.as_ref() {
-            &ref_vec
+            ref_vec
                 .last()
                 .expect("state_traj_vec should never be empty")
         } else {

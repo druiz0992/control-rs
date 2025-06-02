@@ -42,6 +42,29 @@ pub fn dmat_to_vec(mat: &DMatrix<f64>) -> Vec<Vec<f64>> {
         .collect()
 }
 
+/// Vertically stacks two `Option<DMatrix<f64>>` values.
+pub fn vstack_option(
+    a: DMatrix<f64>,
+    b: Option<DMatrix<f64>>,
+) -> Result<DMatrix<f64>, &'static str> {
+    match b {
+        Some(mat_b) => {
+            let (cols_a, cols_b) = (a.ncols(), mat_b.ncols());
+            if cols_a != cols_b {
+                return Err("Matrix column counts must match for vertical stacking.");
+            }
+
+            let mut stacked = DMatrix::zeros(a.nrows() + mat_b.nrows(), cols_a);
+            stacked.view_mut((0, 0), (a.nrows(), cols_a)).copy_from(&a);
+            stacked
+                .view_mut((a.nrows(), 0), (mat_b.nrows(), cols_b))
+                .copy_from(&mat_b);
+            Ok(stacked)
+        }
+        None => Ok(a),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

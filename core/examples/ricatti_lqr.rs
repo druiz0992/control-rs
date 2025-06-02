@@ -1,4 +1,5 @@
 use control_rs::controllers::Controller;
+use control_rs::controllers::ControllerOptions;
 use control_rs::controllers::RiccatiRecursionLQR;
 use control_rs::controllers::riccati_lqr::options::RiccatiLQROptions;
 use control_rs::cost::generic::GenericCost;
@@ -16,7 +17,7 @@ fn main() {
     let initial_state = LtiState::<2, 0>::new([1.0, 0.0]);
     let dt = 0.1;
     let sim_time = 10.0;
-    let n_steps = (sim_time / dt) as usize + 1;
+    //let n_steps = (sim_time / dt) as usize + 1;
 
     let integrator = ZOH::new(&model, dt).unwrap();
 
@@ -26,14 +27,12 @@ fn main() {
     let qn_matrix = DMatrix::<f64>::identity(2, 2);
     let r_matrix = DMatrix::<f64>::identity(1, 1) * 0.1;
     let cost = GenericCost::<_, LtiInput<1, 0>>::new(q_matrix, qn_matrix, r_matrix, None).unwrap();
-    let options = RiccatiLQROptions::enable_infinite_horizon();
+    let general = ControllerOptions::default().set_noise((10.0, 0.1));
+    let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general);
     let mut controller =
         RiccatiRecursionLQR::new(sim, Box::new(cost.clone()), sim_time, dt, Some(options)).unwrap();
 
-    controller.solve(&initial_state).unwrap();
-    controller.get_u_traj();
-    let x_traj = controller.rollout(&initial_state).unwrap();
-    let u_traj = controller.get_u_traj();
+    let (x_traj, u_traj) = controller.solve(&initial_state).unwrap();
 
     let times: Vec<_> = (0..x_traj.len()).map(|i| i as f64 * dt).collect();
 

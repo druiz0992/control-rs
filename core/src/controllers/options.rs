@@ -14,6 +14,7 @@ pub struct ControllerOptions<S: PhysicsSim> {
     /// closed loop options
     noise: Option<(f64, f64)>,
     u_limits: Option<(f64, f64)>,
+    x_limits: Option<(f64, f64)>,
 }
 
 impl<S: PhysicsSim> Clone for ControllerOptions<S> {
@@ -25,8 +26,9 @@ impl<S: PhysicsSim> Clone for ControllerOptions<S> {
             u_op: self.u_op.clone(),
             x_op: self.x_op.clone(),
 
-            noise: self.noise.clone(),
-            u_limits: self.u_limits.clone(),
+            noise: self.noise,
+            u_limits: self.u_limits,
+            x_limits: self.x_limits,
         }
     }
 }
@@ -42,6 +44,7 @@ impl<S: PhysicsSim> Default for ControllerOptions<S> {
 
             noise: None,
             u_limits: None,
+            x_limits: None,
         }
     }
 }
@@ -71,6 +74,9 @@ where
     pub fn get_u_limits(&self) -> Option<(f64, f64)> {
         self.u_limits
     }
+    pub fn get_x_limits(&self) -> Option<(f64, f64)> {
+        self.x_limits
+    }
 
     pub fn concatenate_operating_point(&self) -> Vec<f64> {
         let mut vals = self.get_x_operating().to_vec();
@@ -91,15 +97,15 @@ where
         new
     }
 
-    pub fn set_x_ref(self, x_ref: &Vec<ControllerState<S>>) -> Self {
+    pub fn set_x_ref(self, x_ref: &[ControllerState<S>]) -> Self {
         let mut new = self;
-        new.x_ref = x_ref.clone();
+        new.x_ref = x_ref.to_owned();
         new
     }
 
-    pub fn set_u_ref(self, u_ref: &Vec<ControllerInput<S>>) -> Self {
+    pub fn set_u_ref(self, u_ref: &[ControllerInput<S>]) -> Self {
         let mut new = self;
-        new.u_ref = u_ref.clone();
+        new.u_ref = u_ref.to_owned();
         new
     }
 

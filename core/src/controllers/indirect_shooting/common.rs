@@ -1,4 +1,4 @@
-use crate::controllers::{ControllerInput, ControllerState, CostFn, InputTrajectory};
+use crate::controllers::{ControllerInput, ControllerState, CostFn, InputTrajectory, TrajectoryHistory};
 use crate::physics::ModelError;
 use crate::physics::models::Dynamics;
 use crate::physics::traits::{Discretizer, PhysicsSim, State};
@@ -72,11 +72,6 @@ where
             jacobian_u_fn,
             jacobian_x_fn,
         })
-    }
-
-    pub(super) fn get_u_traj(&self) -> Vec<ControllerInput<S>> {
-        let traj = InputTrajectory::<S>::try_from(&self.u_traj).unwrap();
-        traj.to_vec()
     }
 
     pub(super) fn rollout(
@@ -157,7 +152,7 @@ where
     pub(super) fn solve(
         &mut self,
         initial_state: &ControllerState<S>,
-    ) -> Result<Vec<ControllerInput<S>>, ModelError> {
+    ) -> Result<TrajectoryHistory<S>, ModelError> {
         let mut states = self.rollout(initial_state)?;
         let mut grad_magnitude = 1.0;
 
@@ -167,7 +162,8 @@ where
         }
 
         let inputs = InputTrajectory::<S>::try_from(&self.u_traj)?;
+        let x_traj = self.rollout(initial_state)?;
 
-        Ok(inputs.to_vec())
+        Ok((x_traj, inputs.to_vec()))
     }
 }

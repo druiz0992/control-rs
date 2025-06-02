@@ -1,3 +1,4 @@
+use control_rs::controllers::qp_lqr::options::QPOptions;
 use control_rs::controllers::riccati_lqr::options::RiccatiLQROptions;
 use control_rs::controllers::{
     Controller, ControllerOptions, IndirectShootingLQR, QPLQR, RiccatiRecursionLQR,
@@ -8,11 +9,12 @@ use control_rs::physics::models::{LtiInput, LtiModel, LtiState};
 use control_rs::physics::simulator::BasicSim;
 use control_rs::physics::traits::State;
 use nalgebra::{DMatrix, dmatrix, dvector};
+use osqp::Settings;
 
 enum LinearControllerType {
-    IndirectShootingLQR,
-    QPLQR,
-    QPLQRUlimits(f64, f64),
+    IndirectShootingLqr,
+    QpLqr,
+    QpLqrUlimits(f64, f64),
     RiccatiRecursionLQRFinite,
     RiccatiRecursionLQRInfinite,
 }
@@ -43,31 +45,40 @@ fn linear_controller_setup(controller_type: LinearControllerType) {
         .unwrap();
 
     let mut controller: LinearContoller = match controller_type {
-        LinearControllerType::IndirectShootingLQR => {
+        LinearControllerType::IndirectShootingLqr => {
             Box::new(IndirectShootingLQR::new(sim, Box::new(cost.clone()), sim_time, dt).unwrap())
         }
-        LinearControllerType::QPLQR => {
+        LinearControllerType::QpLqr => {
+            let osqp_settings = Settings::default().verbose(false);
+            let options = ControllerOptions::<BasicSim<LtiModel<2, 0, 1>, ZOH<_>>>::default();
+            let qp_options = QPOptions::default()
+                .set_general(options)
+                .set_osqp_settings(osqp_settings);
             let (controller, _) = QPLQR::new(
                 sim,
                 Box::new(cost.clone()),
                 &initial_state,
                 sim_time,
                 dt,
-                None,
+                Some(qp_options),
             )
             .unwrap();
             Box::new(controller)
         }
-        LinearControllerType::QPLQRUlimits(lower, upper) => {
+        LinearControllerType::QpLqrUlimits(lower, upper) => {
             let options = ControllerOptions::<BasicSim<LtiModel<2, 0, 1>, ZOH<_>>>::default()
                 .set_u_limits((lower, upper));
+            let osqp_settings = Settings::default().verbose(false);
+            let qp_options = QPOptions::<BasicSim<LtiModel<2, 0, 1>, ZOH<_>>>::default()
+                .set_general(options)
+                .set_osqp_settings(osqp_settings);
             let (controller, _) = QPLQR::new(
                 sim,
                 Box::new(cost.clone()),
                 &initial_state,
                 sim_time,
                 dt,
-                Some(options),
+                Some(qp_options),
             )
             .unwrap();
             Box::new(controller)
@@ -89,9 +100,7 @@ fn linear_controller_setup(controller_type: LinearControllerType) {
         }
     };
 
-    let u_traj = controller.solve(&initial_state).unwrap();
-    controller.get_u_traj();
-    let x_traj = controller.rollout(&initial_state).unwrap();
+    let (x_traj, u_traj) = controller.solve(&initial_state).unwrap();
 
     let tol = 1e-3;
     assert!(
@@ -107,31 +116,28 @@ fn linear_controller_setup(controller_type: LinearControllerType) {
             < tol
     );
 
-    match controller_type {
-        LinearControllerType::QPLQRUlimits(lower, upper) => {
-            let exceed_limits: Vec<_> = u_traj
-                .iter()
-                .filter(|u| u.to_vec()[0] < lower - tol || u.to_vec()[0] > upper + tol)
-                .collect();
-            assert!(exceed_limits.is_empty());
-        }
-        _ => (),
+    if let LinearControllerType::QpLqrUlimits(lower, upper) = controller_type {
+        let exceed_limits: Vec<_> = u_traj
+            .iter()
+            .filter(|u| u.to_vec()[0] < lower - tol || u.to_vec()[0] > upper + tol)
+            .collect();
+        assert!(exceed_limits.is_empty());
     }
 }
 
 #[test]
 fn indirect_linear() {
-    linear_controller_setup(LinearControllerType::IndirectShootingLQR);
+    linear_controller_setup(LinearControllerType::IndirectShootingLqr);
 }
 
 #[test]
 fn qp_lqr_linear() {
-    linear_controller_setup(LinearControllerType::QPLQR);
+    linear_controller_setup(LinearControllerType::QpLqr);
 }
 
 #[test]
 fn test_qp_lqr_linear_ulimits() {
-    linear_controller_setup(LinearControllerType::QPLQRUlimits(-0.5, 0.5));
+    linear_controller_setup(LinearControllerType::QpLqrUlimits(-0.5, 0.5));
 }
 
 #[test]

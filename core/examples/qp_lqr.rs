@@ -1,12 +1,14 @@
 use control_rs::controllers::Controller;
 use control_rs::controllers::ControllerOptions;
 use control_rs::controllers::QPLQR;
+use control_rs::controllers::qp_lqr::options::QPOptions;
 use control_rs::cost::generic::GenericCost;
 use control_rs::physics::discretizer::ZOH;
 use control_rs::physics::models::{LtiInput, LtiModel, LtiState};
 use control_rs::physics::simulator::BasicSim;
 use control_rs::plotter;
 use nalgebra::{DMatrix, dmatrix};
+use osqp::Settings;
 
 fn main() {
     let state_matrix = dmatrix![0.0,1.0; 0.0,0.0];
@@ -16,7 +18,7 @@ fn main() {
     let initial_state = LtiState::<2, 0>::new([1.0, 0.0]);
     let dt = 0.1;
     let sim_time = 10.0;
-    let n_steps = (sim_time / dt) as usize + 1;
+    //let n_steps = (sim_time / dt) as usize + 1;
 
     let integrator = ZOH::new(&model, dt).unwrap();
 
@@ -28,19 +30,21 @@ fn main() {
     let cost = GenericCost::<_, LtiInput<1, 0>>::new(q_matrix, qn_matrix, r_matrix, None).unwrap();
     let options = ControllerOptions::<BasicSim<LtiModel<2, 0, 1>, ZOH<_>>>::default()
         .set_u_limits((-1.0, 1.0));
+    let osqp_settings = Settings::default().max_iter(100);
+    let qp_options = QPOptions::<BasicSim<LtiModel<2, 0, 1>, ZOH<_>>>::default()
+        .set_general(options)
+        .set_osqp_settings(osqp_settings);
     let (mut controller, _) = QPLQR::new(
         sim,
         Box::new(cost.clone()),
         &initial_state,
         sim_time,
         dt,
-        Some(options),
+        Some(qp_options),
     )
     .unwrap();
 
-    controller.solve(&initial_state).unwrap();
-    let x_traj = controller.rollout(&initial_state).unwrap();
-    let u_traj = controller.get_u_traj();
+    let (x_traj, u_traj) = controller.solve(&initial_state).unwrap();
 
     let times: Vec<_> = (0..x_traj.len()).map(|i| i as f64 * dt).collect();
 

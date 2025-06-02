@@ -1,6 +1,6 @@
 use crate::controllers::{ControllerInput, ControllerState, CostFn};
 use crate::physics::traits::{PhysicsSim, State};
-use crate::utils::matrix;
+use crate::utils::{matrix, vector};
 use nalgebra::{DMatrix, DVector};
 use osqp::CscMatrix;
 
@@ -18,7 +18,7 @@ pub(super) fn build_d(x0: DVector<f64>, a: &DMatrix<f64>, c: usize) -> DVector<f
 
 /// C = [[B1, -I, 0......0],[0, A2, B1, -I, 0,....0], [0....0 An-1, Bn-1, -I]]
 pub(super) fn build_c(a: &DMatrix<f64>, b: &DMatrix<f64>, n_steps: usize) -> DMatrix<f64> {
-    let n = a.nrows();
+    let n = b.nrows();
     let m = b.ncols();
 
     // Each constraint row corresponds to:
@@ -33,19 +33,17 @@ pub(super) fn build_c(a: &DMatrix<f64>, b: &DMatrix<f64>, n_steps: usize) -> DMa
         .copy_from(&-DMatrix::<f64>::identity(n, n));
 
     // Kronecker product: kron(I(N-1), [B -I])
-    let kron_block = matrix::kron(
-        &DMatrix::<f64>::identity(n_steps, n_steps),
-        &b_minus_i,
-    );
+    let kron_block = matrix::kron(&DMatrix::<f64>::identity(n_steps, n_steps), &b_minus_i);
 
     let mut c = kron_block;
 
     // Insert A blocks into the correct offsets
-    for k in 0..(n_steps - 1) {
+    for k in 1..n_steps {
         let row_start = k * n;
-        let col_start = k * (n + m) + m;
+        let col_start = (k - 1) * a.ncols() + k * m;
 
-        c.view_mut((row_start, col_start), (n, n)).copy_from(a);
+        c.view_mut((row_start, col_start), (a.nrows(), a.ncols()))
+            .copy_from(a);
     }
 
     c
@@ -92,62 +90,35 @@ pub(super) fn build_h<'a, S: PhysicsSim>(
     CscMatrix::from(&h_vec)
 }
 
-/// Builds G such that G * z >= h (input constraints only)
-pub fn build_g(input_dim: usize, state_dim: usize, n_steps: usize) -> DMatrix<f64> {
-    let total_vars = (n_steps - 1) * (input_dim + state_dim); // length of z
-    let g_rows = 2 * input_dim * (n_steps - 1); // lower and upper bounds
-
-    let mut g = DMatrix::<f64>::zeros(g_rows, total_vars);
-
-    for k in 0..(n_steps - 1) {
-        let u_start = k * (input_dim + state_dim); // position of u_k in z
-
-        for i in 0..input_dim {
-            let row_lower = k * input_dim + i;
-            let row_upper = (n_steps - 1) * input_dim + row_lower;
-
-            // Lower bound: -u_k[i] ≤ -u_min[i]
-            g[(row_lower, u_start + i)] = -1.0;
-
-            // Upper bound:  u_k[i] ≤ u_max[i]
-            g[(row_upper, u_start + i)] = 1.0;
-        }
-    }
-
-    g
+/// G = kron([I(n_steps)],[I(input_dim), 0(dim_n,dim_m)])
+pub fn build_g(dim_n: usize, dim_m: usize, n_steps: usize) -> DMatrix<f64> {
+    let mut i_zeros = DMatrix::<f64>::zeros(dim_n, dim_n + dim_m);
+    i_zeros
+        .view_mut((0, 0), (dim_n, dim_n))
+        .copy_from(&DMatrix::identity(dim_n, dim_n));
+    matrix::kron(&DMatrix::identity(n_steps, n_steps), &i_zeros)
 }
 
-pub fn build_h_vec(u_min: &DVector<f64>, u_max: &DVector<f64>, n_steps: usize) -> DVector<f64> {
-    let input_dim = u_min.len();
-    let mut h_vec = DVector::<f64>::zeros(2 * input_dim * (n_steps - 1));
+pub fn build_bounds(
+    v_min: &DVector<f64>,
+    v_max: &DVector<f64>,
+    n_steps: usize,
+) -> (DVector<f64>, DVector<f64>) {
+    let one_vector = DVector::from_vec(vec![1.0; n_steps]);
+    let lb = vector::kron(&one_vector, v_min);
+    let ub = vector::kron(&one_vector, v_max);
 
-    for k in 0..(n_steps - 1) {
-        for i in 0..input_dim {
-            let idx_lower = k * input_dim + i;
-            let idx_upper = (n_steps - 1) * input_dim + idx_lower;
-
-            h_vec[idx_lower] = -u_max[i]; // For -u_k ≤ -u_min
-            //h_vec[idx_upper] = u_max[i];  // For  u_k ≤ u_max
-            h_vec[idx_upper] = u_min[i]; // For  u_k ≤ u_max
-        }
-    }
-
-    h_vec
+    (lb, ub)
 }
 
 pub fn build_q_vec<S: PhysicsSim>(
     cost_fn: &CostFn<S>,
     x_trajectory: &[ControllerState<S>],
-    u_trajectory: &[ControllerInput<S>],
     n_steps: usize,
 ) -> DVector<f64> {
     let state_dims = ControllerState::<S>::dim_v() + ControllerState::<S>::dim_q();
     let input_dims = ControllerInput::<S>::dim_q();
 
-    let r_mat = cost_fn
-        .get_r()
-        .cloned()
-        .unwrap_or_else(|| DMatrix::zeros(input_dims, input_dims));
     let q_mat = cost_fn
         .get_q()
         .cloned()
@@ -158,21 +129,11 @@ pub fn build_q_vec<S: PhysicsSim>(
         .unwrap_or_else(|| DMatrix::zeros(state_dims, state_dims));
 
     let mut q = DVector::zeros((n_steps) * (state_dims + input_dims));
-    let default_running_input_cost = -&r_mat * u_trajectory[0].to_vector();
     let default_running_state_cost = -&q_mat * x_trajectory[0].to_vector();
 
     //let offset = input_dims + (j - 1) * (state_dims + input_dims);
     //b_vec.rows_mut(offset, state_dims).copy_from(&q_x);
     for i in 0..n_steps - 1 {
-        let offset_input = i * (state_dims + input_dims);
-        let running_input_cost = if u_trajectory.len() == 1 {
-            &default_running_input_cost
-        } else {
-            &(-&r_mat * u_trajectory[i].to_vector())
-        };
-        q.rows_mut(offset_input, input_dims)
-            .copy_from(&running_input_cost);
-
         let offset_state = i * (state_dims + input_dims) + input_dims;
         let running_state_cost = if x_trajectory.len() == 1 {
             &default_running_state_cost
@@ -180,7 +141,7 @@ pub fn build_q_vec<S: PhysicsSim>(
             &(-&q_mat * x_trajectory[i].to_vector())
         };
         q.rows_mut(offset_state, state_dims)
-            .copy_from(&running_state_cost);
+            .copy_from(running_state_cost);
     }
     let offset = (n_steps - 1) * (state_dims + input_dims) + input_dims;
     let terminal_cost = -qn_mat * x_trajectory.last().unwrap().to_vector();
@@ -222,7 +183,7 @@ mod tests {
     fn test_build_c() {
         let a = DMatrix::from_vec(2, 2, vec![1.0, 2.0, 2.0, 1.0]);
         let b = DMatrix::from_vec(2, 1, vec![1.0, 1.0]);
-        let n_steps = 4;
+        let n_steps = 3;
 
         //  A = [[1,2],[2,1]], B = [[1],[1]],
         //  C is 6 x 9 ; [[B, -I, 0x6], [0, A, B, -I, 0x5], [0x2 A,B,I,0x4]....[0x6, A, B, -I]]
@@ -247,13 +208,21 @@ mod tests {
             c.row(3),
             DMatrix::from_vec(1, 9, vec![0.0, 2.0, 1.0, 1.0, 0.0, -1.0, 0.0, 0.0, 0.0])
         );
+        assert_eq!(
+            c.row(4),
+            DMatrix::from_vec(1, 9, vec![0.0, 0.0, 0.0, 0.0, 1.0, 2.0, 1.0, -1.0, 0.0])
+        );
+        assert_eq!(
+            c.row(5),
+            DMatrix::from_vec(1, 9, vec![0.0, 0.0, 0.0, 0.0, 2.0, 1.0, 1.0, 0.0, -1.0])
+        );
     }
 
     #[test]
     fn test_build_h() {
         let state_dim = 2;
         let input_dim = 1;
-        let n = 4;
+        let n = 3;
 
         let q_factor = 2.0;
         let qn_factor = 3.0;
@@ -277,8 +246,8 @@ mod tests {
             &cost, state_dim, input_dim, n,
         );
 
-        assert_eq!(h.ncols, (n - 1) * (q_matrix.ncols() + r_matrix.ncols()));
-        assert_eq!(h.nrows, (n - 1) * (q_matrix.nrows() + r_matrix.nrows()));
+        assert_eq!(h.ncols, n * (q_matrix.ncols() + r_matrix.ncols()));
+        assert_eq!(h.nrows, n * (q_matrix.nrows() + r_matrix.nrows()));
         assert_eq!(h.data[0], r_factor);
         assert_eq!(h.data[1], q_factor);
         assert_eq!(h.data[2], q_factor);

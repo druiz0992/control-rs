@@ -1,7 +1,5 @@
-use control_rs::animation::{Animation, macroquad::Macroquad};
+use control_rs::controllers::qp_lqr::options::QPOptions;
 use control_rs::controllers::qp_lqr::symbolic::QPLQRSymbolic;
-use control_rs::controllers::riccati_lqr::options::RiccatiLQROptions;
-use control_rs::controllers::riccati_lqr::symbolic::RiccatiRecursionSymbolic;
 use control_rs::controllers::{Controller, ControllerOptions};
 use control_rs::cost::generic::{GenericCost, GenericCostOptions};
 use control_rs::numeric_services::symbolic::ExprRegistry;
@@ -11,6 +9,7 @@ use control_rs::physics::models::{Quadrotor2D, Quadrotor2DInput, Quadrotor2DStat
 use control_rs::physics::simulator::BasicSim;
 use control_rs::plotter;
 use nalgebra::DMatrix;
+use osqp::Settings;
 use std::sync::Arc;
 
 fn main() {
@@ -23,13 +22,13 @@ fn main() {
     let sim_time = 10.0;
     let n_steps = (sim_time / dt) as usize + 1;
 
-    let u_limits = (0.2 * m * c::GRAVITY, 0.6 * m * c::GRAVITY);
+    //let u_limits = (0.2 * m * c::GRAVITY, 0.6 * m * c::GRAVITY);
 
     // linearization points
     let input_hover = Quadrotor2DInput::new(0.5 * m * c::GRAVITY, 0.5 * m * c::GRAVITY);
     let state_hover = Quadrotor2DState::default();
 
-    let state_0 = Quadrotor2DState::new(2.0, 2.0, 0.0, 0.0, 0.0, 0.0);
+    let state_0 = Quadrotor2DState::new(1.0, 2.0, 0.0, 0.0, 0.0, 0.0);
     let state_ref = Quadrotor2DState::new(0.0, 1.0, 0.0, 0.0, 0.0, 0.0);
 
     let registry = Arc::new(ExprRegistry::new());
@@ -39,8 +38,8 @@ fn main() {
     let integrator = RK4Symbolic::new(&model, Arc::clone(&registry)).unwrap();
     let sim = BasicSim::new(model.clone(), integrator);
 
-    let q_matrix = DMatrix::<f64>::identity(6, 6) * 4.0;
-    let qn_matrix = DMatrix::<f64>::identity(6, 6) * 10.0;
+    let q_matrix = DMatrix::<f64>::identity(6, 6) * 1.0;
+    let qn_matrix = DMatrix::<f64>::identity(6, 6) * 1.0;
     let r_matrix = DMatrix::<f64>::identity(2, 2) * 0.01;
 
     let mut reference_traj: Vec<_> = (0..n_steps + 1)
@@ -56,9 +55,15 @@ fn main() {
     let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, Some(options)).unwrap();
 
     let general_options = ControllerOptions::<BasicSim<Quadrotor2D, RK4Symbolic<_>>>::default()
-        .set_x_ref(&vec![state_ref.clone()])
-        .set_u_operating(&input_hover)
-        .set_x_operating(&state_hover);
+        .set_x_ref(&[state_ref.clone()])
+        .set_u_ref(&[input_hover.clone()])
+        .set_x_operating(&state_hover)
+        .set_u_operating(&input_hover);
+    let osqp_settings = Settings::default().verbose(false);
+    let qp_options = QPOptions::default()
+        .set_general(general_options)
+        .set_osqp_settings(osqp_settings);
+
     //options.set_u_limits((-0.5, 0.1));
     let (mut controller, _) = QPLQRSymbolic::new(
         sim,
@@ -66,7 +71,7 @@ fn main() {
         &state_0,
         sim_time,
         dt,
-        Some(general_options),
+        Some(qp_options),
     )
     .unwrap();
     /*
@@ -81,9 +86,7 @@ fn main() {
             .unwrap();
 
     */
-    controller.solve(&state_0).unwrap();
-    let x_traj = controller.rollout(&state_0).unwrap();
-    let u_traj = controller.get_u_traj();
+    let (x_traj, u_traj) = controller.solve(&state_0).unwrap();
 
     let times: Vec<_> = (0..x_traj.len()).map(|i| i as f64 * dt).collect();
 

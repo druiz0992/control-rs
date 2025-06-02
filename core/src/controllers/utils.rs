@@ -23,9 +23,7 @@ pub fn add_noise_to_inputs<S: PhysicsSim>(
 
     Ok(inputs
         .iter()
-        .map(|s| {
-            ControllerInput::<S>::from_slice(&noise_source.add_noise(s.to_vector()).as_slice())
-        })
+        .map(|s| ControllerInput::<S>::from_slice(noise_source.add_noise(s.to_vector()).as_slice()))
         .collect())
 }
 
@@ -38,8 +36,6 @@ pub fn add_noise_to_states<S: PhysicsSim>(
 
     Ok(states
         .iter()
-        .map(|s| {
-            ControllerState::<S>::from_slice(&noise_source.add_noise(s.to_vector()).as_slice())
-        })
+        .map(|s| ControllerState::<S>::from_slice(noise_source.add_noise(s.to_vector()).as_slice()))
         .collect())
 }

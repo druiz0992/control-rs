@@ -20,9 +20,9 @@ async fn main() {
 
     let dt = 0.05;
     let sim_time = 10.0;
-    let n_steps = (sim_time / dt) as usize + 1;
+    //let n_steps = (sim_time / dt) as usize + 1;
 
-    let u_limits = (0.2 * m * c::GRAVITY, 0.6 * m * c::GRAVITY);
+    //let u_limits = (0.2 * m * c::GRAVITY, 0.6 * m * c::GRAVITY);
 
     // linearization points
     let input_hover = Quadrotor2DInput::new(0.5 * m * c::GRAVITY, 0.5 * m * c::GRAVITY);
@@ -45,7 +45,7 @@ async fn main() {
     let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, None).unwrap();
 
     let general_options = ControllerOptions::<BasicSim<Quadrotor2D, RK4Symbolic<_>>>::default()
-        .set_x_ref(&vec![state_ref])
+        .set_x_ref(&[state_ref])
         .set_u_operating(&input_hover)
         .set_x_operating(&state_hover);
     let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
@@ -54,8 +54,7 @@ async fn main() {
         RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), sim_time, dt, Some(options))
             .unwrap();
 
-    lqr_riccati.solve(&state_0).unwrap();
-    let x_traj_riccati = lqr_riccati.rollout(&state_0).unwrap();
+    let (x_traj_riccati, _) = lqr_riccati.solve(&state_0).unwrap();
     let animation = Macroquad::new();
 
     animation

@@ -1,8 +1,8 @@
 use super::options::RiccatiLQROptions;
 use crate::controllers::riccati_lqr::recursion;
 use crate::controllers::{
-    Controller, ControllerInput, ControllerState, CostFn, InputTrajectory, into_clamped_input,
-    try_into_noisy_state,
+    Controller, ControllerInput, ControllerState, CostFn, InputTrajectory, TrajectoryHistory,
+    into_clamped_input, try_into_noisy_state,
 };
 use crate::physics::ModelError;
 use crate::physics::models::Dynamics;
@@ -120,25 +120,10 @@ where
     S::Model: Dynamics,
     S::Discretizer: Discretizer<S::Model>,
 {
-    fn get_u_traj(&self) -> Vec<ControllerInput<S>> {
-        self.u_traj.to_vec()
-    }
-    fn rollout(
-        &self,
-        initial_state: &ControllerState<S>,
-    ) -> Result<Vec<ControllerState<S>>, ModelError> {
-        self.sim.rollout(
-            initial_state,
-            Some(self.u_traj.as_vec()),
-            self.dt,
-            self.n_steps,
-        )
-    }
-
     fn solve(
         &mut self,
         initial_state: &ControllerState<S>,
-    ) -> Result<Vec<ControllerInput<S>>, ModelError> {
+    ) -> Result<TrajectoryHistory<S>, ModelError> {
         let k_seq = self.compute_gain()?;
 
         // TODO >>> review
@@ -163,13 +148,13 @@ where
             u_traj[k] = into_clamped_input::<S>(current_input, u_limits);
 
             let x_next = self.sim.step(&x_traj[k], Some(&u_traj[k]), self.dt)?;
-            current_state = x_next.clone().to_vector();
             x_traj[k + 1] = try_into_noisy_state::<S>(x_next.to_vector(), &noise_sources, 1)?;
+            current_state = x_traj[k + 1].to_vector();
         }
 
         self.u_traj = InputTrajectory::new(u_traj.clone());
 
-        Ok(u_traj)
+        Ok((x_traj, u_traj))
     }
 }
 
