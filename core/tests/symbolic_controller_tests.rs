@@ -2,7 +2,7 @@ use control_rs::controllers::qp_lqr::options::QPOptions;
 use control_rs::controllers::qp_lqr::symbolic::QPLQRSymbolic;
 use control_rs::controllers::riccati_lqr::options::RiccatiLQROptions;
 use control_rs::controllers::riccati_lqr::symbolic::RiccatiRecursionSymbolic;
-use control_rs::controllers::{Controller, ControllerOptions};
+use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions};
 use control_rs::cost::generic::{GenericCost, GenericCostOptions};
 use control_rs::numeric_services::symbolic::ExprRegistry;
 use control_rs::physics::constants as c;
@@ -24,7 +24,8 @@ enum SymbolicControllerType {
     RiccatiRecursionLQRInfiniteSymbolicLimits(f64, f64),
 }
 
-type SymbolicContoller = Box<dyn Controller<BasicSim<Quadrotor2D, RK4Symbolic<Quadrotor2D>>>>;
+type QuadrotorSim = BasicSim<Quadrotor2D, RK4Symbolic<Quadrotor2D>>;
+type SymbolicContoller = Box<dyn Controller<QuadrotorSim>>;
 
 fn symbolic_controller_setup(controller_type: SymbolicControllerType, tol: f64) {
     let m = 1.0;
@@ -63,11 +64,15 @@ fn symbolic_controller_setup(controller_type: SymbolicControllerType, tol: f64) 
     )
     .unwrap();
 
-    let general_options = ControllerOptions::<BasicSim<Quadrotor2D, RK4Symbolic<_>>>::default()
+    let general_options = ControllerOptions::<QuadrotorSim>::default()
         .set_x_ref(&[state_ref.clone()])
         .set_u_ref(&[input_hover.clone()])
         .set_u_operating(&input_hover)
-        .set_x_operating(&state_hover);
+        .set_x_operating(&state_hover)
+        .set_dt(dt)
+        .unwrap()
+        .set_time_horizon(sim_time)
+        .unwrap();
 
     let mut controller: SymbolicContoller = match controller_type {
         SymbolicControllerType::QPLQRSymbolic => {
@@ -82,8 +87,6 @@ fn symbolic_controller_setup(controller_type: SymbolicControllerType, tol: f64) 
                 sim,
                 Box::new(cost.clone()),
                 &initial_state,
-                sim_time,
-                dt,
                 Some(qp_options),
             )
             .unwrap();
@@ -92,11 +95,11 @@ fn symbolic_controller_setup(controller_type: SymbolicControllerType, tol: f64) 
         SymbolicControllerType::QPLQRSymbolicLimits(lower, upper) => {
             let options = GenericCostOptions::new().set_linear_term(true);
             let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, Some(options)).unwrap();
-            let general_options = general_options.set_u_limits((
+            let contraints = ConstraintTransform::new_uniform_bounds_input::<QuadrotorSim>((
                 lower - input_hover.to_vec()[0],
                 upper - input_hover.to_vec()[0],
             ));
-
+            let general_options = general_options.set_u_limits(contraints);
             let osqp_settings = Settings::default().verbose(false);
             let qp_options = QPOptions::default()
                 .set_general(general_options)
@@ -105,8 +108,6 @@ fn symbolic_controller_setup(controller_type: SymbolicControllerType, tol: f64) 
                 sim,
                 Box::new(cost.clone()),
                 &initial_state,
-                sim_time,
-                dt,
                 Some(qp_options),
             )
             .unwrap();
@@ -115,41 +116,25 @@ fn symbolic_controller_setup(controller_type: SymbolicControllerType, tol: f64) 
         SymbolicControllerType::RiccatiRecursionLQRFiniteSymbolic => {
             let options = RiccatiLQROptions::enable_finite_horizon().set_general(general_options);
 
-            let contoller = RiccatiRecursionSymbolic::new(
-                sim,
-                Box::new(cost.clone()),
-                sim_time,
-                dt,
-                Some(options),
-            )
-            .unwrap();
+            let contoller =
+                RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), Some(options)).unwrap();
             Box::new(contoller)
         }
         SymbolicControllerType::RiccatiRecursionLQRInfiniteSymbolic => {
             let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
 
-            let contoller = RiccatiRecursionSymbolic::new(
-                sim,
-                Box::new(cost.clone()),
-                sim_time,
-                dt,
-                Some(options),
-            )
-            .unwrap();
+            let contoller =
+                RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), Some(options)).unwrap();
             Box::new(contoller)
         }
         SymbolicControllerType::RiccatiRecursionLQRInfiniteSymbolicLimits(lower, upper) => {
-            let general_options = general_options.set_u_limits((lower, upper));
+            let contraints =
+                ConstraintTransform::new_uniform_bounds_input::<QuadrotorSim>((lower, upper));
+            let general_options = general_options.set_u_limits(contraints);
             let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
 
-            let contoller = RiccatiRecursionSymbolic::new(
-                sim,
-                Box::new(cost.clone()),
-                sim_time,
-                dt,
-                Some(options),
-            )
-            .unwrap();
+            let contoller =
+                RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), Some(options)).unwrap();
             Box::new(contoller)
         }
     };
@@ -176,7 +161,6 @@ fn symbolic_controller_setup(controller_type: SymbolicControllerType, tol: f64) 
                 .iter()
                 .filter(|u| u.to_vec()[0] < lower - tol || u.to_vec()[0] > upper + tol)
                 .collect();
-            dbg!(&u_traj);
             assert!(exceed_limits.is_empty());
         }
         _ => (),
@@ -184,13 +168,11 @@ fn symbolic_controller_setup(controller_type: SymbolicControllerType, tol: f64) 
 }
 
 #[test]
-#[ignore]
 fn test_qp_lqr_symbolic() {
-    symbolic_controller_setup(SymbolicControllerType::QPLQRSymbolic, 1e3);
+    symbolic_controller_setup(SymbolicControllerType::QPLQRSymbolic, 1e-3);
 }
 
 #[test]
-#[ignore]
 fn test_qp_lqr_limits_symbolic() {
     symbolic_controller_setup(
         SymbolicControllerType::QPLQRSymbolicLimits(0.2 * c::GRAVITY, 0.6 * c::GRAVITY),

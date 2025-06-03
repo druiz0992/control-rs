@@ -1,7 +1,8 @@
 use super::options::QPOptions;
 use super::utils;
 use crate::controllers::{
-    Controller, ControllerInput, ControllerState, CostFn, InputTrajectory, TrajectoryHistory,
+    Controller, ControllerInput, ControllerState, CostFn, SteppableController, TrajectoryHistory,
+    UpdatableController,
 };
 use crate::physics::ModelError;
 use crate::physics::models::Dynamics;
@@ -11,14 +12,11 @@ use crate::solver::osqp::solver::OSQPSolverHandle;
 use crate::solver::{Minimizer, OSQPBuilder};
 use crate::utils::evaluable::EvaluableDMatrix;
 use crate::utils::{matrix, vector};
-use nalgebra::DVector;
 
 pub struct QPLQRGeneric<S: PhysicsSim> {
     #[allow(dead_code)]
     sim: S,
     solver: OSQPSolverHandle,
-
-    u_traj: InputTrajectory<S>,
 
     n_steps: usize,
 
@@ -38,20 +36,13 @@ where
         jacobian_x_fn: EvaluableDMatrix,
         jacobian_u_fn: EvaluableDMatrix,
         x0: &ControllerState<S>,
-        time_horizon: f64,
-        dt: f64,
         options: QPOptions<S>,
     ) -> Result<(Self, QPParams), ModelError> {
-        if time_horizon <= 0.0 || dt <= 0.0 {
-            return Err(ModelError::ConfigError(
-                "Incorrect time configuration".into(),
-            ));
-        }
+        let n_steps = (options.get_general().get_time_horizon() / options.get_general().get_dt())
+            as usize
+            + 1;
 
-        let n_steps = (time_horizon / dt) as usize + 1;
-
-        let u_traj = InputTrajectory::new(vec![ControllerInput::<S>::default(); n_steps - 1]);
-
+        dbg!(n_steps);
         let vals = options.general.concatenate_operating_point();
 
         let control_mat = jacobian_u_fn.evaluate(&vals)?;
@@ -73,11 +64,8 @@ where
         let mut ub_vec = lb_vec.clone();
 
         // inequality input matrix => lb <= g * input <= ub; c = [c; g]
-        if let Some((u_min_val, u_max_val)) = options.general.get_u_limits() {
-            let u_min = DVector::from_element(input_dim, u_min_val);
-            let u_max = DVector::from_element(input_dim, u_max_val);
-            let (lb, ub) = utils::build_bounds(&u_min, &u_max, n_steps - 1);
-            let g_mat = utils::build_g(input_dim, state_dim, n_steps - 1);
+        if let Some(input_constraints) = options.general.get_u_limits() {
+            let (lb, g_mat, ub) = input_constraints.expand_input::<S>(n_steps - 1)?;
             c = matrix::vstack_option(c, Some(g_mat))
                 .map_err(|e| ModelError::Other(e.to_string()))?;
             lb_vec = vector::vstack_option(lb_vec, Some(lb));
@@ -85,16 +73,12 @@ where
         }
 
         // inequality state matrix => lb <= g * state <= ub; c = [c; g]
-        if let Some((u_min_val, u_max_val)) = options.general.get_x_limits() {
-            let x_min = DVector::from_element(input_dim, u_min_val);
-            let x_max = DVector::from_element(input_dim, u_max_val);
-            let (lb, ub) = utils::build_bounds(&x_min, &x_max, n_steps - 1);
-            lb_vec = vector::vstack_option(lb_vec, Some(lb));
-            ub_vec = vector::vstack_option(ub_vec, Some(ub));
-
-            let g_mat = utils::build_g(state_dim, input_dim, n_steps - 1);
+        if let Some(state_constraints) = options.general.get_x_limits() {
+            let (lb, g_mat, ub) = state_constraints.expand_state::<S>(n_steps - 1)?;
             c = matrix::vstack_option(c, Some(g_mat))
                 .map_err(|e| ModelError::Other(e.to_string()))?;
+            lb_vec = vector::vstack_option(lb_vec, Some(lb));
+            ub_vec = vector::vstack_option(ub_vec, Some(ub));
         }
 
         let mut qp_builder = OSQPBuilder::new();
@@ -111,7 +95,6 @@ where
             QPLQRGeneric {
                 sim,
                 solver,
-                u_traj,
                 n_steps,
                 u_ref,
                 x_ref,
@@ -122,6 +105,14 @@ where
 
     pub fn update(&self, builder: OSQPBuilder) {
         builder.update(&self.solver)
+    }
+}
+
+impl<S: PhysicsSim> UpdatableController<S> for QPLQRGeneric<S> {
+    type Params<'a> = OSQPBuilder<'a>;
+
+    fn update(&self, params: Self::Params<'_>) {
+        params.update(&self.solver)
     }
 }
 
@@ -147,8 +138,16 @@ impl<S: PhysicsSim> Controller<S> for QPLQRGeneric<S> {
                 &r.0[base + input_dim..base + input_dim + state_dim],
             );
         }
-        self.u_traj = InputTrajectory::<S>::new(u_traj.clone());
-
         Ok((x_traj, u_traj))
+    }
+}
+impl<S: PhysicsSim> SteppableController<S> for QPLQRGeneric<S> {
+    fn step(
+        &self,
+        state: ControllerState<S>,
+        input: Option<&ControllerInput<S>>,
+        dt: f64,
+    ) -> Result<ControllerState<S>, ModelError> {
+        self.sim.step(&state, input, dt)
     }
 }

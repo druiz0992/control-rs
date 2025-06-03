@@ -1,3 +1,4 @@
+pub mod constraints;
 pub mod indirect_shooting;
 pub mod options;
 pub mod qp_lqr;
@@ -6,6 +7,7 @@ pub mod riccati_lqr;
 pub mod trajectory;
 pub mod utils;
 
+pub use constraints::ConstraintTransform;
 pub use indirect_shooting::lqr::IndirectShootingLQR;
 pub use indirect_shooting::symbolic::IndirectShootingSymbolic;
 use nalgebra::DVector;
@@ -31,6 +33,20 @@ pub trait Controller<S: PhysicsSim> {
         initial_state: &ControllerState<S>,
     ) -> Result<TrajectoryHistory<S>, ModelError>;
 }
+pub trait UpdatableController<S: PhysicsSim>: Controller<S> {
+    type Params<'a>;
+
+    fn update(&self, params: Self::Params<'_>);
+}
+
+pub trait SteppableController<S: PhysicsSim>: Controller<S> {
+    fn step(
+        &self,
+        state: ControllerState<S>,
+        input: Option<&ControllerInput<S>>,
+        dt: f64,
+    ) -> Result<ControllerState<S>, ModelError>;
+}
 
 fn input_from_slice<S: PhysicsSim>(slice: &[f64]) -> ControllerInput<S> {
     ControllerInput::<S>::from_slice(slice)
@@ -41,7 +57,7 @@ fn state_from_slice<S: PhysicsSim>(slice: &[f64]) -> ControllerState<S> {
 
 fn into_clamped_input<S: PhysicsSim>(
     vector: DVector<f64>,
-    u_limits: Option<(f64, f64)>,
+    u_limits: Option<&ConstraintTransform>,
 ) -> ControllerInput<S> {
     input_from_slice::<S>(utils::clamp_input_vector(vector, u_limits).as_slice())
 }

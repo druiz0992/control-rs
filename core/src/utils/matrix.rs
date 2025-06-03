@@ -1,5 +1,7 @@
 use nalgebra::DMatrix;
 
+use crate::physics::ModelError;
+
 /// Constructs a block diagonal matrix from a slice of matrices.
 ///
 /// - **Parameters**:
@@ -125,6 +127,41 @@ pub fn vstack_option(
         }
         None => Ok(a),
     }
+}
+
+/// Horizontally stacks two matrices.
+///
+/// - **Parameters**:
+///   - `a`: A `DMatrix<f64>` representing the first matrix.
+///   - `b`: A `DMatrix<f64>` representing the second matrix.
+/// - **Returns**:
+///   - A `Result<DMatrix<f64>, ModelError>` containing the horizontally stacked matrix or an error if the row counts do not match.
+///
+/// - **Example**:
+/// ```rust
+/// use nalgebra::dmatrix;
+/// use control_rs::utils::matrix::hstack;
+///
+/// let a = dmatrix![1.0, 2.0; 3.0, 4.0];
+/// let b = dmatrix![5.0; 6.0];
+/// let result = hstack(a, b);
+/// ```
+pub fn hstack(a: DMatrix<f64>, b: DMatrix<f64>) -> Result<DMatrix<f64>, ModelError> {
+    if a.nrows() != b.nrows() {
+        return Err(ModelError::ConfigError(
+            "Mismatch in matix dimensions.".into(),
+        ));
+    }
+
+    let mut stacked = DMatrix::zeros(a.nrows(), a.ncols() + b.ncols());
+    stacked
+        .view_mut((0, 0), (a.nrows(), a.ncols()))
+        .copy_from(&a);
+    stacked
+        .view_mut((0, a.ncols()), (b.nrows(), b.ncols()))
+        .copy_from(&b);
+
+    Ok(stacked)
 }
 
 #[cfg(test)]

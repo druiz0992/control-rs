@@ -1,4 +1,5 @@
 use control_rs::controllers::Controller;
+use control_rs::controllers::ControllerOptions;
 use control_rs::controllers::IndirectShootingLQR;
 use control_rs::cost::generic::GenericCost;
 use control_rs::physics::discretizer::ZOH;
@@ -7,6 +8,7 @@ use control_rs::physics::simulator::BasicSim;
 use control_rs::plotter;
 use nalgebra::{DMatrix, dmatrix};
 
+type LtiSim = BasicSim<LtiModel<2, 0, 1>, ZOH<LtiModel<2, 0, 1>>>;
 fn main() {
     let state_matrix = dmatrix![0.0,1.0; 0.0,0.0];
     let control_matrix = dmatrix![0.0; 1.0];
@@ -25,9 +27,14 @@ fn main() {
     let qn_matrix = DMatrix::<f64>::identity(2, 2);
     let r_matrix = DMatrix::<f64>::identity(1, 1) * 0.1;
     let cost = GenericCost::<_, LtiInput<1, 0>>::new(q_matrix, qn_matrix, r_matrix, None).unwrap();
+    let options = ControllerOptions::<LtiSim>::default()
+        .set_dt(dt)
+        .unwrap()
+        .set_time_horizon(sim_time)
+        .unwrap();
 
     let mut controller =
-        IndirectShootingLQR::new(sim, Box::new(cost.clone()), sim_time, dt).unwrap();
+        IndirectShootingLQR::new(sim, Box::new(cost.clone()), Some(options)).unwrap();
 
     let (x_traj, u_traj) = controller.solve(&initial_state).unwrap();
 

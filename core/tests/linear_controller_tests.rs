@@ -1,7 +1,10 @@
 use control_rs::controllers::qp_lqr::options::QPOptions;
+use control_rs::controllers::qp_mpc::linear::ConvexMpc;
+use control_rs::controllers::qp_mpc::options::ConvexMpcOptions;
 use control_rs::controllers::riccati_lqr::options::RiccatiLQROptions;
 use control_rs::controllers::{
-    Controller, ControllerOptions, IndirectShootingLQR, QPLQR, RiccatiRecursionLQR,
+    ConstraintTransform, Controller, ControllerOptions, IndirectShootingLQR, QPLQR,
+    RiccatiRecursionLQR,
 };
 use control_rs::cost::generic::{GenericCost, GenericCostOptions};
 use control_rs::physics::discretizer::ZOH;
@@ -17,9 +20,11 @@ enum LinearControllerType {
     QpLqrUlimits(f64, f64),
     RiccatiRecursionLQRFinite,
     RiccatiRecursionLQRInfinite,
+    MpcLinear,
 }
 
-type LinearContoller = Box<dyn Controller<BasicSim<LtiModel<2, 0, 1>, ZOH<LtiModel<2, 0, 1>>>>>;
+type LtiSim = BasicSim<LtiModel<2, 0, 1>, ZOH<LtiModel<2, 0, 1>>>;
+type LinearContoller = Box<dyn Controller<LtiSim>>;
 
 fn linear_controller_setup(controller_type: LinearControllerType) {
     let state_matrix = dmatrix![0.0,1.0; 0.0,0.0];
@@ -44,58 +49,59 @@ fn linear_controller_setup(controller_type: LinearControllerType) {
     let cost = GenericCost::<_, LtiInput<1, 0>>::new(q_matrix, qn_matrix, r_matrix, Some(options))
         .unwrap();
 
+    let general_options = ControllerOptions::<LtiSim>::default()
+        .set_dt(dt)
+        .unwrap()
+        .set_time_horizon(sim_time)
+        .unwrap();
     let mut controller: LinearContoller = match controller_type {
-        LinearControllerType::IndirectShootingLqr => {
-            Box::new(IndirectShootingLQR::new(sim, Box::new(cost.clone()), sim_time, dt).unwrap())
-        }
+        LinearControllerType::IndirectShootingLqr => Box::new(
+            IndirectShootingLQR::new(sim, Box::new(cost.clone()), Some(general_options)).unwrap(),
+        ),
         LinearControllerType::QpLqr => {
             let osqp_settings = Settings::default().verbose(false);
-            let options = ControllerOptions::<BasicSim<LtiModel<2, 0, 1>, ZOH<_>>>::default();
             let qp_options = QPOptions::default()
-                .set_general(options)
+                .set_general(general_options)
                 .set_osqp_settings(osqp_settings);
             let (controller, _) = QPLQR::new(
                 sim,
                 Box::new(cost.clone()),
                 &initial_state,
-                sim_time,
-                dt,
                 Some(qp_options),
             )
             .unwrap();
             Box::new(controller)
         }
         LinearControllerType::QpLqrUlimits(lower, upper) => {
-            let options = ControllerOptions::<BasicSim<LtiModel<2, 0, 1>, ZOH<_>>>::default()
-                .set_u_limits((lower, upper));
+            let contraints =
+                ConstraintTransform::new_uniform_bounds_input::<LtiSim>((lower, upper));
+            let general_options = general_options.set_u_limits(contraints);
             let osqp_settings = Settings::default().verbose(false);
-            let qp_options = QPOptions::<BasicSim<LtiModel<2, 0, 1>, ZOH<_>>>::default()
-                .set_general(options)
+            let qp_options = QPOptions::<LtiSim>::default()
+                .set_general(general_options)
                 .set_osqp_settings(osqp_settings);
             let (controller, _) = QPLQR::new(
                 sim,
                 Box::new(cost.clone()),
                 &initial_state,
-                sim_time,
-                dt,
                 Some(qp_options),
             )
             .unwrap();
             Box::new(controller)
         }
         LinearControllerType::RiccatiRecursionLQRFinite => {
-            let options = RiccatiLQROptions::enable_infinite_horizon();
-            Box::new(
-                RiccatiRecursionLQR::new(sim, Box::new(cost.clone()), sim_time, dt, Some(options))
-                    .unwrap(),
-            )
+            let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
+            Box::new(RiccatiRecursionLQR::new(sim, Box::new(cost.clone()), Some(options)).unwrap())
         }
 
         LinearControllerType::RiccatiRecursionLQRInfinite => {
-            let options = RiccatiLQROptions::enable_infinite_horizon();
+            let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
+            Box::new(RiccatiRecursionLQR::new(sim, Box::new(cost.clone()), Some(options)).unwrap())
+        }
+        LinearControllerType::MpcLinear => {
+            let options = ConvexMpcOptions::default().set_general(general_options);
             Box::new(
-                RiccatiRecursionLQR::new(sim, Box::new(cost.clone()), sim_time, dt, Some(options))
-                    .unwrap(),
+                ConvexMpc::new(sim, Box::new(cost.clone()), &initial_state, Some(options)).unwrap(),
             )
         }
     };
@@ -148,4 +154,9 @@ fn test_ricatti_linear_infinite() {
 #[test]
 fn test_ricatti_linear_finite() {
     linear_controller_setup(LinearControllerType::RiccatiRecursionLQRFinite);
+}
+
+#[test]
+fn test_mpc_linear_finite() {
+    linear_controller_setup(LinearControllerType::MpcLinear);
 }

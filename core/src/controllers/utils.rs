@@ -1,13 +1,23 @@
-use super::{ControllerInput, ControllerState};
+use super::{ConstraintTransform, ControllerInput, ControllerState};
 use crate::physics::ModelError;
 use crate::physics::traits::{PhysicsSim, State};
 use crate::utils::NoiseSource;
 use nalgebra::DVector;
 
 /// Clamps an input vector within given limits
-pub fn clamp_input_vector(input: DVector<f64>, limits: Option<(f64, f64)>) -> DVector<f64> {
-    if let Some((lower, upper)) = limits {
-        input.map(|xi| xi.clamp(lower, upper))
+pub fn clamp_input_vector(
+    input: DVector<f64>,
+    limits: Option<&ConstraintTransform>,
+) -> DVector<f64> {
+    if let Some(constraint) = limits {
+        let (lower, upper) = constraint.bounds_as_slice();
+        DVector::from_iterator(
+            input.len(),
+            input
+                .iter()
+                .zip(lower.iter().zip(upper.iter()))
+                .map(|(xi, (lo, hi))| xi.clamp(*lo, *hi)),
+        )
     } else {
         input
     }

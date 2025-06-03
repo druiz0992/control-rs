@@ -1,4 +1,6 @@
-use crate::controllers::{ControllerInput, ControllerState, CostFn, InputTrajectory, TrajectoryHistory};
+use crate::controllers::{
+    ControllerInput, ControllerOptions, ControllerState, CostFn, InputTrajectory, TrajectoryHistory,
+};
 use crate::physics::ModelError;
 use crate::physics::models::Dynamics;
 use crate::physics::traits::{Discretizer, PhysicsSim, State};
@@ -47,15 +49,10 @@ where
         cost_fn: CostFn<S>,
         jacobian_x_fn: EvaluableDMatrix,
         jacobian_u_fn: EvaluableDMatrix,
-        time_horizon: f64,
-        dt: f64,
+        options: ControllerOptions<S>,
     ) -> Result<Self, ModelError> {
-        if time_horizon <= 0.0 || dt <= 0.0 {
-            return Err(ModelError::ConfigError(
-                "Incorrect time configuration".into(),
-            ));
-        }
-        let n_steps = (time_horizon / dt) as usize + 1;
+
+        let n_steps = (options.get_time_horizon() / options.get_dt()) as usize + 1;
 
         let u = ControllerInput::<S>::default().to_vector();
         let mut u_traj = DMatrix::zeros(u.len(), n_steps - 1);
@@ -68,7 +65,7 @@ where
             cost_fn,
             u_traj,
             n_steps,
-            dt,
+            dt: options.get_dt(),
             jacobian_u_fn,
             jacobian_x_fn,
         })

@@ -47,11 +47,11 @@ async fn main() {
     let general_options = ControllerOptions::<BasicSim<Quadrotor2D, RK4Symbolic<_>>>::default()
         .set_x_ref(&[state_ref])
         .set_u_operating(&input_hover)
-        .set_x_operating(&state_hover);
+        .set_x_operating(&state_hover).set_dt(dt).unwrap().set_time_horizon(sim_time).unwrap();
     let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
 
     let mut lqr_riccati =
-        RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), sim_time, dt, Some(options))
+        RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()),Some(options))
             .unwrap();
 
     let (x_traj_riccati, _) = lqr_riccati.solve(&state_0).unwrap();

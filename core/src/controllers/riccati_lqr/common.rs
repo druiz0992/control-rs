@@ -1,8 +1,8 @@
 use super::options::RiccatiLQROptions;
 use crate::controllers::riccati_lqr::recursion;
 use crate::controllers::{
-    Controller, ControllerInput, ControllerState, CostFn, InputTrajectory, TrajectoryHistory,
-    into_clamped_input, try_into_noisy_state,
+    Controller, ControllerInput, ControllerState, CostFn, TrajectoryHistory, into_clamped_input,
+    try_into_noisy_state,
 };
 use crate::physics::ModelError;
 use crate::physics::models::Dynamics;
@@ -16,12 +16,10 @@ const ZERO_MEAN: f64 = 0.0;
 pub struct RiccatiRecursionGeneric<S: PhysicsSim> {
     sim: S,
     cost_fn: CostFn<S>,
-    u_traj: InputTrajectory<S>,
     k_ss: DMatrix<f64>,
     p_ss: DMatrix<f64>,
 
     n_steps: usize,
-    dt: f64,
 
     jacobian_u_fn: EvaluableDMatrix,
     jacobian_x_fn: EvaluableDMatrix,
@@ -40,18 +38,11 @@ where
         cost_fn: CostFn<S>,
         jacobian_x_fn: EvaluableDMatrix,
         jacobian_u_fn: EvaluableDMatrix,
-        time_horizon: f64,
-        dt: f64,
         options: RiccatiLQROptions<S>,
     ) -> Result<Self, ModelError> {
-        if time_horizon <= 0.0 || dt <= 0.0 {
-            return Err(ModelError::ConfigError(
-                "Incorrect time configuration".into(),
-            ));
-        }
-        let n_steps = (time_horizon / dt) as usize + 1;
-
-        let u_traj = InputTrajectory::new(vec![ControllerInput::<S>::default(); n_steps - 1]);
+        let n_steps = (options.get_general().get_time_horizon() / options.get_general().get_dt())
+            as usize
+            + 1;
 
         Ok(RiccatiRecursionGeneric {
             sim,
@@ -59,11 +50,9 @@ where
             options,
             k_ss: DMatrix::default(),
             p_ss: DMatrix::default(),
-            u_traj,
             n_steps,
             jacobian_x_fn,
             jacobian_u_fn,
-            dt,
         })
     }
 
@@ -132,6 +121,7 @@ where
 
         let mut x_traj = vec![initial_state.clone(); self.n_steps];
         let mut u_traj = vec![ControllerInput::<S>::default(); self.n_steps - 1];
+        let dt = self.options.get_general().get_dt();
 
         // enable noise if configured
         let (noise_0_std, noise_std) = self.options.general.get_noise().unwrap_or_default();
@@ -147,12 +137,10 @@ where
             let current_input = gain_to_input_vector(&current_state, &k_seq[k], &x_ref, &u_op);
             u_traj[k] = into_clamped_input::<S>(current_input, u_limits);
 
-            let x_next = self.sim.step(&x_traj[k], Some(&u_traj[k]), self.dt)?;
+            let x_next = self.sim.step(&x_traj[k], Some(&u_traj[k]), dt)?;
             x_traj[k + 1] = try_into_noisy_state::<S>(x_next.to_vector(), &noise_sources, 1)?;
             current_state = x_traj[k + 1].to_vector();
         }
-
-        self.u_traj = InputTrajectory::new(u_traj.clone());
 
         Ok((x_traj, u_traj))
     }

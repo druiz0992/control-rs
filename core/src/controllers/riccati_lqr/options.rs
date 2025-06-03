@@ -55,6 +55,10 @@ where
         self.tol
     }
 
+    pub fn get_general(&self) -> &ControllerOptions<S> {
+        &self.general
+    }
+
     pub fn set_max_iter(self, max_iter: usize) -> Self {
         let mut new = self;
         new.max_iter = max_iter;

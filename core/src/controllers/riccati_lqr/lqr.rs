@@ -16,8 +16,6 @@ where
     pub fn new(
         sim: S,
         cost_fn: CostFn<S>,
-        time_horizon: f64,
-        dt: f64,
         options: Option<RiccatiLQROptions<S>>,
     ) -> Result<Self, ModelError> {
         let jacobian_x_fn = Box::new(sim.discretizer().jacobian_x().clone());
@@ -25,15 +23,8 @@ where
 
         let options = options.unwrap_or_default();
 
-        let controller = RiccatiRecursionGeneric::new(
-            sim,
-            cost_fn,
-            jacobian_x_fn,
-            jacobian_u_fn,
-            time_horizon,
-            dt,
-            options,
-        )?;
+        let controller =
+            RiccatiRecursionGeneric::new(sim, cost_fn, jacobian_x_fn, jacobian_u_fn, options)?;
 
         Ok(RiccatiRecursionLQR(controller))
     }

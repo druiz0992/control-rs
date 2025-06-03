@@ -27,10 +27,15 @@ fn main() {
     let qn_matrix = DMatrix::<f64>::identity(2, 2);
     let r_matrix = DMatrix::<f64>::identity(1, 1) * 0.1;
     let cost = GenericCost::<_, LtiInput<1, 0>>::new(q_matrix, qn_matrix, r_matrix, None).unwrap();
-    let general = ControllerOptions::default().set_noise((10.0, 0.1));
+    let general = ControllerOptions::default()
+        .set_noise((10.0, 0.1))
+        .set_dt(dt)
+        .unwrap()
+        .set_time_horizon(sim_time)
+        .unwrap();
     let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general);
     let mut controller =
-        RiccatiRecursionLQR::new(sim, Box::new(cost.clone()), sim_time, dt, Some(options)).unwrap();
+        RiccatiRecursionLQR::new(sim, Box::new(cost.clone()), Some(options)).unwrap();
 
     let (x_traj, u_traj) = controller.solve(&initial_state).unwrap();
 

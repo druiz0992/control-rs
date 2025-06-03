@@ -1,18 +1,13 @@
-use std::default;
-
-use osqp::Settings;
-
 use crate::{
-    controllers::{
-        ControllerInput, ControllerState, options::ControllerOptions, qp_lqr::options::QPOptions,
-    },
+    controllers::{options::ControllerOptions, qp_lqr::options::QPOptions},
     physics::traits::PhysicsSim,
 };
+use osqp::Settings;
 
-const DEFAULT_N_STEPS: usize = 20;
+const DEFAULT_FINITIE_HORIZON_N_STEPS: usize = 20;
 
 pub struct ConvexMpcOptions<S: PhysicsSim> {
-    pub n_steps: usize,
+    pub finite_horizon_n_steps: usize,
 
     pub general: ControllerOptions<S>,
     pub osqp_settings: Settings,
@@ -21,7 +16,7 @@ pub struct ConvexMpcOptions<S: PhysicsSim> {
 impl<S: PhysicsSim> Clone for ConvexMpcOptions<S> {
     fn clone(&self) -> Self {
         Self {
-            n_steps: self.n_steps,
+            finite_horizon_n_steps: self.finite_horizon_n_steps,
             general: self.get_general().clone(),
             osqp_settings: self.get_osqp_settings().clone(),
         }
@@ -31,7 +26,7 @@ impl<S: PhysicsSim> Clone for ConvexMpcOptions<S> {
 impl<S: PhysicsSim> Default for ConvexMpcOptions<S> {
     fn default() -> Self {
         Self {
-            n_steps: DEFAULT_N_STEPS,
+            finite_horizon_n_steps: DEFAULT_FINITIE_HORIZON_N_STEPS,
             general: ControllerOptions::<S>::default(),
             osqp_settings: Settings::default(),
         }
@@ -46,7 +41,7 @@ where
         &self.general
     }
     pub fn get_n_steps(&self) -> usize {
-        self.n_steps
+        self.finite_horizon_n_steps
     }
     pub fn get_osqp_settings(&self) -> &Settings {
         &self.osqp_settings
@@ -54,7 +49,7 @@ where
 
     pub fn set_n_steps(self, n_steps: usize) -> Self {
         let mut new = self;
-        new.n_steps = n_steps;
+        new.finite_horizon_n_steps = n_steps;
         new
     }
 

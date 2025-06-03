@@ -1,6 +1,9 @@
 use super::common::QPLQRGeneric;
 use super::options::QPOptions;
-use crate::controllers::{Controller, ControllerState, CostFn, TrajectoryHistory};
+use crate::controllers::{
+    Controller, ControllerInput, ControllerState, CostFn, SteppableController, TrajectoryHistory,
+    UpdatableController,
+};
 use crate::physics::ModelError;
 use crate::physics::discretizer::SymbolicDiscretizer;
 use crate::physics::traits::{PhysicsSim, SymbolicDynamics};
@@ -19,25 +22,14 @@ where
         sim: S,
         cost_fn: CostFn<S>,
         x0: &ControllerState<S>,
-        time_horizon: f64,
-        dt: f64,
         options: Option<QPOptions<S>>,
     ) -> Result<(Self, QPParams), ModelError> {
+        let options = options.unwrap_or_default();
         let jacobian_u = Box::new(sim.discretizer().jacobian_u()?);
         let jacobian_x = Box::new(sim.discretizer().jacobian_x()?);
 
-        let options = options.unwrap_or_default();
-
-        let (controller, updatable_qp_params) = QPLQRGeneric::new(
-            sim,
-            cost_fn,
-            jacobian_x,
-            jacobian_u,
-            x0,
-            time_horizon,
-            dt,
-            options,
-        )?;
+        let (controller, updatable_qp_params) =
+            QPLQRGeneric::new(sim, cost_fn, jacobian_x, jacobian_u, x0, options)?;
 
         Ok((QPLQRSymbolic(controller), updatable_qp_params))
     }
@@ -52,5 +44,24 @@ impl<S: PhysicsSim> Controller<S> for QPLQRSymbolic<S> {
         initial_state: &ControllerState<S>,
     ) -> Result<TrajectoryHistory<S>, ModelError> {
         self.0.solve(initial_state)
+    }
+}
+
+impl<S: PhysicsSim> SteppableController<S> for QPLQRSymbolic<S> {
+    fn step(
+        &self,
+        state: ControllerState<S>,
+        input: Option<&ControllerInput<S>>,
+        dt: f64,
+    ) -> Result<ControllerState<S>, ModelError> {
+        self.0.step(state, input, dt)
+    }
+}
+
+impl<S: PhysicsSim> UpdatableController<S> for QPLQRSymbolic<S> {
+    type Params<'a> = OSQPBuilder<'a>;
+
+    fn update(&self, params: Self::Params<'_>) {
+        self.0.update(params);
     }
 }

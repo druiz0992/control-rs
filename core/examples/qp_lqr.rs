@@ -1,3 +1,4 @@
+use control_rs::controllers::ConstraintTransform;
 use control_rs::controllers::Controller;
 use control_rs::controllers::ControllerOptions;
 use control_rs::controllers::QPLQR;
@@ -9,6 +10,8 @@ use control_rs::physics::simulator::BasicSim;
 use control_rs::plotter;
 use nalgebra::{DMatrix, dmatrix};
 use osqp::Settings;
+
+type LtiSim = BasicSim<LtiModel<2, 0, 1>, ZOH<LtiModel<2, 0, 1>>>;
 
 fn main() {
     let state_matrix = dmatrix![0.0,1.0; 0.0,0.0];
@@ -28,18 +31,21 @@ fn main() {
     let qn_matrix = DMatrix::<f64>::identity(2, 2);
     let r_matrix = DMatrix::<f64>::identity(1, 1) * 0.1;
     let cost = GenericCost::<_, LtiInput<1, 0>>::new(q_matrix, qn_matrix, r_matrix, None).unwrap();
-    let options = ControllerOptions::<BasicSim<LtiModel<2, 0, 1>, ZOH<_>>>::default()
-        .set_u_limits((-1.0, 1.0));
+    let contraints = ConstraintTransform::new_uniform_bounds_input::<LtiSim>((-1.0, 1.0));
+    let options = ControllerOptions::<LtiSim>::default()
+        .set_u_limits(contraints)
+        .set_dt(dt)
+        .unwrap()
+        .set_time_horizon(sim_time)
+        .unwrap();
     let osqp_settings = Settings::default().max_iter(100);
-    let qp_options = QPOptions::<BasicSim<LtiModel<2, 0, 1>, ZOH<_>>>::default()
+    let qp_options = QPOptions::<LtiSim>::default()
         .set_general(options)
         .set_osqp_settings(osqp_settings);
     let (mut controller, _) = QPLQR::new(
         sim,
         Box::new(cost.clone()),
         &initial_state,
-        sim_time,
-        dt,
         Some(qp_options),
     )
     .unwrap();

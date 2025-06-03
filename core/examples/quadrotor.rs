@@ -58,22 +58,19 @@ fn main() {
         .set_x_ref(&[state_ref.clone()])
         .set_u_ref(&[input_hover.clone()])
         .set_x_operating(&state_hover)
-        .set_u_operating(&input_hover);
+        .set_u_operating(&input_hover)
+        .set_dt(dt)
+        .unwrap()
+        .set_time_horizon(sim_time)
+        .unwrap();
     let osqp_settings = Settings::default().verbose(false);
     let qp_options = QPOptions::default()
         .set_general(general_options)
         .set_osqp_settings(osqp_settings);
 
     //options.set_u_limits((-0.5, 0.1));
-    let (mut controller, _) = QPLQRSymbolic::new(
-        sim,
-        Box::new(cost.clone()),
-        &state_0,
-        sim_time,
-        dt,
-        Some(qp_options),
-    )
-    .unwrap();
+    let (mut controller, _) =
+        QPLQRSymbolic::new(sim, Box::new(cost.clone()), &state_0, Some(qp_options)).unwrap();
     /*
         let mut options = RiccatiLQROptions::enable_infinite_horizon();
         options.general.set_x_ref(&state_ref);
