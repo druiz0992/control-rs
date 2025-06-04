@@ -178,26 +178,27 @@ impl LineSeachConfig {
         factor: f64,
         merit_expr: Option<ExprScalar>,
     ) -> Result<Self, ModelError> {
-        let mut ls = LineSeachConfig::default();
-        ls.set_factor(factor)?;
-        ls.set_max_iters(max_iters)?;
-        if let Some(merit_expr) = merit_expr {
-            ls.set_merit(merit_expr);
-        }
+        let ls = LineSeachConfig::default()
+            .set_factor(factor)?
+            .set_max_iters(max_iters)?
+            .set_merit(merit_expr);
+
         Ok(ls)
     }
 
-    pub fn set_factor(&mut self, factor: f64) -> Result<(), ModelError> {
+    pub fn set_factor(self, factor: f64) -> Result<Self, ModelError> {
         if !(MIN_ALLOWED_FACTOR..=MAX_ALLOWED_FACTOR).contains(&factor) {
             return Err(ModelError::ConfigError(
                 "Linesearch alpha factor out of range".to_string(),
             ));
         }
-        self.factor = factor;
-        Ok(())
+        let mut new = self;
+        new.factor = factor;
+
+        Ok(new)
     }
 
-    pub fn set_max_iters(&mut self, max_iters: usize) -> Result<(), ModelError> {
+    pub fn set_max_iters(self, max_iters: usize) -> Result<Self, ModelError> {
         if !(MIN_ALLOWED_LINESEARCH_MAX_ITERS..=MAX_ALLOWED_LINESEARCH_MAX_ITERS)
             .contains(&max_iters)
         {
@@ -205,12 +206,15 @@ impl LineSeachConfig {
                 "Linesearch max iterations out of range".to_string(),
             ));
         }
-        self.max_iters = max_iters;
-        Ok(())
+        let mut new = self;
+        new.max_iters = max_iters;
+
+        Ok(new)
     }
 
-    pub fn set_merit(&mut self, merit_expr: ExprScalar) {
-        self.merit_expr = Some(ExprRecord::Scalar(merit_expr));
+    pub fn set_merit(mut self, merit_expr: Option<ExprScalar>) -> Self {
+        self.merit_expr = merit_expr.map(ExprRecord::Scalar);
+        self
     }
 
     pub fn get_max_iters(&self) -> usize {
@@ -242,35 +246,12 @@ pub struct OptimizerConfig {
 }
 
 impl OptimizerConfig {
-    pub fn set_max_iters(&mut self, max_iters: usize) -> Result<(), ModelError> {
-        if !(MIN_ALLOWED_MAX_ITERS..=MAX_ALLOWED_MAX_ITERS).contains(&max_iters) {
-            return Err(ModelError::ConfigError(
-                "Maximum number of iterations out of range".to_string(),
-            ));
-        }
-        self.max_iters = max_iters;
-        Ok(())
-    }
-    pub fn set_tolerance(&mut self, tolerance: f64) -> Result<(), ModelError> {
-        if tolerance < MIN_ALLOWED_TOLERANCE {
-            return Err(ModelError::ConfigError(
-                "Tolerance out of range".to_string(),
-            ));
-        }
-        self.tolerance = tolerance;
-        Ok(())
-    }
-
     pub fn get_max_iters(&self) -> usize {
         self.max_iters
     }
 
     pub fn get_tolerance(&self) -> f64 {
         self.tolerance
-    }
-
-    pub fn set_line_search_opts(&mut self, opts: LineSeachConfig) {
-        self.line_search = opts;
     }
 
     pub fn get_line_search_merit(&self) -> Option<ExprRecord> {
@@ -288,24 +269,62 @@ impl OptimizerConfig {
         self.gauss_newton
     }
 
-    pub fn set_gauss_newton(&mut self, flag: bool) {
-        self.gauss_newton = flag;
-    }
-
-    pub fn set_regularization_factor(&mut self, factor: f64) {
-        self.regularization_factor = factor;
-    }
-
     pub fn get_regularization_factor(&self) -> f64 {
         self.regularization_factor
     }
 
-    pub fn set_verbose(&mut self, flag: bool) {
-        self.verbose = flag;
-    }
-
     pub fn get_verbose(&self) -> bool {
         self.verbose
+    }
+
+    pub fn set_max_iters(self, max_iters: usize) -> Result<Self, ModelError> {
+        if !(MIN_ALLOWED_MAX_ITERS..=MAX_ALLOWED_MAX_ITERS).contains(&max_iters) {
+            return Err(ModelError::ConfigError(
+                "Maximum number of iterations out of range".to_string(),
+            ));
+        }
+        let mut new = self;
+        new.max_iters = max_iters;
+        Ok(new)
+    }
+
+    pub fn set_tolerance(self, tolerance: f64) -> Result<Self, ModelError> {
+        if tolerance < MIN_ALLOWED_TOLERANCE {
+            return Err(ModelError::ConfigError(
+                "Tolerance out of range".to_string(),
+            ));
+        }
+        let mut new = self;
+        new.tolerance = tolerance;
+        Ok(new)
+    }
+
+    pub fn set_line_search_opts(self, opts: LineSeachConfig) -> Self {
+        let mut new = self;
+        new.line_search = opts;
+
+        new
+    }
+
+    pub fn set_gauss_newton(self, flag: bool) -> Self {
+        let mut new = self;
+        new.gauss_newton = flag;
+
+        new
+    }
+
+    pub fn set_regularization_factor(self, factor: f64) -> Self {
+        let mut new = self;
+        new.regularization_factor = factor;
+
+        new
+    }
+
+    pub fn set_verbose(self, flag: bool) -> Self {
+        let mut new = self;
+        new.verbose = flag;
+
+        new
     }
 }
 

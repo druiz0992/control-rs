@@ -1,0 +1,52 @@
+use super::{ConstraintTransform, ControllerInput, ControllerState};
+use crate::physics::ModelError;
+use crate::physics::traits::{PhysicsSim, State};
+use crate::utils::NoiseSource;
+use nalgebra::DVector;
+
+/// Clamps an input vector within given limits
+pub fn clamp_input_vector(
+    input: DVector<f64>,
+    limits: Option<&ConstraintTransform>,
+) -> DVector<f64> {
+    if let Some(constraint) = limits {
+        let (lower, upper) = constraint.bounds_as_slice();
+        DVector::from_iterator(
+            input.len(),
+            input
+                .iter()
+                .zip(lower.iter().zip(upper.iter()))
+                .map(|(xi, (lo, hi))| xi.clamp(*lo, *hi)),
+        )
+    } else {
+        input
+    }
+}
+
+/// Adds gaussian noise to controller input and returns the updated input sample
+pub fn add_noise_to_inputs<S: PhysicsSim>(
+    mean: f64,
+    std_dev: f64,
+    inputs: Vec<ControllerInput<S>>,
+) -> Result<Vec<ControllerInput<S>>, ModelError> {
+    let noise_source = NoiseSource::new(mean, std_dev)?;
+
+    Ok(inputs
+        .iter()
+        .map(|s| ControllerInput::<S>::from_slice(noise_source.add_noise(s.to_vector()).as_slice()))
+        .collect())
+}
+
+/// Adds gaussian noise to controller state and returns the updated state sample
+pub fn add_noise_to_states<S: PhysicsSim>(
+    mean: f64,
+    std_dev: f64,
+    states: Vec<ControllerState<S>>,
+) -> Result<Vec<ControllerState<S>>, ModelError> {
+    let noise_source = NoiseSource::new(mean, std_dev)?;
+
+    Ok(states
+        .iter()
+        .map(|s| ControllerState::<S>::from_slice(noise_source.add_noise(s.to_vector()).as_slice()))
+        .collect())
+}

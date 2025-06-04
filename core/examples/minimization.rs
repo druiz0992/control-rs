@@ -57,9 +57,10 @@ fn main() {
     let eq_constraints_expr = get_eq_constraints_expr(&unknown_expr);
     let ineq_constraints_expr = get_ineq_constraints_expr(&unknown_expr);
     // set optimization to 1 iterations so that we can draw convergence
-    let mut options = OptimizerConfig::default();
-    options.set_max_iters(1).unwrap();
-    options.set_verbose(true);
+    let options = OptimizerConfig::default()
+        .set_max_iters(1)
+        .unwrap()
+        .set_verbose(true);
 
     let solver = NewtonSolverSymbolic::new_minimization(
         &cost,

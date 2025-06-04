@@ -1,6 +1,23 @@
 use nalgebra::DMatrix;
 
-// Build block diagonal matrix from a Vec of matrices
+use crate::physics::ModelError;
+
+/// Constructs a block diagonal matrix from a slice of matrices.
+///
+/// - **Parameters**:
+///   - `blocks`: A slice of `DMatrix<f64>` representing the matrices to be placed in the block diagonal.
+/// - **Returns**:
+///   - A `DMatrix<f64>` representing the block diagonal matrix.
+///
+/// - **Example**:
+/// ```rust
+/// use nalgebra::dmatrix;
+/// use control_rs::utils::matrix::block_diag;
+///
+/// let m1 = dmatrix![1.0, 2.0; 3.0, 4.0];
+/// let m2 = dmatrix![5.0, 6.0, 7.0; 8.0, 9.0, 10.0];
+/// let result = block_diag(&[m1, m2]);
+/// ```
 pub fn block_diag(blocks: &[DMatrix<f64>]) -> DMatrix<f64> {
     let total_rows = blocks.iter().map(|m| m.nrows()).sum();
     let total_cols = blocks.iter().map(|m| m.ncols()).sum();
@@ -17,9 +34,25 @@ pub fn block_diag(blocks: &[DMatrix<f64>]) -> DMatrix<f64> {
     result
 }
 
-/// Kronecker product
-/// If A is an m×n matrix and B is a p×q matrix, then C will be an mp×nq matrix.
-//  Each element A[i,j] is multiplied by the entire matrix B, and the results are placed in a block structure.
+/// Computes the Kronecker product of two matrices.
+///
+/// - **Parameters**:
+///   - `a`: A reference to a `DMatrix<f64>` representing the first matrix.
+///   - `b`: A reference to a `DMatrix<f64>` representing the second matrix.
+/// - **Returns**:
+///   - A `DMatrix<f64>` representing the Kronecker product.
+///      If A is an m×n matrix and B is a p×q matrix, then C will be an mp×nq matrix.
+///       Each element A[i,j] is multiplied by the entire matrix B, and the results are placed in a block structure.
+///
+/// - **Example**:
+/// ```rust
+/// use nalgebra::dmatrix;
+/// use control_rs::utils::matrix::kron;
+///
+/// let a = dmatrix![1.0, 2.0; 3.0, 4.0];
+/// let b = dmatrix![0.0, 5.0; 6.0, 7.0];
+/// let result = kron(&a, &b);
+/// ```
 pub fn kron(a: &DMatrix<f64>, b: &DMatrix<f64>) -> DMatrix<f64> {
     let (ar, ac) = a.shape();
     let (br, bc) = b.shape();
@@ -36,10 +69,99 @@ pub fn kron(a: &DMatrix<f64>, b: &DMatrix<f64>) -> DMatrix<f64> {
     result
 }
 
+/// Converts a `DMatrix<f64>` into a `Vec<Vec<f64>>`.
+///
+/// - **Parameters**:
+///   - `mat`: A reference to a `DMatrix<f64>` to be converted.
+/// - **Returns**:
+///   - A `Vec<Vec<f64>>` representing the matrix rows as vectors.
+///
+/// - **Example**:
+/// ```rust
+/// use nalgebra::dmatrix;
+/// use control_rs::utils::matrix::dmat_to_vec;
+///
+/// let mat = dmatrix![1.0, 2.0; 3.0, 4.0];
+/// let vec = dmat_to_vec(&mat);
+/// ```
 pub fn dmat_to_vec(mat: &DMatrix<f64>) -> Vec<Vec<f64>> {
     (0..mat.nrows())
         .map(|i| mat.row(i).iter().cloned().collect())
         .collect()
+}
+
+/// Vertically stacks two matrices, where the second matrix is optional.
+///
+/// - **Parameters**:
+///   - `a`: A `DMatrix<f64>` representing the first matrix.
+///   - `b`: An `Option<DMatrix<f64>>` representing the second matrix.
+/// - **Returns**:
+///   - A `Result<DMatrix<f64>, &'static str>` containing the vertically stacked matrix or an error message if the column counts do not match.
+///
+/// - **Example**:
+/// ```rust
+/// use nalgebra::dmatrix;
+/// use control_rs::utils::matrix::vstack_option;
+///
+/// let a = dmatrix![1.0, 2.0; 3.0, 4.0];
+/// let b = Some(dmatrix![5.0, 6.0; 7.0, 8.0]);
+/// let result = vstack_option(a, b);
+/// ```
+pub fn vstack_option(
+    a: DMatrix<f64>,
+    b: Option<DMatrix<f64>>,
+) -> Result<DMatrix<f64>, &'static str> {
+    match b {
+        Some(mat_b) => {
+            let (cols_a, cols_b) = (a.ncols(), mat_b.ncols());
+            if cols_a != cols_b {
+                return Err("Matrix column counts must match for vertical stacking.");
+            }
+
+            let mut stacked = DMatrix::zeros(a.nrows() + mat_b.nrows(), cols_a);
+            stacked.view_mut((0, 0), (a.nrows(), cols_a)).copy_from(&a);
+            stacked
+                .view_mut((a.nrows(), 0), (mat_b.nrows(), cols_b))
+                .copy_from(&mat_b);
+            Ok(stacked)
+        }
+        None => Ok(a),
+    }
+}
+
+/// Horizontally stacks two matrices.
+///
+/// - **Parameters**:
+///   - `a`: A `DMatrix<f64>` representing the first matrix.
+///   - `b`: A `DMatrix<f64>` representing the second matrix.
+/// - **Returns**:
+///   - A `Result<DMatrix<f64>, ModelError>` containing the horizontally stacked matrix or an error if the row counts do not match.
+///
+/// - **Example**:
+/// ```rust
+/// use nalgebra::dmatrix;
+/// use control_rs::utils::matrix::hstack;
+///
+/// let a = dmatrix![1.0, 2.0; 3.0, 4.0];
+/// let b = dmatrix![5.0; 6.0];
+/// let result = hstack(a, b);
+/// ```
+pub fn hstack(a: DMatrix<f64>, b: DMatrix<f64>) -> Result<DMatrix<f64>, ModelError> {
+    if a.nrows() != b.nrows() {
+        return Err(ModelError::ConfigError(
+            "Mismatch in matrix dimensions.".into(),
+        ));
+    }
+
+    let mut stacked = DMatrix::zeros(a.nrows(), a.ncols() + b.ncols());
+    stacked
+        .view_mut((0, 0), (a.nrows(), a.ncols()))
+        .copy_from(&a);
+    stacked
+        .view_mut((0, a.ncols()), (b.nrows(), b.ncols()))
+        .copy_from(&b);
+
+    Ok(stacked)
 }
 
 #[cfg(test)]

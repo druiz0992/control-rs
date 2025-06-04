@@ -1,85 +1,74 @@
+pub mod constraints;
 pub mod indirect_shooting;
+pub mod options;
 pub mod qp_lqr;
-pub mod ricatti_lqr;
+pub mod qp_mpc;
+pub mod riccati_lqr;
+pub mod trajectory;
+pub mod utils;
 
+pub use constraints::ConstraintTransform;
 pub use indirect_shooting::lqr::IndirectShootingLQR;
 pub use indirect_shooting::symbolic::IndirectShootingSymbolic;
+use nalgebra::DVector;
+pub use options::ControllerOptions;
 pub use qp_lqr::lqr::QPLQR;
-pub use ricatti_lqr::lqr::RicattiRecursionLQR;
+pub use riccati_lqr::lqr::RiccatiRecursionLQR;
+pub use trajectory::InputTrajectory;
 
-use crate::{
-    cost::CostFunction,
-    physics::{
-        ModelError,
-        models::Dynamics,
-        traits::{PhysicsSim, State},
-    },
-};
-use nalgebra::DMatrix;
+use crate::cost::CostFunction;
+use crate::physics::ModelError;
+use crate::physics::models::Dynamics;
+use crate::physics::traits::{PhysicsSim, State};
+use crate::utils::noise::NoiseSources;
 
 type ControllerState<S> = <<S as PhysicsSim>::Model as Dynamics>::State;
 type ControllerInput<S> = <<S as PhysicsSim>::Model as Dynamics>::Input;
 type CostFn<S> = Box<dyn CostFunction<State = ControllerState<S>, Input = ControllerInput<S>>>;
 
-pub struct InputTrajectory<S: PhysicsSim>(Vec<ControllerInput<S>>);
-
-impl<S: PhysicsSim> InputTrajectory<S> {
-    pub fn as_slice(&self) -> &[ControllerInput<S>] {
-        &self.0
-    }
-    pub fn as_vec(&self) -> &Vec<ControllerInput<S>> {
-        &self.0
-    }
-    pub fn as_mut_vec(&mut self) -> &Vec<ControllerInput<S>> {
-        &self.0
-    }
-    pub fn to_vec(&self) -> Vec<ControllerInput<S>> {
-        self.0.clone()
-    }
-}
-
-impl<S: PhysicsSim> From<&InputTrajectory<S>> for DMatrix<f64> {
-    fn from(value: &InputTrajectory<S>) -> DMatrix<f64> {
-        if value.0.is_empty() {
-            return DMatrix::from_column_slice(0, 0, &[]);
-        }
-        let input_dims = value.0[0].to_vec().len();
-        let mut mat = DMatrix::<f64>::zeros(input_dims, value.0.len());
-        value.0.iter().enumerate().for_each(|(i, v)| {
-            mat.set_column(i, &v.to_vector());
-        });
-        mat
-    }
-}
-
-impl<S: PhysicsSim> TryFrom<&DMatrix<f64>> for InputTrajectory<S> {
-    type Error = ModelError;
-    fn try_from(value: &DMatrix<f64>) -> Result<Self, Self::Error> {
-        if value.is_empty() {
-            return Err(ModelError::ConfigError(
-                "Input matrix cannot be empty".into(),
-            ));
-        }
-
-        Ok(InputTrajectory(
-            value
-                .column_iter()
-                .map(|v| ControllerInput::<S>::from_slice(v.as_slice()))
-                .collect(),
-        ))
-    }
-}
-
+pub type TrajectoryHistory<S> = (Vec<ControllerState<S>>, Vec<ControllerInput<S>>);
 pub trait Controller<S: PhysicsSim> {
-    fn get_u_traj(&self) -> Vec<ControllerInput<S>>;
-
-    fn rollout(
-        &self,
-        initial_state: &ControllerState<S>,
-    ) -> Result<Vec<ControllerState<S>>, ModelError>;
-
     fn solve(
         &mut self,
         initial_state: &ControllerState<S>,
-    ) -> Result<Vec<ControllerInput<S>>, ModelError>;
+    ) -> Result<TrajectoryHistory<S>, ModelError>;
+}
+pub trait UpdatableController<S: PhysicsSim>: Controller<S> {
+    type Params<'a>;
+
+    fn update_q(&self, state_ref: &DVector<f64>, q: &mut DVector<f64>);
+    fn update_bounds(&self, state: &DVector<f64>, lb: &mut DVector<f64>, ub: &mut DVector<f64>);
+    fn update(&self, params: Self::Params<'_>);
+}
+
+pub trait SteppableController<S: PhysicsSim>: Controller<S> {
+    fn step(
+        &self,
+        state: ControllerState<S>,
+        input: Option<&ControllerInput<S>>,
+        dt: f64,
+    ) -> Result<ControllerState<S>, ModelError>;
+}
+
+fn input_from_slice<S: PhysicsSim>(slice: &[f64]) -> ControllerInput<S> {
+    ControllerInput::<S>::from_slice(slice)
+}
+fn state_from_slice<S: PhysicsSim>(slice: &[f64]) -> ControllerState<S> {
+    ControllerState::<S>::from_slice(slice)
+}
+
+fn into_clamped_input<S: PhysicsSim>(
+    vector: DVector<f64>,
+    u_limits: Option<&ConstraintTransform>,
+) -> ControllerInput<S> {
+    input_from_slice::<S>(utils::clamp_input_vector(vector, u_limits).as_slice())
+}
+
+fn try_into_noisy_state<S: PhysicsSim>(
+    vector: DVector<f64>,
+    noise_sources: &NoiseSources,
+    idx: usize,
+) -> Result<ControllerState<S>, ModelError> {
+    let current_state = noise_sources.add_noise(idx, vector)?;
+    Ok(state_from_slice::<S>(current_state.as_slice()))
 }

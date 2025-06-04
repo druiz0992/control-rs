@@ -1,38 +1,49 @@
 use super::solver::{OSQPSolver, OSQPSolverHandle};
-use crate::physics::ModelError;
+use crate::{physics::ModelError, utils::matrix::dmat_to_vec};
 use core::f64;
 use nalgebra::{DMatrix, DVector};
 use osqp::{CscMatrix, Problem, Settings};
 
-const INFINITY: f64 = 1e20;
+type OSQPParams<'a> = (
+    CscMatrix<'a>,
+    Vec<f64>,
+    CscMatrix<'a>,
+    Vec<f64>,
+    Vec<f64>,
+    usize,
+    usize,
+);
+
+/// minimize 1/2 x' P x  + q' x, st Ax=b, Gx>=h
+#[derive(Default, Clone)]
+pub struct QPParams<'a> {
+    // objective function : 0.5 * x' * q_mat * x + q_vec' * x
+    pub q_csc: Option<CscMatrix<'a>>,
+    pub q_mat: Option<Vec<Vec<f64>>>,
+    pub q_vec: Option<Vec<f64>>,
+    // stacked  constraint matrix: lb <= a_mat * x <= ub
+    pub a_mat: Option<DMatrix<f64>>,
+    pub lb_vec: Option<DVector<f64>>,
+    pub ub_vec: Option<DVector<f64>>,
+}
 
 #[derive(Clone, Default)]
 pub struct OSQPBuilder<'a> {
-    // objective function : 0.5 * x' * q_mat * x + q_vec' * x
-    q_csc: Option<CscMatrix<'a>>,
-    q_mat: Option<Vec<Vec<f64>>>,
-    q_vec: Option<Vec<f64>>,
-    // equality constraints: a_mat * x - b_vec = 0
-    a_mat: Option<DMatrix<f64>>,
-    b_vec: Option<DVector<f64>>,
-    // inequality constraints: g_mat * x - h_vec = 0
-    g_mat: Option<DMatrix<f64>>,
-    h_vec: Option<DVector<f64>>,
-
+    pub qp_params: QPParams<'a>,
     options: Settings,
 }
 
 impl<'a> OSQPBuilder<'a> {
     pub fn new() -> Self {
         Self {
-            q_csc: None,
-            q_mat: None,
-            q_vec: None,
-            a_mat: None,
-            b_vec: None,
-            g_mat: None,
-            h_vec: None,
+            qp_params: QPParams::default(),
+            options: Settings::default(),
+        }
+    }
 
+    pub fn from_params(qp_params: QPParams<'a>) -> Self {
+        Self {
+            qp_params,
             options: Settings::default(),
         }
     }
@@ -41,36 +52,27 @@ impl<'a> OSQPBuilder<'a> {
         let q = (0..q_mat.nrows())
             .map(|i| q_mat.row(i).iter().cloned().collect())
             .collect();
-        self.q_mat = Some(q);
+        self.qp_params.q_mat = Some(q);
         self
     }
     pub fn q_csc(mut self, q_csc: CscMatrix<'a>) -> Self {
-        self.q_csc = Some(q_csc);
+        self.qp_params.q_csc = Some(q_csc);
         self
     }
 
     pub fn q_vec(mut self, q_vec: DVector<f64>) -> Self {
-        self.q_vec = Some(q_vec.as_slice().to_vec());
+        self.qp_params.q_vec = Some(q_vec.as_slice().to_vec());
         self
     }
 
     pub fn a_mat(mut self, a_mat: DMatrix<f64>) -> Self {
-        self.a_mat = Some(a_mat);
+        self.qp_params.a_mat = Some(a_mat);
         self
     }
 
-    pub fn b_vec(mut self, b_vec: DVector<f64>) -> Self {
-        self.b_vec = Some(b_vec);
-        self
-    }
-
-    pub fn g_mat(mut self, g_mat: DMatrix<f64>) -> Self {
-        self.g_mat = Some(g_mat);
-        self
-    }
-
-    pub fn h_vec(mut self, h_vec: DVector<f64>) -> Self {
-        self.h_vec = Some(h_vec);
+    pub fn bounds_vec(mut self, lb_vec: DVector<f64>, ub_vec: DVector<f64>) -> Self {
+        self.qp_params.lb_vec = Some(lb_vec);
+        self.qp_params.ub_vec = Some(ub_vec);
         self
     }
 
@@ -79,94 +81,135 @@ impl<'a> OSQPBuilder<'a> {
         self
     }
 
-    pub fn build(self) -> Result<OSQPSolverHandle, ModelError> {
-        if self.b_vec.is_none() && self.a_mat.is_some()
-            || self.b_vec.is_some() && self.a_mat.is_none()
-        {
+    pub fn build(self) -> Result<(OSQPSolverHandle, QPParams<'a>), ModelError> {
+        self.check()?;
+        let options = &self.options.clone();
+        let qp_params = self.qp_params.clone();
+        let (q_csc, q, a_csc, l, u, n_eq, n_ineq) = self.init();
+        // check dimensions
+        // q_mat, q_vec, a_mat, lb_vec, ub_vec
+        // q_mat/q_csc is square
+
+        if q_csc.ncols != q_csc.nrows {
             return Err(ModelError::ConfigError(
-                "Incorrect configuration of equality constraints".into(),
+                "Q Matrix needs to be square.".into(),
+            ))?;
+        }
+
+        if q_csc.nrows != q.len() {
+            return Err(ModelError::ConfigError(
+                "Q Matrix and q vector dimensions don't match.".into(),
+            ))?;
+        }
+        if a_csc.ncols != q_csc.ncols {
+            return Err(ModelError::ConfigError(
+                "Incorrect number of columns for matrix A.".into(),
             ));
         }
-        if self.h_vec.is_none() && self.g_mat.is_some()
-            || self.h_vec.is_some() && self.g_mat.is_none()
-        {
+        if l.len() != u.len() {
             return Err(ModelError::ConfigError(
-                "Incorrect configuration of inequality constraints".into(),
+                "Lower and upper bound vector dimensions don't match.".into(),
             ));
         }
-        if self.q_mat.is_none() && self.q_csc.is_none() {
-            return Err(ModelError::ConfigError("q_mat is required".into()));
-        }
-
-        if self.b_vec.is_none() && self.h_vec.is_none() {
+        if l.len() != a_csc.nrows {
             return Err(ModelError::ConfigError(
-                "Some constraints are required".into(),
+                "Incorrect Lower bound vector dimensions.".into(),
             ));
         }
-
-        let q_vec = self
-            .q_vec
-            .ok_or(ModelError::ConfigError("q_vec is required".into()))?;
-
-        let n_ineq = self.h_vec.as_ref().map_or(0, |v| v.len());
-        let n_eq = self.b_vec.as_ref().map_or(0, |v| v.len());
-
-        // Flatten q_mat into CSC format for OSQP
-        let q_csc;
-        if let Some(q_mat) = self.q_mat {
-            q_csc = CscMatrix::from(&q_mat).into_upper_tri();
-        } else {
-            q_csc = self.q_csc.unwrap();
+        if u.len() != a_csc.nrows {
+            return Err(ModelError::ConfigError(
+                "Incorrect Upper bound vector dimensions.".into(),
+            ));
         }
-        // q vector
-        let q = q_vec;
-
-        // Stack A = [a_mat; g_mat]
-        let a_combined = DMatrix::from_rows(
-            &self
-                .a_mat
-                .iter()
-                .chain(self.g_mat.iter())
-                .flat_map(|m| m.row_iter())
-                .collect::<Vec<_>>(),
-        );
-
-        let a_dense: Vec<Vec<_>> = (0..a_combined.nrows())
-            .map(|i| a_combined.row(i).iter().cloned().collect())
-            .collect();
-        let a_csc = CscMatrix::from(&a_dense);
-
-        // l and u
-        let l: Vec<f64> = self
-            .b_vec
-            .as_ref()
-            .into_iter()
-            .chain(self.h_vec.as_ref())
-            .flat_map(|v| v.iter().cloned())
-            .collect();
-
-        let u: Vec<f64> = self
-            .b_vec
-            .as_ref()
-            .into_iter()
-            .flat_map(|v| v.iter().cloned())
-            .chain(
-                self.h_vec
-                    .as_ref()
-                    .into_iter()
-                    .flat_map(|v| std::iter::repeat(INFINITY).take(v.len())),
-            )
-            .collect();
-
-        let settings = Settings::default().verbose(false);
 
         let solver = OSQPSolver {
-            problem: Problem::new(q_csc, &q, a_csc, &l, &u, &settings)
+            problem: Problem::new(q_csc, &q, a_csc, &l, &u, options)
                 .map_err(|e| ModelError::ConfigError(e.to_string()))?,
             n_eq,
             n_ineq,
         };
 
-        Ok(OSQPSolverHandle::new(solver))
+        Ok((OSQPSolverHandle::new(solver), qp_params))
+    }
+
+    pub fn update(&self, problem: &OSQPSolverHandle) {
+        if self.qp_params.q_mat.is_some() || self.qp_params.q_csc.is_some() {
+            let q_csc = self.build_q_csc();
+            problem.update_p(q_csc.clone());
+        }
+
+        if self.qp_params.q_vec.is_some() {
+            let q_vec = self.qp_params.q_vec.clone().unwrap();
+            problem.update_lin_cost(&q_vec);
+        }
+
+        if let (Some(lb), Some(ub)) = (&self.qp_params.lb_vec, &self.qp_params.ub_vec) {
+            problem.update_bounds(lb.as_slice(), ub.as_slice());
+        } else {
+            if let Some(lb) = &self.qp_params.lb_vec {
+                problem.update_lower_bound(lb.as_slice());
+            }
+            if let Some(ub) = &self.qp_params.ub_vec {
+                problem.update_lower_bound(ub.as_slice());
+            }
+        }
+
+        if self.qp_params.a_mat.is_some() {
+            let a = self.build_a_csc();
+            problem.update_a(a);
+        }
+    }
+
+    fn check(&self) -> Result<(), ModelError> {
+        // If A is defined, then b must be defined. If b is defined, then A must be defined
+        if self.qp_params.lb_vec.is_none()
+            || self.qp_params.lb_vec.is_none()
+            || self.qp_params.a_mat.is_none()
+            || self.qp_params.ub_vec.is_none()
+        {
+            return Err(ModelError::ConfigError(
+                "Incorrect configuration of constraints".into(),
+            ));
+        }
+
+        if self.qp_params.q_mat.is_none() && self.qp_params.q_csc.is_none() {
+            return Err(ModelError::ConfigError("q_mat is required".into()));
+        }
+
+        if self.qp_params.q_vec.is_none() {
+            return Err(ModelError::ConfigError("q_vec is required".into()));
+        }
+
+        Ok(())
+    }
+
+    fn build_a_csc(&self) -> CscMatrix<'a> {
+        let vec_mat = dmat_to_vec(&self.qp_params.a_mat.clone().unwrap());
+        CscMatrix::from(&vec_mat)
+    }
+
+    fn build_q_csc(&self) -> CscMatrix<'a> {
+        // Flatten q_mat into CSC format for OSQP
+        if let Some(q_mat) = &self.qp_params.q_mat {
+            CscMatrix::from(q_mat).into_upper_tri()
+        } else {
+            self.qp_params.q_csc.clone().unwrap().into_upper_tri()
+        }
+    }
+
+    fn init(self) -> OSQPParams<'a> {
+        let q_vec = self.qp_params.q_vec.clone().unwrap();
+
+        // Flatten q_mat into CSC format for OSQP
+        let q_csc = self.build_q_csc();
+        // Stack A = [a_mat; g_mat]
+        let a_csc = self.build_a_csc();
+        // l and u
+        let l = self.qp_params.lb_vec.unwrap().as_slice().to_vec();
+        let u = self.qp_params.ub_vec.unwrap().as_slice().to_vec();
+        let n_eq = l.iter().zip(u.iter()).filter(|(lb, ub)| lb == ub).count();
+        let n_ineq = 2 * (l.len() - n_eq);
+
+        (q_csc, q_vec, a_csc, l, u, n_eq, n_ineq)
     }
 }

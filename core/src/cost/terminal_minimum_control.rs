@@ -105,13 +105,42 @@ where
     fn get_r(&self) -> Option<&DMatrix<f64>> {
         Some(&self.r_matrix)
     }
+    fn update_q(&mut self, _q: DMatrix<f64>) -> Result<(), ModelError> {
+        Ok(())
+    }
+
+    fn update_qn(&mut self, qn: DMatrix<f64>) -> Result<(), ModelError> {
+        if qn.nrows() != self.qn_matrix.nrows() || qn.ncols() != self.qn_matrix.ncols() {
+            return Err(ModelError::ConfigError(format!(
+                "Incorrect Qn Dimensions. Expecting {}, Obtained {}",
+                qn.nrows(),
+                self.qn_matrix.ncols()
+            )));
+        }
+        self.qn_matrix = qn;
+
+        Ok(())
+    }
+
+    fn update_r(&mut self, r: DMatrix<f64>) -> Result<(), ModelError> {
+        if r.nrows() != self.r_matrix.nrows() || r.ncols() != self.r_matrix.ncols() {
+            return Err(ModelError::ConfigError(format!(
+                "Incorrect R Dimensions. Expecting {}, Obtained {}",
+                r.nrows(),
+                self.r_matrix.ncols()
+            )));
+        }
+        self.r_matrix = r;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::Labelizable;
     use crate::physics::traits::State;
+    use crate::utils::Labelizable;
     use macros::{LabelOps, StateOps};
 
     #[derive(Clone, Debug, StateOps, LabelOps)]

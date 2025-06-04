@@ -4,7 +4,7 @@ use crate::numeric_services::solver::{
 };
 use crate::physics::ModelError;
 use crate::solver::Minimizer;
-use osqp::{Problem, Status};
+use osqp::{CscMatrix, Problem, Status};
 use std::sync::{Arc, Mutex};
 
 pub struct OSQPSolver {
@@ -31,6 +31,31 @@ impl OSQPSolverHandle {
         Self {
             solver: Arc::new(Mutex::new(solver)),
         }
+    }
+
+    pub fn update_lin_cost(&self, q: &[f64]) {
+        let mut h = self.solver.lock().unwrap();
+        h.problem.update_lin_cost(q);
+    }
+    pub fn update_p(&self, p: CscMatrix) {
+        let mut h = self.solver.lock().unwrap();
+        h.problem.update_P(p)
+    }
+    pub fn update_a(&self, a: CscMatrix) {
+        let mut h = self.solver.lock().unwrap();
+        h.problem.update_A(a)
+    }
+    pub fn update_lower_bound(&self, l: &[f64]) {
+        let mut h = self.solver.lock().unwrap();
+        h.problem.update_lower_bound(l);
+    }
+    pub fn update_upper_bound(&self, u: &[f64]) {
+        let mut h = self.solver.lock().unwrap();
+        h.problem.update_upper_bound(u);
+    }
+    pub fn update_bounds(&self, l: &[f64], u: &[f64]) {
+        let mut h = self.solver.lock().unwrap();
+        h.problem.update_bounds(l, u);
     }
 }
 

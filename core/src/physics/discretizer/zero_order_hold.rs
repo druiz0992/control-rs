@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use nalgebra::{DMatrix};
+use nalgebra::DMatrix;
 
 use crate::physics::ModelError;
 use crate::physics::traits::{Discretizer, LinearDynamics, State};
@@ -10,7 +10,7 @@ use super::LinearDiscretizer;
 const EXPM_TOL: f64 = 1e-6;
 const EXPM_MAX_ITERATIONS: usize = 50;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ZOH<D>
 where
     D: LinearDynamics,

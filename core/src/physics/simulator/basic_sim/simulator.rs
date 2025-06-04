@@ -1,7 +1,7 @@
 use crate::physics::ModelError;
 use crate::physics::traits::{Discretizer, Dynamics, PhysicsSim};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BasicSim<M, D>
 where
     M: Dynamics,

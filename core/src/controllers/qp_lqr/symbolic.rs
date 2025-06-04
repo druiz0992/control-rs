@@ -7,18 +7,18 @@ use crate::controllers::{
     UpdatableController,
 };
 use crate::physics::ModelError;
-use crate::physics::discretizer::LinearDiscretizer;
-use crate::physics::traits::{LinearDynamics, PhysicsSim};
+use crate::physics::discretizer::SymbolicDiscretizer;
+use crate::physics::traits::{PhysicsSim, SymbolicDynamics};
 use crate::solver::OSQPBuilder;
 use crate::solver::osqp::builder::QPParams;
 
-pub struct QPLQR<S: PhysicsSim>(QPLQRGeneric<S>);
+pub struct QPLQRSymbolic<S: PhysicsSim>(QPLQRGeneric<S>);
 
-impl<S> QPLQR<S>
+impl<S> QPLQRSymbolic<S>
 where
     S: PhysicsSim,
-    S::Model: LinearDynamics,
-    S::Discretizer: LinearDiscretizer<S::Model>,
+    S::Model: SymbolicDynamics,
+    S::Discretizer: SymbolicDiscretizer<S::Model>,
 {
     pub fn new(
         sim: S,
@@ -27,20 +27,20 @@ where
         options: Option<QPOptions<S>>,
     ) -> Result<(Self, QPParams), ModelError> {
         let options = options.unwrap_or_default();
-        let jacobian_u = Box::new(sim.discretizer().jacobian_u().clone());
-        let jacobian_x = Box::new(sim.discretizer().jacobian_x().clone());
+        let jacobian_u = Box::new(sim.discretizer().jacobian_u()?);
+        let jacobian_x = Box::new(sim.discretizer().jacobian_x()?);
 
         let (controller, updatable_qp_params) =
             QPLQRGeneric::new(sim, cost_fn, jacobian_x, jacobian_u, x0, options)?;
 
-        Ok((QPLQR(controller), updatable_qp_params))
+        Ok((QPLQRSymbolic(controller), updatable_qp_params))
     }
     pub fn update(&self, builder: OSQPBuilder) {
         self.0.update(builder);
     }
 }
 
-impl<S: PhysicsSim> Controller<S> for QPLQR<S> {
+impl<S: PhysicsSim> Controller<S> for QPLQRSymbolic<S> {
     fn solve(
         &mut self,
         initial_state: &ControllerState<S>,
@@ -49,7 +49,7 @@ impl<S: PhysicsSim> Controller<S> for QPLQR<S> {
     }
 }
 
-impl<S: PhysicsSim> SteppableController<S> for QPLQR<S> {
+impl<S: PhysicsSim> SteppableController<S> for QPLQRSymbolic<S> {
     fn step(
         &self,
         state: ControllerState<S>,
@@ -60,7 +60,7 @@ impl<S: PhysicsSim> SteppableController<S> for QPLQR<S> {
     }
 }
 
-impl<S: PhysicsSim> UpdatableController<S> for QPLQR<S> {
+impl<S: PhysicsSim> UpdatableController<S> for QPLQRSymbolic<S> {
     type Params<'a> = OSQPBuilder<'a>;
 
     fn update(&self, params: Self::Params<'_>) {

@@ -9,7 +9,9 @@ use control_rs::numeric_services::symbolic::{
 use control_rs::solver::Minimizer;
 use control_rs::solver::osqp::builder::OSQPBuilder;
 use control_rs::solver::qp::QPBuilder;
+use control_rs::utils::{matrix, vector};
 use nalgebra::{DMatrix, DVector};
+use osqp::Settings;
 use std::sync::Arc;
 
 const Q_LINEAR: [f64; 2] = [2.0, -3.0];
@@ -96,11 +98,8 @@ fn test_newton_root_finding_norm1_line_search() {
     let initial_guess = vec![-1.742410372590328, 1.4020334125022704];
 
     let unknown_expr = ExprVector::new(&["x1", "x2"]);
-    let mut ls_opts = LineSeachConfig::default();
-    ls_opts.set_merit(expr.norm1().unwrap());
-
-    let mut options = OptimizerConfig::default();
-    options.set_line_search_opts(ls_opts);
+    let ls_opts = LineSeachConfig::default().set_merit(Some(expr.norm1().unwrap()));
+    let options = OptimizerConfig::default().set_line_search_opts(ls_opts);
 
     let solver =
         NewtonSolverSymbolic::new_root_solver(&expr, &unknown_expr, &registry, Some(options))
@@ -135,8 +134,7 @@ fn test_gauss_newton_minimization_no_constraints() {
 
     let registry = Arc::new(ExprRegistry::new());
     let initial_guess = vec![-0.1, 0.5];
-    let mut options = OptimizerConfig::default();
-    options.set_gauss_newton(true);
+    let options = OptimizerConfig::default().set_gauss_newton(true);
 
     let solver = NewtonSolverSymbolic::new_minimization(
         &cost,
@@ -187,8 +185,7 @@ fn test_gauss_newton_minimization() {
     let initial_guess = vec![-0.1, 0.5];
     let eq_constraints_expr = get_eq_constraints_expr(&unknown_expr);
 
-    let mut options = OptimizerConfig::default();
-    options.set_gauss_newton(true);
+    let options = OptimizerConfig::default().set_gauss_newton(true);
 
     let solver = NewtonSolverSymbolic::new_minimization(
         &cost,
@@ -383,8 +380,7 @@ fn test_symbolic_qp() {
         panic!("Unexpected result for inequality constraints");
     }
 
-    let mut solver_options = OptimizerConfig::default();
-    solver_options.set_verbose(true);
+    let solver_options = OptimizerConfig::default().set_verbose(true);
 
     let solver = NewtonSolverSymbolic::new_minimization(
         &objective_expr,
@@ -473,38 +469,30 @@ fn test_osqp_handle() {
 
     let big_a_data = vec![0.0, 0.0, 1.0, 1.0, -1.0, 2.3, 1.0, -2.0];
 
-    let identity = DMatrix::<f64>::identity(4, 4);
-    let neg_identity = -&identity;
-
-    let primal_max = [1.0, 1.0, 1.0, 1.0];
-    let primal_min = [-0.5, -0.5, -1.0, -1.0];
-    let neg_primal_max: Vec<f64> = primal_max.iter().map(|x| -x).collect();
-    let mut h_data = neg_primal_max;
-    h_data.extend(primal_min);
+    let primal_max = vec![1.0, 1.0, 1.0, 1.0];
+    let primal_min = vec![-0.5, -0.5, -1.0, -1.0];
 
     // objective: 0.5 * X' * Q * X + q * X
     let big_q = DMatrix::from_row_slice(4, 4, &big_q_data);
     let q = DVector::from_vec(vec![-2.0, 3.4, 2.0, 4.0]);
     // eq constraints: A * X - b
-    let big_a = DMatrix::from_row_slice(2, 4, &big_a_data);
-    let b = DVector::from_vec(vec![1.0, 3.0]);
-    // ineq constraints: G*x - h
-    let big_g = DMatrix::from_rows(
-        &neg_identity
-            .row_iter()
-            .chain(identity.row_iter())
-            .collect::<Vec<_>>(),
-    );
-    let h = DVector::from_vec(h_data);
+    let mut big_a = DMatrix::from_row_slice(2, 4, &big_a_data);
+    let mut lb = DVector::from_vec(vec![1.0, 3.0]);
+    let mut ub = lb.clone();
+    lb = vector::vstack_option(lb, Some(DVector::from_vec(primal_min)));
+    ub = vector::vstack_option(ub, Some(DVector::from_vec(primal_max)));
 
+    big_a = matrix::vstack_option(big_a, Some(DMatrix::identity(big_q.nrows(), big_q.ncols())))
+        .unwrap();
+
+    let options = Settings::default().verbose(false);
     let qp_builder = OSQPBuilder::new();
-    let solver = qp_builder
+    let (solver, _) = qp_builder
         .q_mat(big_q)
         .q_vec(q)
         .a_mat(big_a)
-        .b_vec(b)
-        .g_mat(big_g)
-        .h_vec(h)
+        .bounds_vec(lb, ub)
+        .add_options(options)
         .build()
         .unwrap();
 
@@ -523,33 +511,25 @@ fn test_osqp_handle_no_eq() {
         0.0, 0.0, 0.0, 4.0, // row 4
     ];
 
-    let identity = DMatrix::<f64>::identity(4, 4);
-    let neg_identity = -&identity;
-
-    let primal_max = [1.0, 1.0, 1.0, 1.0];
-    let primal_min = [-0.5, -0.5, -1.0, -1.0];
-    let neg_primal_max: Vec<f64> = primal_max.iter().map(|x| -x).collect();
-    let mut h_data = neg_primal_max;
-    h_data.extend(primal_min);
+    let primal_max = vec![1.0, 1.0, 1.0, 1.0];
+    let primal_min = vec![-0.5, -0.5, -1.0, -1.0];
 
     // objective: 0.5 * X' * Q * X + q * X
     let big_q = DMatrix::from_row_slice(4, 4, &big_q_data);
     let q = DVector::from_vec(vec![-2.0, 3.4, 2.0, 4.0]);
-    // ineq constraints: G*x - h
-    let big_g = DMatrix::from_rows(
-        &neg_identity
-            .row_iter()
-            .chain(identity.row_iter())
-            .collect::<Vec<_>>(),
-    );
-    let h = DVector::from_vec(h_data);
+
+    let big_a = DMatrix::<f64>::identity(big_q.nrows(), big_q.ncols());
+    let lb = DVector::from_vec(primal_min);
+    let ub = DVector::from_vec(primal_max);
 
     let qp_builder = OSQPBuilder::new();
-    let solver = qp_builder
+    let options = Settings::default().verbose(false);
+    let (solver, _) = qp_builder
         .q_mat(big_q)
         .q_vec(q)
-        .g_mat(big_g)
-        .h_vec(h)
+        .a_mat(big_a)
+        .bounds_vec(lb, ub)
+        .add_options(options)
         .build()
         .unwrap();
 
@@ -575,14 +555,17 @@ fn test_osqp_handle_no_ineq() {
     let q = DVector::from_vec(vec![-2.0, 3.4, 2.0, 4.0]);
     // eq constraints: A * X - b
     let big_a = DMatrix::from_row_slice(2, 4, &big_a_data);
-    let b = DVector::from_vec(vec![1.0, 3.0]);
+    let lb = DVector::from_vec(vec![1.0, 3.0]);
+    let ub = lb.clone();
 
+    let options = Settings::default().verbose(false);
     let qp_builder = OSQPBuilder::new();
-    let solver = qp_builder
+    let (solver, _) = qp_builder
         .q_mat(big_q)
         .q_vec(q)
         .a_mat(big_a)
-        .b_vec(b)
+        .bounds_vec(lb, ub)
+        .add_options(options)
         .build()
         .unwrap();
 

@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use super::SymbolicDiscretizer;
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct RK4<D: Dynamics> {
     _phantom_data: PhantomData<D>,
 }
@@ -146,8 +146,8 @@ impl<D: SymbolicDynamics> SymbolicDiscretizer<D> for RK4Symbolic<D> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::utils::helpers::within_tolerance;
     use crate::physics::models::{DoublePendulum, DoublePendulumState};
+    use crate::utils::helpers::within_tolerance;
     use proptest::prelude::*;
     use std::f64::consts::PI;
 
