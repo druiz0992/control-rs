@@ -1,13 +1,9 @@
-use control_rs::animation::Animation;
-use control_rs::animation::macroquad::Macroquad;
-use control_rs::controllers::qp_lqr::options::QPOptions;
-use control_rs::controllers::qp_lqr::symbolic::QPLQRSymbolic;
-use control_rs::controllers::qp_mpc::options::ConvexMpcOptions;
-use control_rs::controllers::qp_mpc::symbolic::ConvexMpcSymbolic;
-use control_rs::controllers::riccati_lqr::options::RiccatiLQROptions;
-use control_rs::controllers::riccati_lqr::symbolic::RiccatiRecursionSymbolic;
+use control_rs::animation::{Animation, macroquad::Macroquad};
+use control_rs::controllers::qp_lqr::{QPLQRSymbolic, QPOptions};
+use control_rs::controllers::qp_mpc::{ConvexMpcOptions, ConvexMpcSymbolic};
+use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursionSymbolic};
 use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions};
-use control_rs::cost::generic::{GenericCost, GenericCostOptions};
+use control_rs::cost::generic::GenericCost;
 use control_rs::numeric_services::symbolic::ExprRegistry;
 use control_rs::physics::constants as c;
 use control_rs::physics::discretizer::RK4Symbolic;
@@ -51,7 +47,7 @@ async fn build_sim(controller_type: ControllerType) {
     let input_hover = Quadrotor2DInput::new(0.5 * m * c::GRAVITY, 0.5 * m * c::GRAVITY);
     let state_hover = Quadrotor2DState::default();
 
-    let state_0 = Quadrotor2DState::new(10.0, 2.0, 0.0, 0.0, 0.0, 0.0);
+    let state_0 = Quadrotor2DState::new(1.0, 2.0, 0.0, 0.0, 0.0, 0.0);
     let state_ref = Quadrotor2DState::new(0.0, 1.0, 0.0, 0.0, 0.0, 0.0);
 
     let registry = Arc::new(ExprRegistry::new());
@@ -71,8 +67,8 @@ async fn build_sim(controller_type: ControllerType) {
         .collect();
     reference_traj[n_steps] = state_ref.clone();
 
-    let options = GenericCostOptions::new().set_linear_term(true);
-    let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, Some(options)).unwrap();
+    //let options = GenericCostOptions::new().set_linear_term(true);
+    let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, None).unwrap();
 
     let general_options = ControllerOptions::<Sim<Quadrotor2D>>::default()
         .set_x_ref(&[state_ref.clone()])
@@ -98,10 +94,12 @@ async fn build_sim(controller_type: ControllerType) {
                     .unwrap();
             Box::new(controller)
         }
-        ControllerType::QpLqrUlimits(lower, upper) => {
-            let constraints =
-                ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((lower, upper));
-            let general_options = general_options.set_u_limits(constraints);
+        ControllerType::QpLqrUlimits(lower_u, upper_u) => {
+            let [hover] = input_hover.extract(&["u1"]);
+            let input_constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>(
+                (lower_u - hover, upper_u - hover),
+            );
+            let general_options = general_options.set_u_limits(input_constraints);
             let osqp_settings = Settings::default()
                 .verbose(false)
                 .eps_abs(1e-8)
@@ -214,7 +212,6 @@ async fn build_sim(controller_type: ControllerType) {
     };
 
     let (x_traj, u_traj) = controller.solve(&state_0).unwrap();
-    dbg!(&x_traj.last(), &u_traj.last());
     let animation = Macroquad::new();
 
     animation
@@ -236,13 +233,14 @@ async fn main() {
     let m = 1.0;
     let u_limits = (0.2 * m * c::GRAVITY, 0.6 * m * c::GRAVITY);
     let controller_type = vec![
+        //
         ControllerType::QpLqr,
         ControllerType::QpLqrUlimits(u_limits.0, u_limits.1),
         ControllerType::RiccatiRecursionLQRFinite,
         ControllerType::RiccatiRecursionLQRInfinite,
         ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(u_limits.0, u_limits.1, 10.0, 0.1),
         ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(
-        u_limits.0, u_limits.1, 10.0, 0.1,
+            u_limits.0, u_limits.1, 10.0, 0.1,
         ),
         ControllerType::Mpc,
         ControllerType::MpcULimitsAndNoise(u_limits.0, u_limits.1, 0.0, 0.0),

@@ -1,6 +1,6 @@
 use crate::controllers::{ControllerInput, ControllerState, CostFn};
 use crate::physics::traits::{PhysicsSim, State};
-use crate::utils::{matrix, vector};
+use crate::utils::matrix;
 use nalgebra::{DMatrix, DVector};
 use osqp::CscMatrix;
 
@@ -90,28 +90,7 @@ pub(super) fn build_h<'a, S: PhysicsSim>(
     CscMatrix::from(&h_vec)
 }
 
-/// G = kron([I(n_steps)],[I(input_dim), 0(dim_n,dim_m)])
-pub fn build_g(dim_n: usize, dim_m: usize, n_steps: usize) -> DMatrix<f64> {
-    let mut i_zeros = DMatrix::<f64>::zeros(dim_n, dim_n + dim_m);
-    i_zeros
-        .view_mut((0, 0), (dim_n, dim_n))
-        .copy_from(&DMatrix::identity(dim_n, dim_n));
-    matrix::kron(&DMatrix::identity(n_steps, n_steps), &i_zeros)
-}
-
-pub fn build_bounds(
-    v_min: &DVector<f64>,
-    v_max: &DVector<f64>,
-    n_steps: usize,
-) -> (DVector<f64>, DVector<f64>) {
-    let one_vector = DVector::from_vec(vec![1.0; n_steps]);
-    let lb = vector::kron(&one_vector, v_min);
-    let ub = vector::kron(&one_vector, v_max);
-
-    (lb, ub)
-}
-
-pub fn build_q_vec<S: PhysicsSim>(
+pub(super) fn build_q_vec<S: PhysicsSim>(
     cost_fn: &CostFn<S>,
     x_trajectory: &[ControllerState<S>],
     n_steps: usize,

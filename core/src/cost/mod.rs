@@ -1,8 +1,12 @@
 pub mod generic;
 pub mod terminal_minimum_control;
-use nalgebra::{DMatrix, DVector};
+
+pub use generic::{GenericCost, GenericCostOptions};
+pub use terminal_minimum_control::TerminalMinControlCost;
 
 use crate::physics::{ModelError, traits::State};
+use nalgebra::{DMatrix, DVector};
+
 
 pub trait CostFunction {
     type State: State;

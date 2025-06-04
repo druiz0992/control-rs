@@ -67,14 +67,8 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
         .collect();
     expected_trajectory[n_steps] = state_ref.clone();
 
-    let options = GenericCostOptions::new().set_linear_term(true);
-    let cost = GenericCost::new(
-        q_matrix.clone(),
-        qn_matrix.clone(),
-        r_matrix.clone(),
-        Some(options),
-    )
-    .unwrap();
+    let cost =
+        GenericCost::new(q_matrix.clone(), qn_matrix.clone(), r_matrix.clone(), None).unwrap();
 
     let general_options = ControllerOptions::<Sim<Quadrotor2D>>::default()
         .set_x_ref(&[state_ref.clone()])
@@ -120,10 +114,6 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
             Box::new(controller)
         }
         ControllerType::RiccatiRecursionLQRFinite => {
-            let options = GenericCostOptions::new()
-                .set_linear_term(false)
-                .set_reference_state_trajectory(&expected_trajectory);
-            let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, Some(options)).unwrap();
             let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
             Box::new(
                 RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), Some(options)).unwrap(),
@@ -131,20 +121,12 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
         }
 
         ControllerType::RiccatiRecursionLQRInfinite => {
-            let options = GenericCostOptions::new()
-                .set_linear_term(false)
-                .set_reference_state_trajectory(&expected_trajectory);
-            let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, Some(options)).unwrap();
             let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
             Box::new(
                 RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), Some(options)).unwrap(),
             )
         }
         ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(lower, upper, std_0, std_n) => {
-            let options = GenericCostOptions::new()
-                .set_linear_term(false)
-                .set_reference_state_trajectory(&expected_trajectory);
-            let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, Some(options)).unwrap();
             let constraints =
                 ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((lower, upper));
             let general_options = general_options
@@ -156,10 +138,6 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
             )
         }
         ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(lower, upper, std_0, std_n) => {
-            let options = GenericCostOptions::new()
-                .set_linear_term(false)
-                .set_reference_state_trajectory(&expected_trajectory);
-            let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, Some(options)).unwrap();
             let constraints =
                 ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((lower, upper));
             let general_options = general_options
@@ -171,8 +149,6 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
             )
         }
         ControllerType::Mpc => {
-            let options = GenericCostOptions::new().set_linear_term(true);
-            let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, Some(options)).unwrap();
             let osqp_settings = Settings::default()
                 .verbose(false)
                 .eps_abs(1e-8)
@@ -186,8 +162,6 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
             )
         }
         ControllerType::MpcULimitsAndNoise(lower, upper, std_0, std_n) => {
-            let options = GenericCostOptions::new().set_linear_term(true);
-            let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, Some(options)).unwrap();
             let [hover] = input_hover.extract(&["u1"]);
             let constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((
                 lower - hover,
