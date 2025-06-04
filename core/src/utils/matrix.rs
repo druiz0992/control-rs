@@ -149,7 +149,7 @@ pub fn vstack_option(
 pub fn hstack(a: DMatrix<f64>, b: DMatrix<f64>) -> Result<DMatrix<f64>, ModelError> {
     if a.nrows() != b.nrows() {
         return Err(ModelError::ConfigError(
-            "Mismatch in matix dimensions.".into(),
+            "Mismatch in matrix dimensions.".into(),
         ));
     }
 

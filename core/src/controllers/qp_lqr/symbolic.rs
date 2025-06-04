@@ -1,3 +1,5 @@
+use nalgebra::DVector;
+
 use super::common::QPLQRGeneric;
 use super::options::QPOptions;
 use crate::controllers::{
@@ -63,5 +65,11 @@ impl<S: PhysicsSim> UpdatableController<S> for QPLQRSymbolic<S> {
 
     fn update(&self, params: Self::Params<'_>) {
         self.0.update(params);
+    }
+    fn update_bounds(&self, state: &DVector<f64>, lb: &mut DVector<f64>, ub: &mut DVector<f64>) {
+        self.0.update_bounds(state, lb, ub);
+    }
+    fn update_q(&self, state_ref: &DVector<f64>, q: &mut DVector<f64>) {
+        self.0.update_q(state_ref, q);
     }
 }

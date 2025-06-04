@@ -36,6 +36,8 @@ pub trait Controller<S: PhysicsSim> {
 pub trait UpdatableController<S: PhysicsSim>: Controller<S> {
     type Params<'a>;
 
+    fn update_q(&self, state_ref: &DVector<f64>, q: &mut DVector<f64>);
+    fn update_bounds(&self, state: &DVector<f64>, lb: &mut DVector<f64>, ub: &mut DVector<f64>);
     fn update(&self, params: Self::Params<'_>);
 }
 

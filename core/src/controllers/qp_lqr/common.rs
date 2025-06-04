@@ -1,3 +1,5 @@
+use nalgebra::{DMatrix, DVector};
+
 use super::options::QPOptions;
 use super::utils;
 use crate::controllers::{
@@ -23,6 +25,11 @@ pub struct QPLQRGeneric<S: PhysicsSim> {
 
     u_ref: Vec<ControllerInput<S>>,
     x_ref: Vec<ControllerState<S>>,
+
+    control_mat: DMatrix<f64>,
+    state_mat: DMatrix<f64>,
+
+    cost_fn: CostFn<S>,
 }
 
 impl<S> QPLQRGeneric<S>
@@ -99,6 +106,9 @@ where
                 u_ref,
                 x_ref,
                 dt: options.get_general().get_dt(),
+                state_mat,   // A
+                control_mat, // B
+                cost_fn,     // can get Q, Qn, R
             },
             updatable_qp_params,
         ))
@@ -114,6 +124,41 @@ impl<S: PhysicsSim> UpdatableController<S> for QPLQRGeneric<S> {
 
     fn update(&self, params: Self::Params<'_>) {
         params.update(&self.solver)
+    }
+
+    fn update_bounds(
+        &self,
+        current_state: &DVector<f64>,
+        lb: &mut DVector<f64>,
+        ub: &mut DVector<f64>,
+    ) {
+        // update vector d[0] to -A * x0; => lb <= Az <= ub;
+        let a_x = -&self.state_mat * current_state;
+        lb.rows_mut(0, current_state.len()).copy_from(&a_x);
+        ub.rows_mut(0, current_state.len()).copy_from(&a_x);
+    }
+
+    fn update_q(&self, state_ref: &DVector<f64>, q: &mut DVector<f64>) {
+        let n_steps = self.n_steps;
+        let state_dims = state_ref.len();
+        let input_dims = ControllerInput::<S>::dim_q();
+
+        // TODO >>> review
+        if let (Some(running_cost), Some(terminal_cost)) =
+            (self.cost_fn.get_q(), self.cost_fn.get_qn())
+        {
+            let q_x = -running_cost * state_ref;
+            let qn_x = -terminal_cost * state_ref;
+
+            for j in 0..n_steps - 2 {
+                let offset = input_dims + j * (state_dims + input_dims);
+                q.rows_mut(offset, state_dims).copy_from(&q_x);
+            }
+
+            // Final step (for j = Nh)
+            let offset = input_dims + (n_steps - 2) * (state_dims + input_dims);
+            q.rows_mut(offset, state_dims).copy_from(&qn_x);
+        }
     }
 }
 

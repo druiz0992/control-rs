@@ -1,7 +1,5 @@
-use crate::controllers::riccati_lqr::options::RiccatiLQROptions;
-use crate::controllers::riccati_lqr::recursion::solve_steady_state_lqr;
 use crate::controllers::{
-    Controller, ControllerInput, ControllerState, QPLQR, SteppableController, TrajectoryHistory,
+    Controller, ControllerInput, ControllerState, SteppableController, TrajectoryHistory,
     UpdatableController, state_from_slice, try_into_noisy_state,
 };
 use crate::physics::ModelError;
@@ -9,9 +7,8 @@ use crate::physics::models::Dynamics;
 use crate::physics::traits::{Discretizer, PhysicsSim, State};
 use crate::solver::OSQPBuilder;
 use crate::solver::osqp::builder::QPParams;
-use crate::utils::evaluable::EvaluableDMatrix;
 use crate::utils::noise::NoiseSources;
-use nalgebra::{DMatrix, DVector};
+use nalgebra::DVector;
 
 use super::options::ConvexMpcOptions;
 
@@ -50,9 +47,6 @@ pub(super) struct ConvexMpcGeneric<
     updatable_params: ConvexMpcUpdatableParams,
 
     n_steps: usize,
-    state_matrix: DMatrix<f64>,
-    running_cost: DMatrix<f64>,
-    terminal_cost: DMatrix<f64>,
 
     options: ConvexMpcOptions<S>,
 }
@@ -63,14 +57,10 @@ where
     S::Model: Dynamics,
     S::Discretizer: Discretizer<S::Model>,
     C: UpdatableController<S> + SteppableController<S>,
+    for<'a> C::Params<'a>: From<OSQPBuilder<'a>>,
 {
     pub(super) fn new(
         qp_controller: C,
-        jacobian_x_fn: EvaluableDMatrix,
-        jacobian_u_fn: EvaluableDMatrix,
-        q_mat: DMatrix<f64>,
-        qn_mat: DMatrix<f64>,
-        r_mat: DMatrix<f64>,
         updatable_params: ConvexMpcUpdatableParams,
         options: ConvexMpcOptions<S>,
     ) -> Result<Self, ModelError> {
@@ -78,60 +68,29 @@ where
             as usize
             + 1;
 
-        let vals = options.general.concatenate_operating_point();
-
-        let a_mat = jacobian_x_fn.evaluate(&vals)?;
-        let b_mat = jacobian_u_fn.evaluate(&vals)?;
-
         Ok(ConvexMpcGeneric {
             qp_controller,
             updatable_params,
             options,
             n_steps,
-            state_matrix: a_mat,
-            running_cost: q_mat,
-            terminal_cost: qn_mat,
         })
     }
 
-    fn update_qp<'a>(&'a self, state: &'a DVector<f64>) -> ConvexMpcUpdatableParams {
+    fn update_mpc(&mut self, current_state: &ControllerState<S>) {
         let ConvexMpcUpdatableParams {
-            mut q_vec,
-            mut lb_vec,
-            mut ub_vec,
-        } = self.updatable_params.clone();
-
-        let mpc_horizon = self.options.get_horizon();
-        let n_steps = (mpc_horizon / self.options.get_general().get_dt()) as usize + 1;
-
-        // update vector d[0] to -A * x0; => lb <= Az <= ub;
-        let a_x = -&self.state_matrix * state;
-        lb_vec.rows_mut(0, state.len()).copy_from(&a_x);
-        ub_vec.rows_mut(0, state.len()).copy_from(&a_x);
-
-        // update vector b with
-        let state_dims = state.len();
-        let input_dims = ControllerInput::<S>::dim_q();
-
-        // TODO >>> review
-        let state_ref = self.options.general.get_x_ref()[0].to_vector();
-        let q_x = -&self.running_cost * &state_ref;
-        let qn_x = -&self.terminal_cost * &state_ref;
-
-        for j in 0..n_steps - 2 {
-            let offset = input_dims + j * (state_dims + input_dims);
-            q_vec.rows_mut(offset, state_dims).copy_from(&q_x);
-        }
-
-        // Final step (for j = Nh)
-        let offset = input_dims + (n_steps - 2) * (state_dims + input_dims);
-        q_vec.rows_mut(offset, state_dims).copy_from(&qn_x);
-
-        ConvexMpcUpdatableParams {
             q_vec,
             lb_vec,
             ub_vec,
-        }
+        } = &mut self.updatable_params;
+
+        let state_ref = self.options.general.get_x_ref()[0].to_vector();
+        self.qp_controller
+            .update_bounds(&current_state.to_vector(), lb_vec, ub_vec);
+        self.qp_controller.update_q(&state_ref, q_vec);
+        let builder = OSQPBuilder::new()
+            .q_vec(q_vec.clone())
+            .bounds_vec(lb_vec.clone(), ub_vec.clone());
+        self.qp_controller.update(builder.into());
     }
 }
 
@@ -165,13 +124,7 @@ where
         for k in 0..self.n_steps - 1 {
             // 1- mpc_update
             // update controller
-            let current_vec = current_state.to_vector();
-            let params = self.update_qp(&current_vec);
-            self.updatable_params = params.clone();
-            let builder = OSQPBuilder::new()
-                .q_vec(params.q_vec)
-                .bounds_vec(params.lb_vec, params.ub_vec);
-            self.qp_controller.update(builder.into());
+            self.update_mpc(&current_state);
 
             let (_, mpc_u_traj) = self.qp_controller.solve(&current_state)?;
             u_traj[k] = mpc_u_traj[0].clone();

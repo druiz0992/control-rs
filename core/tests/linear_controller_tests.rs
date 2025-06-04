@@ -125,7 +125,6 @@ fn linear_controller_setup(controller_type: LinearControllerType) {
     };
 
     let (x_traj, u_traj) = controller.solve(&initial_state).unwrap();
-    dbg!(&x_traj.last(), &u_traj.last(), &expected_trajectory.last());
 
     let tol = 1e-2;
     assert!(
@@ -181,7 +180,6 @@ fn test_mpc_linear() {
 }
 
 #[test]
-#[ignore]
 fn test_mpc_noise_linear() {
     linear_controller_setup(LinearControllerType::MpcLinearULimitsAndNoise(
         -0.5, 0.5, 0.0, 0.0,

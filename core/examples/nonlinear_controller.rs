@@ -30,6 +30,7 @@ enum ControllerType {
     RiccatiRecursionLQRInfiniteULimitsAndNoise(f64, f64, f64, f64),
     Mpc,
     MpcULimitsAndNoise(f64, f64, f64, f64),
+    MpcUXLimitsAndNoise(f64, f64, f64, f64, f64, f64),
 }
 
 // Example iterates over all implemented linear controllers
@@ -50,7 +51,7 @@ async fn build_sim(controller_type: ControllerType) {
     let input_hover = Quadrotor2DInput::new(0.5 * m * c::GRAVITY, 0.5 * m * c::GRAVITY);
     let state_hover = Quadrotor2DState::default();
 
-    let state_0 = Quadrotor2DState::new(10.0, 21.0, 0.0, 0.0, 0.0, 0.0);
+    let state_0 = Quadrotor2DState::new(10.0, 2.0, 0.0, 0.0, 0.0, 0.0);
     let state_ref = Quadrotor2DState::new(0.0, 1.0, 0.0, 0.0, 0.0, 0.0);
 
     let registry = Arc::new(ExprRegistry::new());
@@ -82,9 +83,13 @@ async fn build_sim(controller_type: ControllerType) {
         .unwrap()
         .set_time_horizon(sim_time)
         .unwrap();
+
     let mut controller: SymbolicController<Quadrotor2D> = match controller_type {
         ControllerType::QpLqr => {
-            let osqp_settings = Settings::default().verbose(false);
+            let osqp_settings = Settings::default()
+                .verbose(false)
+                .eps_abs(1e-8)
+                .eps_rel(1e-8);
             let qp_options = QPOptions::default()
                 .set_general(general_options)
                 .set_osqp_settings(osqp_settings);
@@ -97,7 +102,10 @@ async fn build_sim(controller_type: ControllerType) {
             let constraints =
                 ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((lower, upper));
             let general_options = general_options.set_u_limits(constraints);
-            let osqp_settings = Settings::default().verbose(false);
+            let osqp_settings = Settings::default()
+                .verbose(false)
+                .eps_abs(1e-8)
+                .eps_rel(1e-8);
             let qp_options = QPOptions::<Sim<Quadrotor2D>>::default()
                 .set_general(general_options)
                 .set_osqp_settings(osqp_settings);
@@ -142,7 +150,10 @@ async fn build_sim(controller_type: ControllerType) {
             )
         }
         ControllerType::Mpc => {
-            let osqp_settings = Settings::default().verbose(false).eps_abs(1e-7);
+            let osqp_settings = Settings::default()
+                .verbose(false)
+                .eps_abs(1e-8)
+                .eps_rel(1e-8);
             let options = ConvexMpcOptions::default()
                 .set_general(general_options)
                 .set_osqp_settings(osqp_settings);
@@ -153,14 +164,45 @@ async fn build_sim(controller_type: ControllerType) {
         }
         ControllerType::MpcULimitsAndNoise(lower, upper, std_0, std_n) => {
             let [hover] = input_hover.extract(&["u1"]);
-            let constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((
-                lower - hover,
-                upper - hover,
-            ));
+            let input_constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>(
+                (lower - hover, upper - hover),
+            );
+
             let general_options = general_options
-                .set_u_limits(constraints)
+                .set_u_limits(input_constraints)
                 .set_noise((std_0, std_n));
-            let osqp_settings = Settings::default().verbose(false).eps_abs(1e-7);
+            let osqp_settings = Settings::default()
+                .verbose(false)
+                .eps_abs(1e-8)
+                .eps_rel(1e-8);
+            let options = ConvexMpcOptions::default()
+                .set_general(general_options)
+                .set_osqp_settings(osqp_settings);
+            Box::new(
+                ConvexMpcSymbolic::new(sim, Box::new(cost.clone()), &state_0, Some(options))
+                    .unwrap(),
+            )
+        }
+        ControllerType::MpcUXLimitsAndNoise(lower_u, upper_u, lower_x, upper_x, std_0, std_n) => {
+            let [hover] = input_hover.extract(&["u1"]);
+            let input_constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>(
+                (lower_u - hover, upper_u - hover),
+            );
+
+            let state_constraints =
+                ConstraintTransform::new_single_bound_state::<Sim<Quadrotor2D>>(
+                    (lower_x, upper_x),
+                    2,
+                )
+                .unwrap();
+            let general_options = general_options
+                .set_u_limits(input_constraints)
+                .set_x_limits(state_constraints)
+                .set_noise((std_0, std_n));
+            let osqp_settings = Settings::default()
+                .verbose(false)
+                .eps_abs(1e-8)
+                .eps_rel(1e-8);
             let options = ConvexMpcOptions::default()
                 .set_general(general_options)
                 .set_osqp_settings(osqp_settings);
@@ -172,6 +214,7 @@ async fn build_sim(controller_type: ControllerType) {
     };
 
     let (x_traj, u_traj) = controller.solve(&state_0).unwrap();
+    dbg!(&x_traj.last(), &u_traj.last());
     let animation = Macroquad::new();
 
     animation
@@ -193,16 +236,17 @@ async fn main() {
     let m = 1.0;
     let u_limits = (0.2 * m * c::GRAVITY, 0.6 * m * c::GRAVITY);
     let controller_type = vec![
-        //ControllerType::QpLqr,
-        //ControllerType::QpLqrUlimits(u_limits.0, u_limits.1),
-        //ControllerType::RiccatiRecursionLQRFinite,
-        //ControllerType::RiccatiRecursionLQRInfinite,
-        //ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(u_limits.0, u_limits.1, 10.0, 0.1),
-        //ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(
-        //u_limits.0, u_limits.1, 10.0, 0.1,
-        //),
+        ControllerType::QpLqr,
+        ControllerType::QpLqrUlimits(u_limits.0, u_limits.1),
+        ControllerType::RiccatiRecursionLQRFinite,
+        ControllerType::RiccatiRecursionLQRInfinite,
+        ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(u_limits.0, u_limits.1, 10.0, 0.1),
+        ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(
+        u_limits.0, u_limits.1, 10.0, 0.1,
+        ),
         ControllerType::Mpc,
         ControllerType::MpcULimitsAndNoise(u_limits.0, u_limits.1, 0.0, 0.0),
+        ControllerType::MpcUXLimitsAndNoise(u_limits.0, u_limits.1, -0.2, 0.2, 0.0, 0.0),
     ];
     env_logger::init();
 

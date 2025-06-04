@@ -73,11 +73,6 @@ where
 
         let controller = ConvexMpcGeneric::new(
             qp_controller,
-            jacobian_x,
-            jacobian_u,
-            q_mat,
-            p_ss,
-            r_mat,
             updatable_qp_params.try_into()?,
             options,
         )?;

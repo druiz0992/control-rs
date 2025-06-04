@@ -40,16 +40,12 @@ impl ConstraintTransform {
         Self::new_bounds(lb, ub, transform)
     }
     /// Creates a new `ConstraintTransform` for input dimensions with uniform bounds.
-    pub fn new_uniform_bounds_input<S: PhysicsSim>(
-        limit: ConstraintBound,
-    ) -> Self {
+    pub fn new_uniform_bounds_input<S: PhysicsSim>(limit: ConstraintBound) -> Self {
         let input_dim = ControllerInput::<S>::dim_q();
         Self::new_uniform_bounds(limit, input_dim)
     }
     /// Creates a new `ConstraintTransform` for state dimensions with uniform bounds.
-    pub fn new_uniform_bounds_state<S: PhysicsSim>(
-        limit: ConstraintBound,
-    ) -> Self {
+    pub fn new_uniform_bounds_state<S: PhysicsSim>(limit: ConstraintBound) -> Self {
         let state_dim = ControllerState::<S>::dim_q() + ControllerState::<S>::dim_v();
         Self::new_uniform_bounds(limit, state_dim)
     }
@@ -64,12 +60,10 @@ impl ConstraintTransform {
                 "Mistmatch in input vector length".into(),
             ));
         }
-        let mut transform = DMatrix::zeros(input_dim, input_dim);
-        transform[(idx, idx)] = 1.0;
-        let mut lb = DVector::from_column_slice(&vec![0.0; input_dim]);
-        lb[idx] = limit.0;
-        let mut ub = DVector::from_column_slice(&vec![0.0; input_dim]);
-        ub[idx] = limit.1;
+        let mut transform = DMatrix::zeros(1, input_dim);
+        transform[(0, idx)] = 1.0;
+        let lb = DVector::from_column_slice(&[limit.0]);
+        let ub = DVector::from_column_slice(&[limit.1]);
         Self::new_bounds(lb, ub, transform)
     }
 
@@ -83,12 +77,10 @@ impl ConstraintTransform {
                 "Mistmatch in state vector length".into(),
             ));
         }
-        let mut transform = DMatrix::zeros(state_dim, state_dim);
-        transform[(idx, idx)] = 1.0;
-        let mut lb = DVector::from_column_slice(&vec![0.0; state_dim]);
-        lb[idx] = limit.0;
-        let mut ub = DVector::from_column_slice(&vec![0.0; state_dim]);
-        ub[idx] = limit.1;
+        let mut transform = DMatrix::zeros(1, state_dim);
+        transform[(0, idx)] = 1.0;
+        let lb = DVector::from_column_slice(&[limit.0]);
+        let ub = DVector::from_column_slice(&[limit.1]);
         Self::new_bounds(lb, ub, transform)
     }
 
@@ -125,11 +117,12 @@ impl ConstraintTransform {
     /// Expands the input constraint transformation and bounds to be compatible with qp_lqr controller's
     /// c (constraint matrix) and bounds
     pub fn expand_input<S: PhysicsSim>(&self, n_steps: usize) -> Result<QpConstraints, ModelError> {
-        let input_dim = ControllerInput::<S>::dim_q();
         let state_dim = ControllerState::<S>::dim_q() + ControllerState::<S>::dim_v();
 
-        let expanded_transform =
-            matrix::hstack(self.transform.clone(), DMatrix::zeros(input_dim, state_dim))?;
+        let expanded_transform = matrix::hstack(
+            self.transform.clone(),
+            DMatrix::zeros(self.transform.nrows(), state_dim),
+        )?;
         let constraint_mat =
             matrix::kron(&DMatrix::identity(n_steps, n_steps), &expanded_transform);
         let (lb, ub) = self.expand_bounds(n_steps);
@@ -140,10 +133,11 @@ impl ConstraintTransform {
     /// c (constraint matrix) and bounds
     pub fn expand_state<S: PhysicsSim>(&self, n_steps: usize) -> Result<QpConstraints, ModelError> {
         let input_dim = ControllerInput::<S>::dim_q();
-        let state_dim = ControllerState::<S>::dim_q() + ControllerState::<S>::dim_v();
 
-        let expanded_transform =
-            matrix::hstack(self.transform.clone(), DMatrix::zeros(state_dim, input_dim))?;
+        let expanded_transform = matrix::hstack(
+            DMatrix::zeros(self.transform.nrows(), input_dim),
+            self.transform.clone(),
+        )?;
         let constraint_mat =
             matrix::kron(&DMatrix::identity(n_steps, n_steps), &expanded_transform);
         let (lb, ub) = self.expand_bounds(n_steps);
@@ -192,16 +186,6 @@ impl ConstraintTransform {
         if lb.len() != ub.len() {
             return Err(ModelError::ConfigError(
                 "Lower and Upper bound vector lengths mismatch.".into(),
-            ));
-        }
-        if lb.len() != transform.nrows() {
-            return Err(ModelError::ConfigError(
-                "Bound vector lengths do not match with transfirm matrix dimensions".into(),
-            ));
-        }
-        if transform.ncols() != transform.nrows() {
-            return Err(ModelError::ConfigError(
-                "Transform matrix must be square".into(),
             ));
         }
         Ok(Self { lb, ub, transform })
@@ -339,24 +323,16 @@ mod tests {
             ConstraintTransform::new_single_bound_input::<MockPhysicsSim>(limit, idx).unwrap();
 
         let input_dim = ControllerInput::<MockPhysicsSim>::dim_q();
-        assert_eq!(transform.lb.len(), input_dim);
-        assert_eq!(transform.ub.len(), input_dim);
-        assert_eq!(transform.lb[idx], limit.0);
-        assert_eq!(transform.ub[idx], limit.1);
+        assert_eq!(transform.lb.len(), 1);
+        assert_eq!(transform.ub.len(), 1);
+        assert_eq!(transform.lb[0], limit.0);
+        assert_eq!(transform.ub[0], limit.1);
 
-        for i in 0..input_dim {
-            if i != idx {
-                assert_eq!(transform.lb[i], 0.0);
-                assert_eq!(transform.ub[i], 0.0);
-            }
-        }
-
-        assert_eq!(transform.transform[(idx, idx)], 1.0);
-        for i in 0..input_dim {
-            for j in 0..input_dim {
-                if i != idx || j != idx {
-                    assert_eq!(transform.transform[(i, j)], 0.0);
-                }
+        for j in 0..input_dim {
+            if j != idx {
+                assert_eq!(transform.transform[(0, j)], 0.0);
+            } else {
+                assert_eq!(transform.transform[(0, j)], 1.0);
             }
         }
     }
@@ -371,24 +347,16 @@ mod tests {
 
         let state_dim =
             ControllerState::<MockPhysicsSim>::dim_q() + ControllerState::<MockPhysicsSim>::dim_v();
-        assert_eq!(transform.lb.len(), state_dim);
-        assert_eq!(transform.ub.len(), state_dim);
-        assert_eq!(transform.lb[idx], limit.0);
-        assert_eq!(transform.ub[idx], limit.1);
+        assert_eq!(transform.lb.len(), 1);
+        assert_eq!(transform.ub.len(), 1);
+        assert_eq!(transform.lb[0], limit.0);
+        assert_eq!(transform.ub[0], limit.1);
 
-        for i in 0..state_dim {
-            if i != idx {
-                assert_eq!(transform.lb[i], 0.0);
-                assert_eq!(transform.ub[i], 0.0);
-            }
-        }
-
-        assert_eq!(transform.transform[(idx, idx)], 1.0);
-        for i in 0..state_dim {
-            for j in 0..state_dim {
-                if i != idx || j != idx {
-                    assert_eq!(transform.transform[(i, j)], 0.0);
-                }
+        for j in 0..state_dim {
+            if j != idx {
+                assert_eq!(transform.transform[(0, j)], 0.0);
+            } else {
+                assert_eq!(transform.transform[(0, j)], 1.0);
             }
         }
     }

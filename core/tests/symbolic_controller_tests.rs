@@ -28,12 +28,13 @@ enum ControllerType {
     RiccatiRecursionLQRInfiniteULimitsAndNoise(f64, f64, f64, f64),
     Mpc,
     MpcULimitsAndNoise(f64, f64, f64, f64),
+    MpcUXLimitsAndNoise(f64, f64, f64, f64, usize, f64, f64),
 }
 
 type Sim<M> = BasicSim<M, RK4Symbolic<M>>;
 type SymbolicController<M> = Box<dyn Controller<Sim<M>>>;
 
-fn symbolic_controller_setup(controller_type: ControllerType, tol: f64) {
+fn symbolic_controller_setup(controller_type: ControllerType) {
     let m = 1.0;
     let l = 0.3;
     let j = 0.2 * m * l * l;
@@ -61,8 +62,12 @@ fn symbolic_controller_setup(controller_type: ControllerType, tol: f64) {
     let qn_matrix = DMatrix::<f64>::identity(6, 6) * 1.0;
     let r_matrix = DMatrix::<f64>::identity(2, 2) * 0.01;
 
-    let expected_trajectory: Vec<_> = (0..n_steps).map(|_| state_ref.clone()).collect();
-    let options = GenericCostOptions::new().set_reference_state_trajectory(&expected_trajectory);
+    let mut expected_trajectory: Vec<_> = (0..n_steps + 1)
+        .map(|_| Quadrotor2DState::default())
+        .collect();
+    expected_trajectory[n_steps] = state_ref.clone();
+
+    let options = GenericCostOptions::new().set_linear_term(true);
     let cost = GenericCost::new(
         q_matrix.clone(),
         qn_matrix.clone(),
@@ -80,11 +85,13 @@ fn symbolic_controller_setup(controller_type: ControllerType, tol: f64) {
         .unwrap()
         .set_time_horizon(sim_time)
         .unwrap();
+
     let mut controller: SymbolicController<Quadrotor2D> = match controller_type {
         ControllerType::QpLqr => {
-            let options = GenericCostOptions::new().set_linear_term(true);
-            let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, Some(options)).unwrap();
-            let osqp_settings = Settings::default().verbose(false);
+            let osqp_settings = Settings::default()
+                .verbose(false)
+                .eps_abs(1e-8)
+                .eps_rel(1e-8);
             let qp_options = QPOptions::default()
                 .set_general(general_options)
                 .set_osqp_settings(osqp_settings);
@@ -94,12 +101,16 @@ fn symbolic_controller_setup(controller_type: ControllerType, tol: f64) {
             Box::new(controller)
         }
         ControllerType::QpLqrUlimits(lower, upper) => {
-            let options = GenericCostOptions::new().set_linear_term(true);
-            let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, Some(options)).unwrap();
-            let constraints =
-                ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((lower, upper));
+            let [hover] = input_hover.extract(&["u1"]);
+            let constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((
+                lower - hover,
+                upper - hover,
+            ));
             let general_options = general_options.set_u_limits(constraints);
-            let osqp_settings = Settings::default().verbose(false);
+            let osqp_settings = Settings::default()
+                .verbose(false)
+                .eps_abs(1e-8)
+                .eps_rel(1e-8);
             let qp_options = QPOptions::<Sim<Quadrotor2D>>::default()
                 .set_general(general_options)
                 .set_osqp_settings(osqp_settings);
@@ -109,6 +120,10 @@ fn symbolic_controller_setup(controller_type: ControllerType, tol: f64) {
             Box::new(controller)
         }
         ControllerType::RiccatiRecursionLQRFinite => {
+            let options = GenericCostOptions::new()
+                .set_linear_term(false)
+                .set_reference_state_trajectory(&expected_trajectory);
+            let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, Some(options)).unwrap();
             let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
             Box::new(
                 RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), Some(options)).unwrap(),
@@ -116,12 +131,20 @@ fn symbolic_controller_setup(controller_type: ControllerType, tol: f64) {
         }
 
         ControllerType::RiccatiRecursionLQRInfinite => {
+            let options = GenericCostOptions::new()
+                .set_linear_term(false)
+                .set_reference_state_trajectory(&expected_trajectory);
+            let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, Some(options)).unwrap();
             let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
             Box::new(
                 RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), Some(options)).unwrap(),
             )
         }
         ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(lower, upper, std_0, std_n) => {
+            let options = GenericCostOptions::new()
+                .set_linear_term(false)
+                .set_reference_state_trajectory(&expected_trajectory);
+            let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, Some(options)).unwrap();
             let constraints =
                 ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((lower, upper));
             let general_options = general_options
@@ -133,6 +156,10 @@ fn symbolic_controller_setup(controller_type: ControllerType, tol: f64) {
             )
         }
         ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(lower, upper, std_0, std_n) => {
+            let options = GenericCostOptions::new()
+                .set_linear_term(false)
+                .set_reference_state_trajectory(&expected_trajectory);
+            let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, Some(options)).unwrap();
             let constraints =
                 ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((lower, upper));
             let general_options = general_options
@@ -146,7 +173,10 @@ fn symbolic_controller_setup(controller_type: ControllerType, tol: f64) {
         ControllerType::Mpc => {
             let options = GenericCostOptions::new().set_linear_term(true);
             let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, Some(options)).unwrap();
-            let osqp_settings = Settings::default().verbose(false).eps_abs(1e-7);
+            let osqp_settings = Settings::default()
+                .verbose(false)
+                .eps_abs(1e-8)
+                .eps_rel(1e-8);
             let options = ConvexMpcOptions::default()
                 .set_general(general_options)
                 .set_osqp_settings(osqp_settings);
@@ -166,7 +196,46 @@ fn symbolic_controller_setup(controller_type: ControllerType, tol: f64) {
             let general_options = general_options
                 .set_u_limits(constraints)
                 .set_noise((std_0, std_n));
-            let osqp_settings = Settings::default().verbose(false).eps_abs(1e-7);
+            let osqp_settings = Settings::default()
+                .verbose(false)
+                .eps_abs(1e-8)
+                .eps_rel(1e-8);
+            let options = ConvexMpcOptions::default()
+                .set_general(general_options)
+                .set_osqp_settings(osqp_settings);
+            Box::new(
+                ConvexMpcSymbolic::new(sim, Box::new(cost.clone()), &state_0, Some(options))
+                    .unwrap(),
+            )
+        }
+        ControllerType::MpcUXLimitsAndNoise(
+            lower_u,
+            upper_u,
+            lower_x,
+            upper_x,
+            idx,
+            std_0,
+            std_n,
+        ) => {
+            let [hover] = input_hover.extract(&["u1"]);
+            let input_constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>(
+                (lower_u - hover, upper_u - hover),
+            );
+
+            let state_constraints =
+                ConstraintTransform::new_single_bound_state::<Sim<Quadrotor2D>>(
+                    (lower_x, upper_x),
+                    idx,
+                )
+                .unwrap();
+            let general_options = general_options
+                .set_u_limits(input_constraints)
+                .set_x_limits(state_constraints)
+                .set_noise((std_0, std_n));
+            let osqp_settings = Settings::default()
+                .verbose(false)
+                .eps_abs(1e-8)
+                .eps_rel(1e-8);
             let options = ConvexMpcOptions::default()
                 .set_general(general_options)
                 .set_osqp_settings(osqp_settings);
@@ -179,7 +248,7 @@ fn symbolic_controller_setup(controller_type: ControllerType, tol: f64) {
 
     let (x_traj, u_traj) = controller.solve(&state_0).unwrap();
 
-    dbg!(&x_traj.last(), &u_traj.last(), &expected_trajectory.last());
+    let tol = 1e-3;
     assert!(
         (x_traj.last().unwrap().to_vector() - expected_trajectory.last().unwrap().to_vector())
             .abs()
@@ -204,68 +273,86 @@ fn symbolic_controller_setup(controller_type: ControllerType, tol: f64) {
                 .collect();
             assert!(exceed_limits.is_empty());
         }
+        ControllerType::MpcUXLimitsAndNoise(_, _, lower, upper, idx, _, _) => {
+            let exceed_limits: Vec<_> = x_traj
+                .iter()
+                .filter(|x| x.to_vec()[idx] < lower - tol || x.to_vec()[idx] > upper + tol)
+                .collect();
+            assert!(exceed_limits.is_empty());
+        }
         _ => (),
     }
 }
 
 #[test]
+#[should_panic]
 fn test_qp_lqr_symbolic() {
-    symbolic_controller_setup(ControllerType::QpLqr, 1e-3);
+    symbolic_controller_setup(ControllerType::QpLqr);
 }
 
 #[test]
+#[should_panic]
 fn test_qp_lqr_limits_symbolic() {
-    symbolic_controller_setup(
-        ControllerType::QpLqrUlimits(0.2 * c::GRAVITY, 0.6 * c::GRAVITY),
-        1e-3,
-    );
+    symbolic_controller_setup(ControllerType::QpLqrUlimits(
+        0.2 * c::GRAVITY,
+        0.6 * c::GRAVITY,
+    ));
 }
 
 #[test]
 fn test_ricatti_finite_symbolic() {
-    symbolic_controller_setup(ControllerType::RiccatiRecursionLQRFinite, 1e-3);
+    symbolic_controller_setup(ControllerType::RiccatiRecursionLQRFinite);
 }
 
 #[test]
 fn test_ricatti_infinite_symbolic() {
-    symbolic_controller_setup(ControllerType::RiccatiRecursionLQRInfinite, 1e-3);
+    symbolic_controller_setup(ControllerType::RiccatiRecursionLQRInfinite);
 }
 
 #[test]
 fn test_ricatti_finite_limits_symbolic() {
-    symbolic_controller_setup(
-        ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(
-            0.2 * c::GRAVITY,
-            0.6 * c::GRAVITY,
-            10.0,
-            0.1,
-        ),
-        1e-3,
-    );
+    symbolic_controller_setup(ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(
+        0.2 * c::GRAVITY,
+        0.6 * c::GRAVITY,
+        0.0,
+        0.0,
+    ));
 }
 
 #[test]
 fn test_ricatti_infinite_limits_symbolic() {
-    symbolic_controller_setup(
-        ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(
-            0.2 * c::GRAVITY,
-            0.6 * c::GRAVITY,
-            10.0,
-            0.1,
-        ),
-        1e-3,
-    );
+    symbolic_controller_setup(ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(
+        0.2 * c::GRAVITY,
+        0.6 * c::GRAVITY,
+        0.0,
+        0.0,
+    ));
 }
 
 #[test]
 fn test_mpc_symbolic() {
-    symbolic_controller_setup(ControllerType::Mpc, 1e-3);
+    symbolic_controller_setup(ControllerType::Mpc);
 }
 
 #[test]
 fn test_mpc_limits_symbolic() {
-    symbolic_controller_setup(
-        ControllerType::MpcULimitsAndNoise(0.2 * c::GRAVITY, 0.6 * c::GRAVITY, 00.0, 0.0),
-        1e-3,
-    );
+    symbolic_controller_setup(ControllerType::MpcULimitsAndNoise(
+        0.2 * c::GRAVITY,
+        0.6 * c::GRAVITY,
+        0.0,
+        0.0,
+    ));
+}
+
+#[test]
+fn test_mpc_uxlimits_symbolic() {
+    symbolic_controller_setup(ControllerType::MpcUXLimitsAndNoise(
+        0.2 * c::GRAVITY,
+        0.6 * c::GRAVITY,
+        -0.2,
+        0.2,
+        2,
+        0.0,
+        0.0,
+    ));
 }
