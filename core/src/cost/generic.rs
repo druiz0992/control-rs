@@ -122,9 +122,9 @@ where
         }
 
         if options.state_traj_ref.as_ref().is_some() && options.linear_term_flag {
-                return Err(ModelError::ConfigError(
-                    "Can't provide reference state if linear term flag is enabled".into(),
-                ));
+            return Err(ModelError::ConfigError(
+                "Can't provide reference state if linear term flag is enabled".into(),
+            ));
         }
         if options.input_traj_ref.as_ref().is_some() && options.linear_term_flag {
             return Err(ModelError::ConfigError(
@@ -284,6 +284,44 @@ where
     }
     fn get_r(&self) -> Option<&DMatrix<f64>> {
         Some(&self.r_matrix)
+    }
+
+    fn update_q(&mut self, q: DMatrix<f64>) -> Result<(), ModelError> {
+        if q.nrows() != self.q_matrix.nrows() || q.ncols() != self.q_matrix.ncols() {
+            return Err(ModelError::ConfigError(format!(
+                "Incorrect Q Dimensions. Expecting {}, Obtained {}",
+                q.nrows(),
+                self.q_matrix.ncols()
+            )));
+        }
+        self.q_matrix = q;
+
+        Ok(())
+    }
+    fn update_qn(&mut self, qn: DMatrix<f64>) -> Result<(), ModelError> {
+        if qn.nrows() != self.qn_matrix.nrows() || qn.ncols() != self.qn_matrix.ncols() {
+            return Err(ModelError::ConfigError(format!(
+                "Incorrect Qn Dimensions. Expecting {}, Obtained {}",
+                qn.nrows(),
+                self.qn_matrix.ncols()
+            )));
+        }
+        self.qn_matrix = qn;
+
+        Ok(())
+    }
+
+    fn update_r(&mut self, r: DMatrix<f64>) -> Result<(), ModelError> {
+        if r.nrows() != self.r_matrix.nrows() || r.ncols() != self.r_matrix.ncols() {
+            return Err(ModelError::ConfigError(format!(
+                "Incorrect R Dimensions. Expecting {}, Obtained {}",
+                r.nrows(),
+                self.r_matrix.ncols()
+            )));
+        }
+        self.r_matrix = r;
+
+        Ok(())
     }
 }
 

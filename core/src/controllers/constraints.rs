@@ -40,12 +40,16 @@ impl ConstraintTransform {
         Self::new_bounds(lb, ub, transform)
     }
     /// Creates a new `ConstraintTransform` for input dimensions with uniform bounds.
-    pub fn new_uniform_bounds_input<S: PhysicsSim>(limit: ConstraintBound) -> Self {
+    pub fn new_uniform_bounds_input<S: PhysicsSim>(
+        limit: ConstraintBound,
+    ) -> Self {
         let input_dim = ControllerInput::<S>::dim_q();
         Self::new_uniform_bounds(limit, input_dim)
     }
     /// Creates a new `ConstraintTransform` for state dimensions with uniform bounds.
-    pub fn new_uniform_bounds_state<S: PhysicsSim>(limit: ConstraintBound) -> Self {
+    pub fn new_uniform_bounds_state<S: PhysicsSim>(
+        limit: ConstraintBound,
+    ) -> Self {
         let state_dim = ControllerState::<S>::dim_q() + ControllerState::<S>::dim_v();
         Self::new_uniform_bounds(limit, state_dim)
     }

@@ -53,6 +53,10 @@ impl OSQPSolverHandle {
         let mut h = self.solver.lock().unwrap();
         h.problem.update_upper_bound(u);
     }
+    pub fn update_bounds(&self, l: &[f64], u: &[f64]) {
+        let mut h = self.solver.lock().unwrap();
+        h.problem.update_bounds(l, u);
+    }
 }
 
 impl OSQPSolver {

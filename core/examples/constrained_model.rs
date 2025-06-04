@@ -1,4 +1,6 @@
 #![allow(unused_imports)]
+use control_rs::animation::Animation;
+use control_rs::animation::macroquad::Macroquad;
 use control_rs::numeric_services::solver::OptimizerConfig;
 use control_rs::numeric_services::symbolic::fasteval::ExprRegistry;
 use control_rs::physics::discretizer::{
@@ -21,9 +23,9 @@ enum IntegratorType {
     ImplicitMidpoint,
 }
 
-fn build_sim(integrator: IntegratorType) {
+async fn build_sim(integrator: IntegratorType) {
     let dt = 0.01;
-    let steps = 1000;
+    let steps = 500;
 
     let m = 1.0;
     let friction_coeff = 0.0;
@@ -57,6 +59,11 @@ fn build_sim(integrator: IntegratorType) {
         }
     };
 
+    let animation = Macroquad::new();
+    animation
+        .run_animation(&model, &states, (400.0, 300.0))
+        .await
+        .unwrap();
     let times: Vec<_> = (0..states.len()).map(|i| i as f64 * dt).collect();
     let energy: Vec<_> = states.iter().filter_map(|s| model.energy(s)).collect();
 
@@ -67,7 +74,8 @@ fn build_sim(integrator: IntegratorType) {
     plotter::display("/tmp/plot2.png").unwrap();
 }
 
-fn main() {
+#[macroquad::main("Physics Bouncing Ball")]
+async fn main() {
     let integrator_type = vec![
         IntegratorType::BackwardEuler,
         IntegratorType::ImplicitMidpoint,
@@ -76,7 +84,7 @@ fn main() {
 
     for integrator in integrator_type {
         println!("Discretizer: {:?}", integrator);
-        build_sim(integrator);
+        build_sim(integrator).await;
         println!("Press Enter to continue...");
         let _ = io::stdout().flush();
         let _ = io::stdin().read_line(&mut String::new());

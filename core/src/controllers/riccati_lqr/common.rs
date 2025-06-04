@@ -129,6 +129,7 @@ where
         let noise_sources =
             NoiseSources::from_stats(vec![(ZERO_MEAN, noise_0_std), (ZERO_MEAN, noise_std)])?;
         let mut current_state = noise_sources.add_noise(0, x_traj[0].to_vector())?;
+        x_traj[0] = ControllerState::<S>::from_slice(current_state.as_slice());
 
         let u_limits = self.options.general.get_u_limits();
 

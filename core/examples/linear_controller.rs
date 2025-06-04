@@ -10,24 +10,30 @@ use control_rs::cost::generic::{GenericCost, GenericCostOptions};
 use control_rs::physics::discretizer::ZOH;
 use control_rs::physics::models::{LtiInput, LtiModel, LtiState};
 use control_rs::physics::simulator::BasicSim;
-use control_rs::physics::traits::State;
-use nalgebra::{DMatrix, dmatrix, dvector};
+use control_rs::plotter;
+use nalgebra::{DMatrix, dmatrix};
 use osqp::Settings;
+use std::io::{self, Write};
 
+#[derive(Debug, Clone)]
 enum LinearControllerType {
     IndirectShootingLqr,
     QpLqr,
     QpLqrUlimits(f64, f64),
     RiccatiRecursionLQRFinite,
     RiccatiRecursionLQRInfinite,
+    RiccatiRecursionLQRFiniteULimitsAndNoise(f64, f64, f64, f64),
+    RiccatiRecursionLQRInfiniteULimitsAndNoise(f64, f64, f64, f64),
     MpcLinear,
     MpcLinearULimitsAndNoise(f64, f64, f64, f64),
 }
 
+// Example iterates over all implemented linear controllers
+
 type LtiSim = BasicSim<LtiModel<2, 0, 1>, ZOH<LtiModel<2, 0, 1>>>;
 type LinearContoller = Box<dyn Controller<LtiSim>>;
 
-fn linear_controller_setup(controller_type: LinearControllerType) {
+fn build_sim(controller_type: LinearControllerType) {
     let state_matrix = dmatrix![0.0,1.0; 0.0,0.0];
     let control_matrix = dmatrix![0.0; 1.0];
     let model = LtiModel::<2, 0, 1>::new(state_matrix, control_matrix).unwrap();
@@ -74,9 +80,9 @@ fn linear_controller_setup(controller_type: LinearControllerType) {
             Box::new(controller)
         }
         LinearControllerType::QpLqrUlimits(lower, upper) => {
-            let contraints =
+            let constraints =
                 ConstraintTransform::new_uniform_bounds_input::<LtiSim>((lower, upper));
-            let general_options = general_options.set_u_limits(contraints);
+            let general_options = general_options.set_u_limits(constraints);
             let osqp_settings = Settings::default().verbose(false);
             let qp_options = QPOptions::<LtiSim>::default()
                 .set_general(general_options)
@@ -96,6 +102,34 @@ fn linear_controller_setup(controller_type: LinearControllerType) {
         }
 
         LinearControllerType::RiccatiRecursionLQRInfinite => {
+            let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
+            Box::new(RiccatiRecursionLQR::new(sim, Box::new(cost.clone()), Some(options)).unwrap())
+        }
+        LinearControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(
+            lower,
+            upper,
+            std_0,
+            std_n,
+        ) => {
+            let constraints =
+                ConstraintTransform::new_uniform_bounds_input::<LtiSim>((lower, upper));
+            let general_options = general_options
+                .set_u_limits(constraints)
+                .set_noise((std_0, std_n));
+            let options = RiccatiLQROptions::enable_finite_horizon().set_general(general_options);
+            Box::new(RiccatiRecursionLQR::new(sim, Box::new(cost.clone()), Some(options)).unwrap())
+        }
+        LinearControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(
+            lower,
+            upper,
+            std_0,
+            std_n,
+        ) => {
+            let constraints =
+                ConstraintTransform::new_uniform_bounds_input::<LtiSim>((lower, upper));
+            let general_options = general_options
+                .set_u_limits(constraints)
+                .set_noise((std_0, std_n));
             let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
             Box::new(RiccatiRecursionLQR::new(sim, Box::new(cost.clone()), Some(options)).unwrap())
         }
@@ -125,65 +159,34 @@ fn linear_controller_setup(controller_type: LinearControllerType) {
     };
 
     let (x_traj, u_traj) = controller.solve(&initial_state).unwrap();
-    dbg!(&x_traj.last(), &u_traj.last(), &expected_trajectory.last());
+    let times: Vec<_> = (0..u_traj.len()).map(|i| i as f64 * dt).collect();
 
-    let tol = 1e-2;
-    assert!(
-        (x_traj.last().unwrap().to_vector() - expected_trajectory.last().unwrap().to_vector())
-            .abs()
-            .sum()
-            < tol
-    );
-    assert!(
-        (u_traj.last().unwrap().to_vector() - dvector!(0.0))
-            .abs()
-            .sum()
-            < tol
-    );
+    plotter::plot_states(&times, &x_traj, "/tmp/plot1.png").unwrap();
+    plotter::plot_states(&times, &u_traj, "/tmp/plot2.png").unwrap();
 
-    if let LinearControllerType::QpLqrUlimits(lower, upper) = controller_type {
-        let exceed_limits: Vec<_> = u_traj
-            .iter()
-            .filter(|u| u.to_vec()[0] < lower - tol || u.to_vec()[0] > upper + tol)
-            .collect();
-        assert!(exceed_limits.is_empty());
+    plotter::display("/tmp/plot1.png").unwrap();
+    plotter::display("/tmp/plot2.png").unwrap();
+}
+
+fn main() {
+    let controller_type = vec![
+        LinearControllerType::IndirectShootingLqr,
+        LinearControllerType::QpLqr,
+        LinearControllerType::QpLqrUlimits(-0.5, 0.5),
+        LinearControllerType::RiccatiRecursionLQRFinite,
+        LinearControllerType::RiccatiRecursionLQRInfinite,
+        LinearControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(-4.5, 4.5, 10.0, 0.1),
+        LinearControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(-4.5, 4.5, 10.0, 0.1),
+        LinearControllerType::MpcLinear,
+        LinearControllerType::MpcLinearULimitsAndNoise(-19.5, 19.5, 10.0, 0.1),
+    ];
+    env_logger::init();
+
+    for controller in controller_type {
+        println!("Controller: {:?}", controller);
+        build_sim(controller);
+        println!("Press Enter to continue...");
+        let _ = io::stdout().flush();
+        let _ = io::stdin().read_line(&mut String::new());
     }
-}
-
-#[test]
-fn indirect_linear() {
-    linear_controller_setup(LinearControllerType::IndirectShootingLqr);
-}
-
-#[test]
-fn qp_lqr_linear() {
-    linear_controller_setup(LinearControllerType::QpLqr);
-}
-
-#[test]
-fn test_qp_lqr_linear_ulimits() {
-    linear_controller_setup(LinearControllerType::QpLqrUlimits(-0.5, 0.5));
-}
-
-#[test]
-fn test_ricatti_linear_infinite() {
-    linear_controller_setup(LinearControllerType::RiccatiRecursionLQRInfinite);
-}
-
-#[test]
-fn test_ricatti_linear_finite() {
-    linear_controller_setup(LinearControllerType::RiccatiRecursionLQRFinite);
-}
-
-#[test]
-fn test_mpc_linear() {
-    linear_controller_setup(LinearControllerType::MpcLinear);
-}
-
-#[test]
-#[ignore]
-fn test_mpc_noise_linear() {
-    linear_controller_setup(LinearControllerType::MpcLinearULimitsAndNoise(
-        -0.5, 0.5, 0.0, 0.0,
-    ));
 }

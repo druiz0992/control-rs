@@ -89,6 +89,7 @@ impl<'a> OSQPBuilder<'a> {
         // check dimensions
         // q_mat, q_vec, a_mat, lb_vec, ub_vec
         // q_mat/q_csc is square
+
         if q_csc.ncols != q_csc.nrows {
             return Err(ModelError::ConfigError(
                 "Q Matrix needs to be square.".into(),
@@ -142,11 +143,15 @@ impl<'a> OSQPBuilder<'a> {
             problem.update_lin_cost(&q_vec);
         }
 
-        if let Some(lb) = &self.qp_params.lb_vec {
-            problem.update_lower_bound(lb.as_slice());
-        }
-        if let Some(ub) = &self.qp_params.ub_vec {
-            problem.update_upper_bound(ub.as_slice());
+        if let (Some(lb), Some(ub)) = (&self.qp_params.lb_vec, &self.qp_params.ub_vec) {
+            problem.update_bounds(lb.as_slice(), ub.as_slice());
+        } else {
+            if let Some(lb) = &self.qp_params.lb_vec {
+                problem.update_lower_bound(lb.as_slice());
+            }
+            if let Some(ub) = &self.qp_params.ub_vec {
+                problem.update_lower_bound(ub.as_slice());
+            }
         }
 
         if self.qp_params.a_mat.is_some() {
@@ -188,7 +193,7 @@ impl<'a> OSQPBuilder<'a> {
         if let Some(q_mat) = &self.qp_params.q_mat {
             CscMatrix::from(q_mat).into_upper_tri()
         } else {
-            self.qp_params.q_csc.clone().unwrap()
+            self.qp_params.q_csc.clone().unwrap().into_upper_tri()
         }
     }
 

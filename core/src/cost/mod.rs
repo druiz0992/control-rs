@@ -20,4 +20,8 @@ pub trait CostFunction {
     fn get_q(&self) -> Option<&DMatrix<f64>>;
     fn get_qn(&self) -> Option<&DMatrix<f64>>;
     fn get_r(&self) -> Option<&DMatrix<f64>>;
+
+    fn update_q(&mut self, q: DMatrix<f64>) -> Result<(), ModelError>;
+    fn update_qn(&mut self, qn: DMatrix<f64>) -> Result<(), ModelError>;
+    fn update_r(&mut self, r: DMatrix<f64>) -> Result<(), ModelError>;
 }

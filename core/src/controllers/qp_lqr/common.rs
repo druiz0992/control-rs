@@ -19,6 +19,7 @@ pub struct QPLQRGeneric<S: PhysicsSim> {
     solver: OSQPSolverHandle,
 
     n_steps: usize,
+    dt: f64,
 
     u_ref: Vec<ControllerInput<S>>,
     x_ref: Vec<ControllerState<S>>,
@@ -42,7 +43,6 @@ where
             as usize
             + 1;
 
-        dbg!(n_steps);
         let vals = options.general.concatenate_operating_point();
 
         let control_mat = jacobian_u_fn.evaluate(&vals)?;
@@ -98,6 +98,7 @@ where
                 n_steps,
                 u_ref,
                 x_ref,
+                dt: options.get_general().get_dt(),
             },
             updatable_qp_params,
         ))
@@ -127,6 +128,8 @@ impl<S: PhysicsSim> Controller<S> for QPLQRGeneric<S> {
         let mut u_traj = vec![ControllerInput::<S>::default(); self.n_steps - 1];
         let mut x_traj = vec![initial_state.clone(); self.n_steps];
 
+        let dt = self.dt;
+
         // retuls are in r.0 : [u1, x2, u2, ...]
         let r = self.solver.minimize(&[])?;
 
@@ -134,9 +137,7 @@ impl<S: PhysicsSim> Controller<S> for QPLQRGeneric<S> {
             let base = i * (state_dim + input_dim);
             let next_input = ControllerInput::<S>::from_slice(&r.0[base..base + input_dim]);
             u_traj[i] = next_input + self.u_ref[0].clone();
-            x_traj[i + 1] = ControllerState::<S>::from_slice(
-                &r.0[base + input_dim..base + input_dim + state_dim],
-            );
+            x_traj[i + 1] = self.sim.step(&x_traj[i], Some(&u_traj[i]), dt)?;
         }
         Ok((x_traj, u_traj))
     }

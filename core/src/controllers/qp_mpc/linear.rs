@@ -1,6 +1,8 @@
 use super::common::ConvexMpcGeneric;
 use super::options::ConvexMpcOptions;
 use crate::controllers::qp_lqr::options::QPOptions;
+use crate::controllers::riccati_lqr::options::RiccatiLQROptions;
+use crate::controllers::riccati_lqr::recursion::solve_steady_state_lqr;
 use crate::controllers::{
     Controller, ControllerState, CostFn, QPLQR, SteppableController, TrajectoryHistory,
     UpdatableController,
@@ -8,6 +10,7 @@ use crate::controllers::{
 use crate::physics::ModelError;
 use crate::physics::discretizer::LinearDiscretizer;
 use crate::physics::traits::{LinearDynamics, PhysicsSim};
+use crate::utils::evaluable::Evaluable;
 
 pub struct ConvexMpc<S: PhysicsSim, C: SteppableController<S> + UpdatableController<S>>(
     ConvexMpcGeneric<S, C>,
@@ -21,23 +24,19 @@ where
 {
     pub fn new(
         sim: S,
-        cost_fn: CostFn<S>,
+        mut cost_fn: CostFn<S>,
         state_0: &ControllerState<S>,
         options: Option<ConvexMpcOptions<S>>,
     ) -> Result<Self, ModelError> {
         let options = options.unwrap_or_default();
-        // full horizon
-        let n_steps = (options.get_general().get_time_horizon() / options.get_general().get_dt())
-            as usize
-            + 1;
 
-        // check qp horizon is shorted than full horizon
-        let finitite_horizon = options.get_n_steps();
-        if finitite_horizon >= n_steps {
+        // check qp horizon is shorter than full horizon
+        let finitite_horizon = options.get_horizon();
+        if finitite_horizon >= options.get_general().get_time_horizon() {
             return Err(ModelError::ConfigError(format!(
-                "MPC time steps {} must be less than overall number of time steps {}",
-                options.get_n_steps(),
-                n_steps
+                "MPC horizon {} must be less than overall horizon {}",
+                options.get_horizon(),
+                options.get_general().get_time_horizon()
             )));
         }
 
@@ -52,8 +51,22 @@ where
             "Expected non empty R matrix".into(),
         ))?;
 
-        let general_options = options.get_general().clone().set_time_horizon(0.95)?;
+        let vals = options.general.concatenate_operating_point();
+        let a_mat = jacobian_x.evaluate(&vals)?;
+        let b_mat = jacobian_u.evaluate(&vals)?;
+
+        let ricatti_options = RiccatiLQROptions::enable_infinite_horizon();
+        let (p_ss, _) =
+            solve_steady_state_lqr::<S>(&a_mat, &b_mat, &q_mat, &r_mat, &ricatti_options)?;
+
+        // update qp horizon with mpc horizon
+        let general_options = options
+            .get_general()
+            .clone()
+            .set_time_horizon(finitite_horizon)?;
         let qp_options = QPOptions::<S>::from(options.clone()).set_general(general_options);
+
+        cost_fn.update_qn(p_ss.clone())?;
 
         let (qp_controller, updatable_qp_params) =
             QPLQR::new(sim, cost_fn, state_0, Some(qp_options))?;
@@ -63,6 +76,7 @@ where
             jacobian_x,
             jacobian_u,
             q_mat,
+            p_ss,
             r_mat,
             updatable_qp_params.try_into()?,
             options,

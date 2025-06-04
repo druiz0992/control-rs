@@ -1,4 +1,6 @@
 #![allow(unused_imports)]
+use control_rs::animation::Animation;
+use control_rs::animation::macroquad::Macroquad;
 use control_rs::numeric_services::solver::OptimizerConfig;
 use control_rs::numeric_services::symbolic::fasteval::ExprRegistry;
 use control_rs::physics::discretizer::{
@@ -24,16 +26,9 @@ enum IntegratorType {
     ImplicitMidpoint,
 }
 
-// Example iterates over all implemented discretizers and shows a plot of the energy of the model and the state trajectory.
-// The model energy shows some of the qualities of the different discretizers used:
-// - Forward Euler              : Tends to increase energy over time, as it extrapolates forward.
-// - Backward Euler (Implicit)  : Dissipates energy,
-// - MidPoint                   : Second order method. It doesnt conserve energy, but ofted oscillates around true energy
-// - MidPoint (Implicit)        : Approximately conserves energy over long time
-// - RK4                        : Doesn't conserve energy over long time, but has low error per step.
-// - Hermit Simpson (Implicit)  : Can conserve energy well
+// Example iterates over all implemented discretizers and shows an animation of the state trajectory
 
-fn build_sim(integrator: IntegratorType) {
+async fn build_sim(integrator: IntegratorType) {
     let m1 = 1.0;
     let m2 = 1.0;
     let l1 = 1.0;
@@ -49,9 +44,10 @@ fn build_sim(integrator: IntegratorType) {
     let state0 = DoublePendulumState::new(theta1, omega1, theta2, omega2);
 
     let dt = 0.01;
-    let steps = 1000;
+    let steps = 500;
 
     let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry));
+    let solver_options = OptimizerConfig::default().set_verbose(true);
 
     let states = match integrator {
         IntegratorType::BackwardEuler => {
@@ -65,7 +61,6 @@ fn build_sim(integrator: IntegratorType) {
             sim.rollout(&state0, None, dt, steps).unwrap()
         }
         IntegratorType::ImplicitMidpoint => {
-            let solver_options = OptimizerConfig::default().set_verbose(true);
             let integrator =
                 ImplicitMidpoint::new(&model, Arc::clone(&registry), Some(solver_options)).unwrap();
             let sim = BasicSim::new(model.clone(), integrator);
@@ -93,7 +88,14 @@ fn build_sim(integrator: IntegratorType) {
         }
     };
 
-    let times: Vec<_> = (0..states.len()).map(|i| i as f64 * dt).collect();
+    let animation = Macroquad::new();
+
+    animation
+        .run_animation(&model, &states, (400.0, 300.0))
+        .await
+        .unwrap();
+
+        let times: Vec<_> = (0..states.len()).map(|i| i as f64 * dt).collect();
     let energy: Vec<_> = states.iter().filter_map(|s| model.energy(s)).collect();
 
     plotter::plot_states(&times, &states, "/tmp/plot1.png").unwrap();
@@ -103,7 +105,8 @@ fn build_sim(integrator: IntegratorType) {
     plotter::display("/tmp/plot2.png").unwrap();
 }
 
-fn main() {
+#[macroquad::main("Physics Double Pendulum")]
+async fn main() {
     let integrator_type = vec![
         IntegratorType::RK4Symbolic,
         IntegratorType::RK4,
@@ -117,7 +120,7 @@ fn main() {
 
     for integrator in integrator_type {
         println!("Discretizer: {:?}", integrator);
-        build_sim(integrator);
+        build_sim(integrator).await;
         println!("Press Enter to continue...");
         let _ = io::stdout().flush();
         let _ = io::stdin().read_line(&mut String::new());
