@@ -31,6 +31,11 @@ pub struct ControllerOptions<S: PhysicsSim> {
     u_op: ControllerInput<S>,
     x_op: ControllerState<S>,
 
+    /// Estimated params => real model params are those
+    /// used to carry out physics. Estimated params are those
+    /// used to compute controls. They can differ.
+    estimated_params: Option<Vec<f64>>,
+
     /// closed loop options
     noise: Option<(f64, f64)>,
     u_limits: Option<ConstraintTransform>,
@@ -47,6 +52,8 @@ impl<S: PhysicsSim> Clone for ControllerOptions<S> {
 
             u_op: self.u_op.clone(),
             x_op: self.x_op.clone(),
+
+            estimated_params: self.estimated_params.clone(),
 
             noise: self.noise,
             u_limits: self.u_limits.clone(),
@@ -65,6 +72,8 @@ impl<S: PhysicsSim> Default for ControllerOptions<S> {
 
             u_op: ControllerInput::<S>::default(),
             x_op: ControllerState::<S>::default(),
+
+            estimated_params: None,
 
             noise: None,
             u_limits: None,
@@ -107,6 +116,9 @@ where
     }
     pub fn get_time_horizon(&self) -> f64 {
         self.time_horizon
+    }
+    pub fn get_estimated_params(&self) -> Option<&Vec<f64>> {
+        self.estimated_params.as_ref()
     }
 
     pub fn concatenate_operating_point(&self) -> Vec<f64> {
@@ -177,5 +189,12 @@ where
         let mut new = self;
         new.time_horizon = time_horizon;
         Ok(new)
+    }
+
+    pub fn set_estimated_params(self, params: Vec<f64>) -> Self {
+        let mut new = self;
+        new.estimated_params = Some(params);
+
+        new
     }
 }

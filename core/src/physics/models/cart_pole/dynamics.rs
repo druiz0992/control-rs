@@ -1,11 +1,12 @@
 use super::input::CartPoleInput;
 use super::model::CartPole;
 use super::state::CartPoleState;
-use crate::utils::Labelizable;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
+use crate::physics::ModelError;
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Dynamics, State};
 use crate::physics::{constants as c, energy::Energy};
+use crate::utils::Labelizable;
 use std::sync::Arc;
 
 impl Dynamics for CartPole {
@@ -24,9 +25,10 @@ impl Dynamics for CartPole {
         let input = input.unwrap_or(&Self::Input::default()).clone();
         let [u] = input.extract(&["u1"]);
 
+        let omega_sq = omega * omega;
         // damping
         let cart_friction = -friction_coeff * v_x;
-        let pendulum_damping = -air_resistance_coeff * omega * omega.abs();
+        let pendulum_damping = -air_resistance_coeff * omega_sq * omega.signum();
 
         let sin_theta = theta.sin();
         let cos_theta = theta.cos();
@@ -35,12 +37,11 @@ impl Dynamics for CartPole {
         let denom = l * (4.0 / 3.0 - m_p * cos_theta * cos_theta / total_mass);
 
         let domega = (c::GRAVITY * sin_theta
-            + cos_theta * (-1.0 * u - cart_friction - m_p * l * omega * omega * sin_theta)
-                / total_mass
+            + cos_theta * (-1.0 * u - cart_friction - m_p * l * omega_sq * sin_theta) / total_mass
             + pendulum_damping / (m_p + l))
             / denom;
 
-        let dv = (u + cart_friction + m_p * l * (omega * omega * sin_theta - domega * cos_theta))
+        let dv = (u + cart_friction + m_p * l * (omega_sq * sin_theta - domega * cos_theta))
             / total_mass;
 
         CartPoleState {
@@ -73,6 +74,30 @@ impl Dynamics for CartPole {
 
         Some(Energy::new(kinetic, potential))
     }
+    fn update(
+        &mut self,
+        params: &[f64],
+        registry: Option<&Arc<ExprRegistry>>,
+    ) -> Result<(), ModelError> {
+        let [
+            pole_mass,
+            cart_mass,
+            friction_coeff,
+            air_resistance_coeff,
+            l,
+        ]: [f64; 5] = params
+            .try_into()
+            .map_err(|_| ModelError::ConfigError("Incorrect number of parameters.".into()))?;
+        *self = Self::new(
+            pole_mass,
+            cart_mass,
+            friction_coeff,
+            air_resistance_coeff,
+            l,
+            registry,
+        );
+        Ok(())
+    }
 }
 
 impl SymbolicDynamics for CartPole {
@@ -81,7 +106,7 @@ impl SymbolicDynamics for CartPole {
         let v_x = state.get(CartPoleState::index_of("v_x")).unwrap();
         let theta = state.get(CartPoleState::index_of("theta")).unwrap();
         let omega = state.get(CartPoleState::index_of("omega")).unwrap();
-        let u = registry.get_scalar(c::INPUT_SYMBOLIC).unwrap();
+        let u = registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
 
         let m_p = registry.get_scalar(c::MASS_POLE_SYMBOLIC).unwrap();
         let m_c = registry.get_scalar(c::MASS_CART_SYMBOLIC).unwrap();
@@ -91,13 +116,14 @@ impl SymbolicDynamics for CartPole {
             .unwrap();
         let l = registry.get_scalar(c::LENGTH_SYMBOLIC).unwrap();
         let g = registry.get_scalar(c::GRAVITY_SYMBOLIC).unwrap();
+        let omega_sq = omega.mul(&omega);
 
         // damping
         let cart_friction = friction_coeff.scalef(-1.0).mul(&v_x);
         let pendulum_damping = air_resistance_coeff
             .scalef(-1.0)
-            .mul(&omega)
-            .mul(&omega.abs());
+            .mul(&omega_sq)
+            .mul(&omega.smooth_sign(1e-6));
 
         // Common terms
         let sin_theta = theta.sin();
@@ -114,12 +140,12 @@ impl SymbolicDynamics for CartPole {
             .mul(&sin_theta)
             .add(&cos_theta)
             .mul(
-                &u.scalef(-1.0)
+                &u[0]
+                    .scalef(-1.0)
                     .add(&cart_friction.scalef(-1.0).wrap())
                     .sub(&m_p)
                     .mul(&l)
-                    .mul(&omega)
-                    .mul(&omega)
+                    .mul(&omega_sq)
                     .mul(&sin_theta)
                     .wrap(),
             )
@@ -130,18 +156,11 @@ impl SymbolicDynamics for CartPole {
             .div(&denom)
             .wrap();
 
-        let dv = u
+        let dv = u[0]
             .add(&cart_friction)
             .add(&m_p)
             .mul(&l)
-            .mul(
-                &omega
-                    .mul(&omega)
-                    .mul(&sin_theta)
-                    .sub(&domega)
-                    .mul(&cos_theta)
-                    .wrap(),
-            )
+            .mul(&omega_sq.mul(&sin_theta).sub(&domega).mul(&cos_theta).wrap())
             .wrap()
             .div(&total_mass);
         ExprVector::from_vec(vec![v_x, dv, omega, domega])
@@ -149,8 +168,8 @@ impl SymbolicDynamics for CartPole {
 }
 #[cfg(test)]
 mod tests {
-    use crate::utils::helpers::within_tolerance;
     use crate::numeric_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
+    use crate::utils::helpers::within_tolerance;
 
     use super::*;
     use proptest::prelude::*;

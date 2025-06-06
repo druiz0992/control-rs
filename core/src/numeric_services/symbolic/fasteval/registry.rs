@@ -48,6 +48,19 @@ impl ExprRegistry {
     pub fn insert_scalar(&self, name: &str, var: f64) {
         self.insert(name, ExprRecord::Scalar(ExprScalar::new(var.to_string())));
     }
+    pub fn insert_scalars(&self, name: &[&str], var: &[f64]) -> Result<(), SymbolicError> {
+        if name.len() != var.len() {
+            return Err(SymbolicError::Other(
+                "Incorrect number of scalars during insertion.".into(),
+            ));
+        }
+
+        name.iter()
+            .zip(var.iter())
+            .for_each(|(n, v)| self.insert_scalar(n, *v));
+
+        Ok(())
+    }
 
     pub fn insert_scalar_expr(&self, name: &str, expr: ExprScalar) {
         self.insert(name, ExprRecord::Scalar(expr));

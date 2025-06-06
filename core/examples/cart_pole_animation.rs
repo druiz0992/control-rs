@@ -24,10 +24,11 @@ async fn main() {
     let state0 = CartPoleState::new(pos_x, v_x, theta, omega);
 
     let integrator = RK4::<CartPole>::new(&model).unwrap();
-    let sim = BasicSim::new(model.clone(), integrator);
+    let sim = BasicSim::new(model.clone(), integrator, None);
     let animation = Macroquad::new();
     let states = sim.rollout(&state0, None, 0.01, 500).unwrap();
 
+    dbg!(&states);
     animation
         .run_animation(&model, &states, (400.0, 300.0))
         .await

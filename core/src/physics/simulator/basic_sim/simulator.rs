@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+use crate::numeric_services::symbolic::ExprRegistry;
 use crate::physics::ModelError;
 use crate::physics::traits::{Discretizer, Dynamics, PhysicsSim};
 
@@ -9,6 +12,7 @@ where
 {
     discretizer: D,
     model: M,
+    registry: Option<Arc<ExprRegistry>>,
 }
 
 impl<M, D> BasicSim<M, D>
@@ -16,8 +20,12 @@ where
     M: Dynamics,
     D: Discretizer<M>,
 {
-    pub fn new(model: M, discretizer: D) -> Self {
-        BasicSim { discretizer, model }
+    pub fn new(model: M, discretizer: D, registry: Option<Arc<ExprRegistry>>) -> Self {
+        BasicSim {
+            discretizer,
+            model,
+            registry,
+        }
     }
 }
 
@@ -63,5 +71,9 @@ where
     }
     fn discretizer(&self) -> &Self::Discretizer {
         &self.discretizer
+    }
+    
+    fn update_model(&mut self, params: &[f64]) -> Result<(), ModelError> {
+        self.model.update(params, self.registry.as_ref())
     }
 }

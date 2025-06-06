@@ -4,13 +4,14 @@ use crate::controllers::{Controller, ControllerState, CostFn, TrajectoryHistory}
 use crate::physics::ModelError;
 use crate::physics::discretizer::SymbolicDiscretizer;
 use crate::physics::traits::{PhysicsSim, SymbolicDynamics};
+use crate::utils::Labelizable;
 
 pub struct RiccatiRecursionSymbolic<S: PhysicsSim>(RiccatiRecursionGeneric<S>);
 
 impl<S> RiccatiRecursionSymbolic<S>
 where
     S: PhysicsSim,
-    S::Model: SymbolicDynamics,
+    S::Model: SymbolicDynamics + Labelizable,
     S::Discretizer: SymbolicDiscretizer<S::Model>,
 {
     pub fn new(
@@ -33,7 +34,7 @@ where
 impl<S> Controller<S> for RiccatiRecursionSymbolic<S>
 where
     S: PhysicsSim,
-    S::Model: SymbolicDynamics,
+    S::Model: SymbolicDynamics + Labelizable,
     S::Discretizer: SymbolicDiscretizer<S::Model>,
 {
     fn solve(

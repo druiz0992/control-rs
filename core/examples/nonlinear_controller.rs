@@ -56,7 +56,7 @@ async fn build_sim(controller_type: ControllerType) {
     registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
 
     let integrator = RK4Symbolic::new(&model, Arc::clone(&registry)).unwrap();
-    let sim = BasicSim::new(model.clone(), integrator);
+    let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
 
     let q_matrix = DMatrix::<f64>::identity(6, 6) * 1.0;
     let qn_matrix = DMatrix::<f64>::identity(6, 6) * 1.0;

@@ -14,13 +14,37 @@ def extract_symbols(functions, variable_names):
     
     return function, variables
 
-def compute_gradient(function, variables):
+#def compute_gradient(function, variables):
     # Compute the gradient (partial derivatives)
-    gradient = [sp.diff(function, var) for var in variables]
+    #gradient = [sp.diff(function, var) for var in variables]
+#
+    #gradient_str = [str(g) for g in gradient]
+#
+    #return gradient_str, gradient
 
-    gradient_str = [str(g) for g in gradient]
+import sympy as sp
+
+def compute_gradient(function, variables):
+    gradient = []
+    with open("/tmp/diff.txt", "a") as log_file:
+        #log_file.write(f"Computed gradient Request {function}, {variables}\n")
+        # Compute gradients with progress logging
+        for i, var in enumerate(variables):
+            grad_i = sp.diff(function, var)
+            gradient.append(grad_i)
+            log_file.write(f"Computed gradient {i+1}/{len(variables)} for variable {var}\n")
+            log_file.flush()
+
+        # Convert gradients to strings with progress logging
+        gradient_str = []
+        #log_file.write(f"Conver gradient request {gradient}\n")
+        for j, g in enumerate(gradient):
+            gradient_str.append(str(g))
+            log_file.write(f"Converted gradient {j+1}/{len(gradient)} to string\n")
+            log_file.flush()
 
     return gradient_str, gradient
+
 
 def compute_hessian(function, variables, gradient = None):
     if gradient is None:

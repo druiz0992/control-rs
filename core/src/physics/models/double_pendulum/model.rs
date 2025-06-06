@@ -1,7 +1,7 @@
-use super::state::DoublePendulumState;
-use crate::utils::Labelizable;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
-use crate::physics::constants as c;
+use crate::physics::models::DoublePendulumState;
+use crate::physics::{ModelError, constants as c};
+use crate::utils::Labelizable;
 use macros::LabelOps;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -14,7 +14,6 @@ pub struct DoublePendulum {
     l2: f64,
     air_resistance_coeff: f64,
 }
-
 impl DoublePendulum {
     pub fn new(
         m1: f64,
@@ -24,27 +23,35 @@ impl DoublePendulum {
         air_resistance_coeff: f64,
         registry: Option<&Arc<ExprRegistry>>,
     ) -> Self {
-        if let Some(registry) = registry {
-            registry.insert_scalar("m1", m1);
-            registry.insert_scalar("m2", m2);
-            registry.insert_scalar("l1", l1);
-            registry.insert_scalar("l2", l2);
-            registry.insert_scalar(c::AIR_RESISTANCE_COEFF_SYMBOLIC, air_resistance_coeff);
-            registry.insert_scalar(c::GRAVITY_SYMBOLIC, c::GRAVITY);
+        let model = DoublePendulum {
+            m1,
+            m2,
+            l1,
+            l2,
+            air_resistance_coeff,
+        };
 
+        if let Some(registry) = registry {
+            model.store_params(registry);
+
+            registry.insert_scalar(c::GRAVITY_SYMBOLIC, c::GRAVITY);
             registry.insert_vector(c::STATE_SYMBOLIC, DoublePendulumState::labels());
             registry.insert_vector_expr(c::INPUT_SYMBOLIC, ExprVector::new(&["u1", "u2"]));
             registry.insert_var("u1", 0.0);
             registry.insert_var("u2", 0.0);
         }
 
-        DoublePendulum {
-            m1,
-            m2,
-            l1,
-            l2,
-            air_resistance_coeff,
-        }
+        model
+    }
+
+    fn store_params(&self, registry: &Arc<ExprRegistry>) {
+        let labels = Self::labels();
+        let params = self.vectorize(labels);
+
+        labels
+            .iter()
+            .zip(params.iter())
+            .for_each(|(n, v)| registry.insert_scalar(n, *v));
     }
 }
 

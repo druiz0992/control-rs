@@ -187,6 +187,7 @@ impl<S: PhysicsSim> Controller<S> for QPLQRGeneric<S> {
         Ok((x_traj, u_traj))
     }
 }
+
 impl<S: PhysicsSim> SteppableController<S> for QPLQRGeneric<S> {
     fn step(
         &self,

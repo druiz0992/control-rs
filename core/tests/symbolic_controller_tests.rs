@@ -1,17 +1,12 @@
-use control_rs::controllers::qp_lqr::options::QPOptions;
-use control_rs::controllers::qp_lqr::symbolic::QPLQRSymbolic;
-use control_rs::controllers::qp_mpc::options::ConvexMpcOptions;
-use control_rs::controllers::qp_mpc::symbolic::ConvexMpcSymbolic;
-use control_rs::controllers::riccati_lqr::options::RiccatiLQROptions;
-use control_rs::controllers::riccati_lqr::symbolic::RiccatiRecursionSymbolic;
+use control_rs::controllers::qp_lqr::{QPLQRSymbolic, QPOptions};
+use control_rs::controllers::qp_mpc::{ConvexMpcOptions, ConvexMpcSymbolic};
+use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursionSymbolic};
 use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions};
-use control_rs::cost::generic::{GenericCost, GenericCostOptions};
+use control_rs::cost::generic::GenericCost;
 use control_rs::numeric_services::symbolic::ExprRegistry;
 use control_rs::physics::constants as c;
 use control_rs::physics::discretizer::RK4Symbolic;
-use control_rs::physics::models::quadrotor_2d::input::Quadrotor2DInput;
-use control_rs::physics::models::quadrotor_2d::model::Quadrotor2D;
-use control_rs::physics::models::quadrotor_2d::state::Quadrotor2DState;
+use control_rs::physics::models::quadrotor_2d::{Quadrotor2D, Quadrotor2DInput, Quadrotor2DState};
 use control_rs::physics::simulator::BasicSim;
 use control_rs::physics::traits::State;
 use control_rs::utils::Labelizable;
@@ -56,7 +51,7 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
     registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
 
     let integrator = RK4Symbolic::new(&model, Arc::clone(&registry)).unwrap();
-    let sim = BasicSim::new(model.clone(), integrator);
+    let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
 
     let q_matrix = DMatrix::<f64>::identity(6, 6) * 1.0;
     let qn_matrix = DMatrix::<f64>::identity(6, 6) * 1.0;

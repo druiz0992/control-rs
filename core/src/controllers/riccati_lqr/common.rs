@@ -7,6 +7,7 @@ use crate::controllers::{
 use crate::physics::ModelError;
 use crate::physics::models::Dynamics;
 use crate::physics::traits::{Discretizer, PhysicsSim, State};
+use crate::utils::Labelizable;
 use crate::utils::evaluable::EvaluableDMatrix;
 use crate::utils::noise::NoiseSources;
 use nalgebra::{DMatrix, DVector};
@@ -30,7 +31,7 @@ pub struct RiccatiRecursionGeneric<S: PhysicsSim> {
 impl<S> RiccatiRecursionGeneric<S>
 where
     S: PhysicsSim,
-    S::Model: Dynamics,
+    S::Model: Dynamics + Labelizable,
     S::Discretizer: Discretizer<S::Model>,
 {
     pub fn new(
@@ -60,10 +61,20 @@ where
         let state_dim = ControllerState::<S>::dim_q() + ControllerState::<S>::dim_v();
         let input_dim = ControllerInput::<S>::dim_q();
 
-        let vals = self.options.general.concatenate_operating_point();
+        let mut real_params: Option<Vec<f64>> = None;
+        if let Some(estimated_params) = self.options.get_general().get_estimated_params() {
+            let labels = S::Model::labels();
+            real_params = Some(self.sim.model().vectorize(labels));
+            self.sim.update_model(estimated_params)?;
+        }
 
+        let vals = self.options.general.concatenate_operating_point();
         let a_mat = self.jacobian_x_fn.evaluate(&vals)?;
         let b_mat = self.jacobian_u_fn.evaluate(&vals)?;
+
+        if let Some(real_params) = real_params {
+            self.sim.update_model(&real_params)?;
+        }
 
         let q_mat = self
             .cost_fn
@@ -106,7 +117,7 @@ where
 impl<S> Controller<S> for RiccatiRecursionGeneric<S>
 where
     S: PhysicsSim,
-    S::Model: Dynamics,
+    S::Model: Dynamics + Labelizable,
     S::Discretizer: Discretizer<S::Model>,
 {
     fn solve(
@@ -115,7 +126,6 @@ where
     ) -> Result<TrajectoryHistory<S>, ModelError> {
         let k_seq = self.compute_gain()?;
 
-        // TODO >>> review
         let x_ref = self.options.general.get_x_ref()[0].to_vector();
         let u_op = self.options.general.get_u_operating().to_vector();
 

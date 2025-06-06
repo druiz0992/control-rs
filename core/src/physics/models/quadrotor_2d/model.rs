@@ -1,6 +1,7 @@
 use super::state::Quadrotor2DState;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
 use crate::physics::constants as c;
+use crate::physics::models::Dynamics;
 use crate::utils::Labelizable;
 use macros::LabelOps;
 use serde::{Deserialize, Serialize};
@@ -15,19 +16,27 @@ pub struct Quadrotor2D {
 
 impl Quadrotor2D {
     pub fn new(m: f64, j: f64, l: f64, registry: Option<&Arc<ExprRegistry>>) -> Self {
+        let model = Quadrotor2D { m, l, j };
         if let Some(registry) = registry {
-            registry.insert_scalar("m", m);
-            registry.insert_scalar("j", j);
-            registry.insert_scalar("l", l);
-            registry.insert_scalar(c::GRAVITY_SYMBOLIC, c::GRAVITY);
+            model.store_params(registry);
 
+            registry.insert_scalar(c::GRAVITY_SYMBOLIC, c::GRAVITY);
             registry.insert_vector(c::STATE_SYMBOLIC, Quadrotor2DState::labels());
             registry.insert_vector_expr(c::INPUT_SYMBOLIC, ExprVector::new(&["u1", "u2"]));
             registry.insert_var("u1", 0.0);
             registry.insert_var("u2", 0.0);
         }
+        model
+    }
 
-        Quadrotor2D { m, l, j }
+    fn store_params(&self, registry: &Arc<ExprRegistry>) {
+        let labels = Self::labels();
+        let params = self.vectorize(labels);
+
+        labels
+            .iter()
+            .zip(params.iter())
+            .for_each(|(n, v)| registry.insert_scalar(n, *v));
     }
 }
 
