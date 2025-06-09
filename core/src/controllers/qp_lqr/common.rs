@@ -143,7 +143,6 @@ impl<S: PhysicsSim> UpdatableController<S> for QPLQRGeneric<S> {
         let state_dims = state_ref.len();
         let input_dims = ControllerInput::<S>::dim_q();
 
-        // TODO >>> review
         if let (Some(running_cost), Some(terminal_cost)) =
             (self.cost_fn.get_q(), self.cost_fn.get_qn())
         {
