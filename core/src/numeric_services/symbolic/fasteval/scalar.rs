@@ -190,10 +190,10 @@ impl ExprScalar {
     }
 
     pub fn smooth_sign(&self, eps: f64) -> Self {
-        let eps_symbolic = ExprScalar::new(eps.to_string());
-        let x = self.div(&self.pow(2.0).add(&eps_symbolic).wrap().pow(0.5));
-
-        Self::new(format!("{}", x.0))
+        let eps_expr = ExprScalar::new(eps.to_string());
+        let denom = self.pow(2.0).add(&eps_expr).pow(0.5);
+        let result = self.div(&denom.wrap()).wrap();
+        result
     }
 
     pub fn gradient(&self, vars: &ExprVector) -> Result<ExprVector, SymbolicError> {

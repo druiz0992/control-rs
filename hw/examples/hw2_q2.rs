@@ -6,16 +6,17 @@ use std::sync::Arc;
 use control_rs::animation::Animation;
 use control_rs::animation::macroquad::Macroquad;
 use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursionSymbolic};
+use control_rs::controllers::utils::clamp_input_vector;
 use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions};
 use control_rs::cost::GenericCost;
 use control_rs::numeric_services::symbolic::ExprRegistry;
-use control_rs::physics::constants as c;
 use control_rs::physics::discretizer::RK4Symbolic;
 use control_rs::physics::models::{CartPole, CartPoleInput, CartPoleState};
 use control_rs::physics::simulator::BasicSim;
 use control_rs::physics::traits::{Discretizer, Dynamics, State};
+use control_rs::physics::{Energy, constants as c};
 use control_rs::plotter;
-use control_rs::utils::NoiseSource;
+use control_rs::utils::{Labelizable, NoiseSource};
 use nalgebra::{DMatrix, DVector};
 
 type Sim = BasicSim<CartPole, RK4Symbolic<CartPole>>;
@@ -33,13 +34,13 @@ struct TrajOptions {
     noise_std: Option<(f64, f64)>,
     tf: f64,
     plot_flag: bool,
-    x_goal: CartPoleState,
-    u_goal: CartPoleInput,
-    x_op: CartPoleState,
-    u_op: CartPoleInput,
+    x_goal: Vec<CartPoleState>,
+    u_goal: Vec<CartPoleInput>,
+    x_op: Vec<CartPoleState>,
+    u_op: Vec<CartPoleInput>,
     finite_horizon_flag: bool,
     estimated_parameters: Option<Vec<f64>>,
-    u_imits: Option<ConstraintTransform>,
+    u_limits: Option<ConstraintTransform>,
 }
 
 impl TrajOptions {
@@ -76,22 +77,22 @@ impl TrajOptions {
         new.plot_flag = flag;
         new
     }
-    fn set_x_goal(self, x_goal: CartPoleState) -> Self {
+    fn set_x_goal(self, x_goal: Vec<CartPoleState>) -> Self {
         let mut new = self;
         new.x_goal = x_goal;
         new
     }
-    fn set_u_goal(self, u_goal: CartPoleInput) -> Self {
+    fn set_u_goal(self, u_goal: Vec<CartPoleInput>) -> Self {
         let mut new = self;
         new.u_goal = u_goal;
         new
     }
-    fn set_x_op(self, x_op: CartPoleState) -> Self {
+    fn set_x_op(self, x_op: Vec<CartPoleState>) -> Self {
         let mut new = self;
         new.x_op = x_op;
         new
     }
-    fn set_u_op(self, u_op: CartPoleInput) -> Self {
+    fn set_u_op(self, u_op: Vec<CartPoleInput>) -> Self {
         let mut new = self;
         new.u_op = u_op;
         new
@@ -108,7 +109,7 @@ impl TrajOptions {
     }
     fn set_u_limits(self, constraints: ConstraintTransform) -> Self {
         let mut new = self;
-        new.u_imits = Some(constraints);
+        new.u_limits = Some(constraints);
         new
     }
 }
@@ -124,13 +125,13 @@ impl Default for TrajOptions {
             r: DMatrix::identity(input_dims, input_dims) * DEFAULT_R_FACTOR,
             noise_std: None,
             plot_flag: false,
-            x_goal: CartPoleState::default(),
-            u_goal: CartPoleInput::default(),
-            x_op: CartPoleState::default(),
-            u_op: CartPoleInput::default(),
+            x_goal: vec![CartPoleState::default(); 1],
+            u_goal: vec![CartPoleInput::default(); 1],
+            x_op: vec![CartPoleState::default(); 1],
+            u_op: vec![CartPoleInput::default(); 1],
             finite_horizon_flag: true,
             estimated_parameters: None,
-            u_imits: None,
+            u_limits: None,
         }
     }
 }
@@ -176,6 +177,67 @@ fn rollout(
     }
     x_traj
 }
+
+fn energy_shaping_control(
+    model: &CartPole,
+    x_ic: &CartPoleState,
+    desired_energy: &Energy,
+    registry: Arc<ExprRegistry>,
+    traj_options: &TrajOptions,
+) -> (Vec<CartPoleState>, Vec<CartPoleInput>) {
+    let k = 20.0;
+    let kp_x = 60.0;
+    let kd_x = 100.0;
+    let max_delta = 3.0;
+    let dt = 0.05;
+
+    let tf = traj_options.tf;
+    let n_steps = (tf / dt) as usize + 1;
+
+    let mut x_traj = vec![];
+    let mut u_traj: Vec<CartPoleInput> = vec![];
+    x_traj.push(x_ic.clone());
+
+    let integrator = RK4Symbolic::new(model, Arc::clone(&registry)).unwrap();
+
+    for j in 0..n_steps - 1 {
+        let current_energy = model.energy(&x_traj[j]).unwrap();
+        let error = desired_energy.total() - current_energy.total();
+        let [pos_x, v_x, theta, omega] = x_traj[j].extract(&["pos_x", "v_x", "theta", "omega"]);
+        if theta.abs() < 0.1 && error < 0.1 {
+            break;
+        };
+        let next_input_energy = DVector::from_column_slice(&[k * error * (omega * theta.cos())]);
+        let cart_position_error = -pos_x;
+        let cart_velocity = v_x;
+        let next_input_cart =
+            DVector::from_column_slice(&[kp_x * cart_position_error - kd_x * cart_velocity]);
+
+        let mut u_candidate = next_input_cart + next_input_energy;
+
+        if j > 0 {
+            let u_prev = u_traj[j - 1].to_vector();
+            let delta_u = &u_candidate - &u_prev;
+            let delta_norm = delta_u.norm();
+            if delta_norm > max_delta {
+                let limited_delta = delta_u * (max_delta / delta_norm);
+                u_candidate = u_prev + limited_delta;
+            }
+        }
+
+        u_traj.push(CartPoleInput::from_vector(clamp_input_vector(
+            u_candidate,
+            traj_options.u_limits.as_ref(),
+        )));
+        x_traj.push(
+            integrator
+                .step(model, &x_traj[j], Some(&u_traj[j]), dt)
+                .unwrap(),
+        );
+    }
+    (x_traj, u_traj)
+}
+
 async fn fhlqr(
     model: &CartPole,
     traj_options: &TrajOptions,
@@ -210,8 +272,8 @@ async fn fhlqr(
         .unwrap()
         .set_time_horizon(tf)
         .unwrap()
-        .set_x_ref(&[goal_state])
-        .set_u_ref(&[goal_input])
+        .set_x_ref(&goal_state)
+        .set_u_ref(&goal_input)
         .set_x_operating(&op_state)
         .set_u_operating(&op_input);
 
@@ -347,84 +409,120 @@ async fn main() {
 
     let traj_options = TrajOptions::new()
         .set_finite_horizon(true)
-        .set_u_goal(u_ref.clone())
-        .set_x_goal(x_ref.clone())
-        .set_u_op(u_ref.clone())
-        .set_x_op(x_ref.clone())
+        .set_u_goal(vec![u_ref.clone()])
+        .set_x_goal(vec![x_ref.clone()])
+        .set_u_op(vec![u_ref.clone()])
+        .set_x_op(vec![x_ref.clone()])
         .set_q(q.clone())
         .set_qf(q)
         .set_r(r)
         .set_estimated_parameters(estimated_parameters.clone());
-    /* *
-        let mut controller = fhlqr(&model, &traj_options, Arc::clone(&registry)).await;
-        let (x_traj, u_traj) = solve(&mut controller, &model, &x_ic, &traj_options).await;
-        check_input_trajectory_error(&[u_traj.last().unwrap().to_owned()], &[u_ref.clone()], 1e-1);
-        check_state_trajectory_error(&[x_traj.last().unwrap().to_owned()], &[x_ref.clone()], 1e-1);
 
-        // Part B - try a range of initial conditions to check which conditions are good enough for the linearization to work
-        //  and drive the cart pole to the equilibrium position
-        let thetas: Vec<f64> = (-10..=10).map(|x| x as f64 * 6.0).collect();
-        let p_xs: Vec<f64> = (-10..=10).map(|x| x as f64 * 6.0).collect();
+    let mut controller = fhlqr(&model, &traj_options, Arc::clone(&registry)).await;
+    let (x_traj, u_traj) = solve(&mut controller, &model, &x_ic, &traj_options).await;
+    dbg!(&x_traj, & u_traj);
+    check_input_trajectory_error(&[u_traj.last().unwrap().to_owned()], &[u_ref.clone()], 1e-1);
+    check_state_trajectory_error(&[x_traj.last().unwrap().to_owned()], &[x_ref.clone()], 1e-1);
 
-        let mut converging_conditions: Vec<(f64, f64)> = Vec::new();
-        for theta in &thetas {
-            for p_x in &p_xs {
-                let x_ic = CartPoleState::new(*p_x, 0.0, deg2rad(*theta), 0.0);
-                let (x_traj, _) = solve(&mut controller, &model, &x_ic, &traj_options).await;
-                let state_err =
-                    state_trajectory_error(&[x_traj.last().unwrap().to_owned()], &[x_ref.clone()]);
-                if state_err < 0.1 {
-                    converging_conditions.push((*theta, *p_x))
-                }
+    // Part B - try a range of initial conditions to check which conditions are good enough for the linearization to work
+    //  and drive the cart pole to the equilibrium position
+    let thetas: Vec<f64> = (-10..=10).map(|x| x as f64 * 6.0).collect();
+    let p_xs: Vec<f64> = (-10..=10).map(|x| x as f64 * 6.0).collect();
+
+    let mut converging_conditions: Vec<(f64, f64)> = Vec::new();
+    for theta in &thetas {
+        for p_x in &p_xs {
+            let x_ic = CartPoleState::new(*p_x, 0.0, deg2rad(*theta), 0.0);
+            let (x_traj, _) = solve(&mut controller, &model, &x_ic, &traj_options).await;
+            let state_err =
+                state_trajectory_error(&[x_traj.last().unwrap().to_owned()], &[x_ref.clone()]);
+            if state_err < 0.1 {
+                converging_conditions.push((*theta, *p_x))
             }
         }
+    }
 
-        converging_conditions.iter().for_each(|(theta, x)| {
-            assert!(*theta >= -48.0 && *theta <= 48.0);
-            assert!(*x >= -6.0 && *x <= 6.0);
-        });
+    converging_conditions.iter().for_each(|(theta, x)| {
+        assert!(*theta >= -48.0 && *theta <= 48.0);
+        assert!(*x >= -6.0 && *x <= 6.0);
+    });
 
-        // Part C - infinite horizon cost tuning.
-        let x_perturbation = CartPoleState::new(0.5, 0.3, deg2rad(-10.0), 0.0);
-        let x_ic = x_ref.clone() + x_perturbation;
+    // Part C - infinite horizon cost tuning.
+    let x_perturbation = CartPoleState::new(0.5, 0.3, deg2rad(-10.0), 0.0);
+    let x_ic = x_ref.clone() + x_perturbation;
 
-        let q = DMatrix::from_diagonal(&DVector::from_vec(vec![1.0, 0.01, 1.0, 0.01]));
-        let r = DMatrix::identity(1, 1) * 1.0;
+    let q = DMatrix::from_diagonal(&DVector::from_vec(vec![1.0, 0.01, 1.0, 0.01]));
+    let r = DMatrix::identity(1, 1) * 1.0;
 
-        let u_limits = (-3.0, 3.0);
-        let constraints =
-            ConstraintTransform::new_uniform_bounds_input::<Sim>((u_limits.0, u_limits.1));
+    let u_limits = (-3.0, 3.0);
+    let constraints =
+        ConstraintTransform::new_uniform_bounds_input::<Sim>((u_limits.0, u_limits.1));
 
-        let traj_options = TrajOptions::new()
-            .set_finite_horizon(true)
-            .set_u_goal(u_ref.clone())
-            .set_x_goal(x_ref.clone())
-            .set_u_op(u_ref.clone())
-            .set_x_op(x_ref.clone())
-            .set_q(q.clone())
-            .set_qf(q)
-            .set_r(r)
-            .set_estimated_parameters(estimated_parameters.clone())
-            .set_u_limits(constraints)
-            .set_plot_flag(true);
+    let traj_options = TrajOptions::new()
+        .set_finite_horizon(true)
+        .set_u_goal(vec![u_ref.clone()])
+        .set_x_goal(vec![x_ref.clone()])
+        .set_u_op(vec![u_ref.clone()])
+        .set_x_op(vec![x_ref.clone()])
+        .set_q(q.clone())
+        .set_qf(q)
+        .set_r(r)
+        .set_estimated_parameters(estimated_parameters.clone())
+        .set_u_limits(constraints);
 
-        let mut controller = fhlqr(&model, &traj_options, Arc::clone(&registry)).await;
-        let (x_traj, u_traj) = solve(&mut controller, &model, &x_ic, &traj_options).await;
-        check_state_trajectory_error(&[x_traj.last().unwrap().to_owned()], &[x_ref.clone()], 1e-1);
-        check_input_bounds(&u_traj, u_limits, 1e-1);
-    */
+    let mut controller = fhlqr(&model, &traj_options, Arc::clone(&registry)).await;
+    let (x_traj, u_traj) = solve(&mut controller, &model, &x_ic, &traj_options).await;
+    check_state_trajectory_error(&[x_traj.last().unwrap().to_owned()], &[x_ref.clone()], 1e-1);
+    check_input_bounds(&u_traj, u_limits, 1e-1);
+
     // Part D - TVLQR for trajectory tracking
     let x_ic = CartPoleState::new(0.0, 0.0, PI, 0.0);
     let model = CartPole::new(0.2, 1.0, 0.0, 0.0, 0.50, Some(&registry));
-    //let u_traj = load_u_traj("./hw/examples/data/cartpole_u_traj1.dat").unwrap();
-    let u_traj = generate_u_traj(0.05, 4.0, 0.7, 10.0);
-    let x_traj = rollout(&model, &x_ic, &u_traj, registry);
+    let desired_energy = Energy::new(0.0, 0.2 * c::GRAVITY * 0.5);
+    let u_limits = (-14.0, 14.0);
+    let constraints =
+        ConstraintTransform::new_uniform_bounds_input::<Sim>((u_limits.0, u_limits.1));
+    let mut traj_options = TrajOptions::new().set_u_limits(constraints).set_tf(21.0);
+    let (mut x_traj, mut u_traj) = energy_shaping_control(
+        &model,
+        &x_ic,
+        &desired_energy,
+        Arc::clone(&registry),
+        &traj_options,
+    );
 
-    let times: Vec<_> = (0..u_traj.len()).map(|i| i as f64 * 0.05).collect();
-    plotter::plot_states(&times, &u_traj, "/tmp/plot2.png").unwrap();
-    plotter::plot_states(&times, &x_traj, "/tmp/plot1.png").unwrap();
-    plotter::display("/tmp/plot2.png").unwrap();
-    plotter::display("/tmp/plot1.png").unwrap();
+    traj_options = TrajOptions::new()
+        .set_tf(10.0)
+        .set_u_goal(vec![u_ref.clone()])
+        .set_x_goal(vec![x_ref.clone()])
+        .set_u_op(vec![u_ref.clone()])
+        .set_x_op(vec![x_ref.clone()]);
+    let mut controller = fhlqr(&model, &traj_options, Arc::clone(&registry)).await;
+    let (x_traj2, u_traj2) = solve(
+        &mut controller,
+        &model,
+        &x_traj.last().unwrap(),
+        &traj_options,
+    )
+    .await;
 
-    dbg!(&x_traj, &u_traj);
+    x_traj.extend(x_traj2);
+    u_traj.extend(u_traj2);
+    check_state_trajectory_error(&[x_traj.last().unwrap().to_owned()], &[x_ref.clone()], 1e-1);
+
+    traj_options = TrajOptions::new()
+        .set_tf(10.0)
+        .set_u_goal(u_traj.clone())
+        .set_x_goal(x_traj.clone())
+        .set_u_op(u_traj.clone())
+        .set_x_op(x_traj.clone())
+        .set_plot_flag(true);
+    let mut controller = fhlqr(&model, &traj_options, Arc::clone(&registry)).await;
+    let (x_traj, u_traj) = solve(
+        &mut controller,
+        &model,
+        &x_traj.first().unwrap(),
+        &traj_options,
+    )
+    .await;
 }

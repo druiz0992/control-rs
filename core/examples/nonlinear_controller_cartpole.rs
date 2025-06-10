@@ -1,3 +1,4 @@
+use control_rs::animation::{Animation, macroquad::Macroquad};
 use control_rs::controllers::qp_lqr::{QPLQRSymbolic, QPOptions};
 use control_rs::controllers::qp_mpc::{ConvexMpcOptions, ConvexMpcSymbolic};
 use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursionSymbolic};
@@ -6,14 +7,17 @@ use control_rs::cost::generic::GenericCost;
 use control_rs::numeric_services::symbolic::ExprRegistry;
 use control_rs::physics::constants as c;
 use control_rs::physics::discretizer::RK4Symbolic;
-use control_rs::physics::models::quadrotor_2d::{Quadrotor2D, Quadrotor2DInput, Quadrotor2DState};
+use control_rs::physics::models::{CartPole, CartPoleInput, CartPoleState};
 use control_rs::physics::simulator::BasicSim;
-use control_rs::physics::traits::State;
+use control_rs::plotter;
 use control_rs::utils::Labelizable;
-use nalgebra::{DMatrix, dvector};
+use nalgebra::DMatrix;
 use osqp::Settings;
+use std::f64::consts::PI;
+use std::io::{self, Write};
 use std::sync::Arc;
 
+#[derive(Debug, Clone)]
 enum ControllerType {
     QpLqr,
     QpLqrUlimits(f64, f64),
@@ -23,59 +27,58 @@ enum ControllerType {
     RiccatiRecursionLQRInfiniteULimitsAndNoise(f64, f64, f64, f64),
     Mpc,
     MpcULimitsAndNoise(f64, f64, f64, f64),
-    MpcUXLimitsAndNoise(f64, f64, f64, f64, usize, f64, f64),
+    MpcUXLimitsAndNoise(f64, f64, f64, f64, f64, f64),
 }
+
+// Example iterates over all implemented linear controllers
 
 type Sim<M> = BasicSim<M, RK4Symbolic<M>>;
 type SymbolicController<M> = Box<dyn Controller<Sim<M>>>;
 
-fn symbolic_controller_setup(controller_type: ControllerType) {
-    let m = 1.0;
-    let l = 0.3;
-    let j = 0.2 * m * l * l;
+async fn build_sim(controller_type: ControllerType) {
+    let mp = 2.0;
+    let mc = 0.2;
+    let l = 0.5;
 
     let dt = 0.05;
     let sim_time = 10.0;
     let n_steps = (sim_time / dt) as usize + 1;
 
     // linearization points
-    let input_hover = Quadrotor2DInput::new(0.5 * m * c::GRAVITY, 0.5 * m * c::GRAVITY);
-    let state_hover = Quadrotor2DState::default();
+    let input_ref = CartPoleInput::new(0.0);
 
-    let state_0 = Quadrotor2DState::new(1.0, 2.0, 0.0, 0.0, 0.0, 0.0);
-    let state_ref = Quadrotor2DState::new(0.0, 1.0, 0.0, 0.0, 0.0, 0.0);
+    let state_0 = CartPoleState::new(0.0, 0.0, PI, 0.0);
+    let state_ref = CartPoleState::new(0.0, 0.0, 0.0, 0.0);
 
     let registry = Arc::new(ExprRegistry::new());
-    let model = Quadrotor2D::new(m, j, l, Some(&registry));
+    let model = CartPole::new(mp, mc, 0.0, 0.0, l, Some(&registry));
 
     registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
 
     let integrator = RK4Symbolic::new(&model, Arc::clone(&registry)).unwrap();
     let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
 
-    let q_matrix = DMatrix::<f64>::identity(6, 6) * 1.0;
-    let qn_matrix = DMatrix::<f64>::identity(6, 6) * 1.0;
-    let r_matrix = DMatrix::<f64>::identity(2, 2) * 0.01;
+    let q_matrix = DMatrix::<f64>::identity(4, 4) * 1.0;
+    let qn_matrix = DMatrix::<f64>::identity(4, 4) * 1.0;
+    let r_matrix = DMatrix::<f64>::identity(1, 1) * 0.01;
 
-    let mut expected_trajectory: Vec<_> = (0..n_steps + 1)
-        .map(|_| Quadrotor2DState::default())
-        .collect();
-    expected_trajectory[n_steps] = state_ref.clone();
+    let mut reference_traj: Vec<_> = (0..n_steps + 1).map(|_| CartPoleState::default()).collect();
+    reference_traj[n_steps] = state_ref.clone();
 
-    let cost =
-        GenericCost::new(q_matrix.clone(), qn_matrix.clone(), r_matrix.clone(), None).unwrap();
+    //let options = GenericCostOptions::new().set_linear_term(true);
+    let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, None).unwrap();
 
-    let general_options = ControllerOptions::<Sim<Quadrotor2D>>::default()
+    let general_options = ControllerOptions::<Sim<CartPole>>::default()
         .set_x_ref(&[state_ref.clone()])
-        .set_u_ref(&[input_hover.clone()])
-        .set_x_operating(&[state_hover.clone()])
-        .set_u_operating(&[input_hover.clone()])
+        .set_u_ref(&[input_ref.clone()])
+        .set_x_operating(&[state_ref.clone()])
+        .set_u_operating(&[input_ref.clone()])
         .set_dt(dt)
         .unwrap()
         .set_time_horizon(sim_time)
         .unwrap();
 
-    let mut controller: SymbolicController<Quadrotor2D> = match controller_type {
+    let mut controller: SymbolicController<CartPole> = match controller_type {
         ControllerType::QpLqr => {
             let osqp_settings = Settings::default()
                 .verbose(false)
@@ -89,18 +92,18 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
                     .unwrap();
             Box::new(controller)
         }
-        ControllerType::QpLqrUlimits(lower, upper) => {
-            let [hover] = input_hover.extract(&["u1"]);
-            let constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((
-                lower - hover,
-                upper - hover,
-            ));
-            let general_options = general_options.set_u_limits(constraints);
+        ControllerType::QpLqrUlimits(lower_u, upper_u) => {
+            let [hover] = input_ref.extract(&["u1"]);
+            dbg!(&hover);
+            let input_constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<CartPole>>(
+                (lower_u - hover, upper_u - hover),
+            );
+            let general_options = general_options.set_u_limits(input_constraints);
             let osqp_settings = Settings::default()
                 .verbose(false)
                 .eps_abs(1e-8)
                 .eps_rel(1e-8);
-            let qp_options = QPOptions::<Sim<Quadrotor2D>>::default()
+            let qp_options = QPOptions::<Sim<CartPole>>::default()
                 .set_general(general_options)
                 .set_osqp_settings(osqp_settings);
             let (controller, _) =
@@ -123,7 +126,7 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
         }
         ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(lower, upper, std_0, std_n) => {
             let constraints =
-                ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((lower, upper));
+                ConstraintTransform::new_uniform_bounds_input::<Sim<CartPole>>((lower, upper));
             let general_options = general_options
                 .set_u_limits(constraints)
                 .set_noise((std_0, std_n));
@@ -134,7 +137,7 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
         }
         ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(lower, upper, std_0, std_n) => {
             let constraints =
-                ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((lower, upper));
+                ConstraintTransform::new_uniform_bounds_input::<Sim<CartPole>>((lower, upper));
             let general_options = general_options
                 .set_u_limits(constraints)
                 .set_noise((std_0, std_n));
@@ -157,13 +160,13 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
             )
         }
         ControllerType::MpcULimitsAndNoise(lower, upper, std_0, std_n) => {
-            let [hover] = input_hover.extract(&["u1"]);
-            let constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((
-                lower - hover,
-                upper - hover,
-            ));
+            let [hover] = input_ref.extract(&["u1"]);
+            let input_constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<CartPole>>(
+                (lower - hover, upper - hover),
+            );
+
             let general_options = general_options
-                .set_u_limits(constraints)
+                .set_u_limits(input_constraints)
                 .set_noise((std_0, std_n));
             let osqp_settings = Settings::default()
                 .verbose(false)
@@ -177,26 +180,15 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
                     .unwrap(),
             )
         }
-        ControllerType::MpcUXLimitsAndNoise(
-            lower_u,
-            upper_u,
-            lower_x,
-            upper_x,
-            idx,
-            std_0,
-            std_n,
-        ) => {
-            let [hover] = input_hover.extract(&["u1"]);
-            let input_constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>(
+        ControllerType::MpcUXLimitsAndNoise(lower_u, upper_u, lower_x, upper_x, std_0, std_n) => {
+            let [hover] = input_ref.extract(&["u1"]);
+            let input_constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<CartPole>>(
                 (lower_u - hover, upper_u - hover),
             );
 
             let state_constraints =
-                ConstraintTransform::new_single_bound_state::<Sim<Quadrotor2D>>(
-                    (lower_x, upper_x),
-                    idx,
-                )
-                .unwrap();
+                ConstraintTransform::new_single_bound_state::<Sim<CartPole>>((lower_x, upper_x), 2)
+                    .unwrap();
             let general_options = general_options
                 .set_u_limits(input_constraints)
                 .set_x_limits(state_constraints)
@@ -216,112 +208,45 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
     };
 
     let (x_traj, u_traj) = controller.solve(&state_0).unwrap();
+    let animation = Macroquad::new();
 
-    let tol = 1e-3;
-    assert!(
-        (x_traj.last().unwrap().to_vector() - expected_trajectory.last().unwrap().to_vector())
-            .abs()
-            .sum()
-            < tol
-    );
-    assert!(
-        (u_traj.last().unwrap().to_vector() - dvector!(0.5 * m * c::GRAVITY, 0.5 * m * c::GRAVITY))
-            .abs()
-            .sum()
-            < tol
-    );
+    animation
+        .run_animation(&model, &x_traj, (400.0, 300.0))
+        .await
+        .unwrap();
 
-    match controller_type {
-        ControllerType::QpLqrUlimits(lower, upper)
-        | ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(lower, upper, _, _)
-        | ControllerType::MpcULimitsAndNoise(lower, upper, _, _)
-        | ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(lower, upper, _, _) => {
-            let exceed_limits: Vec<_> = u_traj
-                .iter()
-                .filter(|u| u.to_vec()[0] < lower - tol || u.to_vec()[0] > upper + tol)
-                .collect();
-            assert!(exceed_limits.is_empty());
-        }
-        ControllerType::MpcUXLimitsAndNoise(_, _, lower, upper, idx, _, _) => {
-            let exceed_limits: Vec<_> = x_traj
-                .iter()
-                .filter(|x| x.to_vec()[idx] < lower - tol || x.to_vec()[idx] > upper + tol)
-                .collect();
-            assert!(exceed_limits.is_empty());
-        }
-        _ => (),
+    let times: Vec<_> = (0..u_traj.len()).map(|i| i as f64 * dt).collect();
+
+    plotter::plot_states(&times, &x_traj, "/tmp/plot1.png").unwrap();
+    plotter::plot_states(&times, &u_traj, "/tmp/plot2.png").unwrap();
+
+    plotter::display("/tmp/plot1.png").unwrap();
+    plotter::display("/tmp/plot2.png").unwrap();
+}
+
+#[macroquad::main("Physics Quadrotor")]
+async fn main() {
+    let u_limits = (-0.3, 0.3);
+    let controller_type = vec![
+        //
+        //ControllerType::QpLqr,
+        //ControllerType::QpLqrUlimits(u_limits.0, u_limits.1),
+        //ControllerType::RiccatiRecursionLQRFinite,
+        //ControllerType::RiccatiRecursionLQRInfinite,
+        //ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(u_limits.0, u_limits.1, 10.0, 0.1),
+        //ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(
+        //u_limits.0, u_limits.1, 10.0, 0.1,
+        //),
+        ControllerType::Mpc,
+        ControllerType::MpcULimitsAndNoise(u_limits.0, u_limits.1, 0.0, 0.0),
+    ];
+    env_logger::init();
+
+    for controller in controller_type {
+        println!("Controller: {:?}", controller);
+        build_sim(controller).await;
+        println!("Press Enter to continue...");
+        let _ = io::stdout().flush();
+        let _ = io::stdin().read_line(&mut String::new());
     }
-}
-
-#[test]
-#[should_panic]
-fn test_qp_lqr_symbolic() {
-    symbolic_controller_setup(ControllerType::QpLqr);
-}
-
-#[test]
-#[should_panic]
-fn test_qp_lqr_limits_symbolic() {
-    symbolic_controller_setup(ControllerType::QpLqrUlimits(
-        0.2 * c::GRAVITY,
-        0.6 * c::GRAVITY,
-    ));
-}
-
-#[test]
-fn test_ricatti_finite_symbolic() {
-    symbolic_controller_setup(ControllerType::RiccatiRecursionLQRFinite);
-}
-
-#[test]
-fn test_ricatti_infinite_symbolic() {
-    symbolic_controller_setup(ControllerType::RiccatiRecursionLQRInfinite);
-}
-
-#[test]
-fn test_ricatti_finite_limits_symbolic() {
-    symbolic_controller_setup(ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(
-        0.2 * c::GRAVITY,
-        0.6 * c::GRAVITY,
-        0.0,
-        0.0,
-    ));
-}
-
-#[test]
-fn test_ricatti_infinite_limits_symbolic() {
-    symbolic_controller_setup(ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(
-        0.2 * c::GRAVITY,
-        0.6 * c::GRAVITY,
-        0.0,
-        0.0,
-    ));
-}
-
-#[test]
-fn test_mpc_symbolic() {
-    symbolic_controller_setup(ControllerType::Mpc);
-}
-
-#[test]
-fn test_mpc_limits_symbolic() {
-    symbolic_controller_setup(ControllerType::MpcULimitsAndNoise(
-        0.2 * c::GRAVITY,
-        0.6 * c::GRAVITY,
-        0.0,
-        0.0,
-    ));
-}
-
-#[test]
-fn test_mpc_uxlimits_symbolic() {
-    symbolic_controller_setup(ControllerType::MpcUXLimitsAndNoise(
-        0.2 * c::GRAVITY,
-        0.6 * c::GRAVITY,
-        -0.2,
-        0.2,
-        2,
-        0.0,
-        0.0,
-    ));
 }

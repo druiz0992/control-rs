@@ -3,8 +3,8 @@ use nalgebra::{DMatrix, DVector};
 use super::options::QPOptions;
 use super::utils;
 use crate::controllers::{
-    Controller, ControllerInput, ControllerState, CostFn, SteppableController, TrajectoryHistory,
-    UpdatableController,
+    Controller, ControllerInput, ControllerOptions, ControllerState, CostFn, SteppableController,
+    TrajectoryHistory, UpdatableController,
 };
 use crate::physics::ModelError;
 use crate::physics::models::Dynamics;
@@ -12,6 +12,7 @@ use crate::physics::traits::{Discretizer, PhysicsSim, State};
 use crate::solver::osqp::builder::QPParams;
 use crate::solver::osqp::solver::OSQPSolverHandle;
 use crate::solver::{Minimizer, OSQPBuilder};
+use crate::utils::Labelizable;
 use crate::utils::evaluable::EvaluableDMatrix;
 use crate::utils::{matrix, vector};
 
@@ -50,8 +51,10 @@ where
             as usize
             + 1;
 
-        let vals = options.general.concatenate_operating_point();
+        let new_general_options = options.get_general().clone().extend_x_and_u();
+        let options = options.set_general(new_general_options);
 
+        let vals = options.general.concatenate_operating_point(0)?;
         let control_mat = jacobian_u_fn.evaluate(&vals)?;
         let state_mat = jacobian_x_fn.evaluate(&vals)?;
 

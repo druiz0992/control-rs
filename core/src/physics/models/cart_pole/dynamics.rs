@@ -123,7 +123,7 @@ impl SymbolicDynamics for CartPole {
         let pendulum_damping = air_resistance_coeff
             .scalef(-1.0)
             .mul(&omega_sq)
-            .mul(&omega.smooth_sign(1e-6));
+            .mul(&omega.smooth_sign(1e-20));
 
         // Common terms
         let sin_theta = theta.sin();
@@ -207,9 +207,9 @@ mod tests {
             omega in -5.0..5.0,
             pole_mass in 0.1f64..10.0,
             cart_mass in 0.1f64..10.0,
+            l in 0.1f64..5.0,
             friction_coeff in 0.0f64..5.0,
             air_resistance_coeff in 0.0f64..5.0,
-            l in 0.1f64..5.0,
         ) {
             let registry = Arc::new(ExprRegistry::new());
             registry.insert_var("pos_x", pos_x);

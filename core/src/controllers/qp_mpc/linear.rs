@@ -51,7 +51,7 @@ where
             "Expected non empty R matrix".into(),
         ))?;
 
-        let vals = options.general.concatenate_operating_point();
+        let vals = options.general.concatenate_operating_point(0)?;
         let a_mat = jacobian_x.evaluate(&vals)?;
         let b_mat = jacobian_u.evaluate(&vals)?;
 
@@ -71,11 +71,8 @@ where
         let (qp_controller, updatable_qp_params) =
             QPLQR::new(sim, cost_fn, state_0, Some(qp_options))?;
 
-        let controller = ConvexMpcGeneric::new(
-            qp_controller,
-            updatable_qp_params.try_into()?,
-            options,
-        )?;
+        let controller =
+            ConvexMpcGeneric::new(qp_controller, updatable_qp_params.try_into()?, options)?;
 
         Ok(ConvexMpc(controller))
     }

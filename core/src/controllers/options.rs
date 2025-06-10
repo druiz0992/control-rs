@@ -28,8 +28,8 @@ pub struct ControllerOptions<S: PhysicsSim> {
     dt: f64,
 
     /// Operating points => linearization points
-    u_op: ControllerInput<S>,
-    x_op: ControllerState<S>,
+    u_op: Vec<ControllerInput<S>>,
+    x_op: Vec<ControllerState<S>>,
 
     /// Estimated params => real model params are those
     /// used to carry out physics. Estimated params are those
@@ -70,8 +70,8 @@ impl<S: PhysicsSim> Default for ControllerOptions<S> {
             dt: DEFAULT_DT,
             time_horizon: DEFAULT_TIME_HORIZON,
 
-            u_op: ControllerInput::<S>::default(),
-            x_op: ControllerState::<S>::default(),
+            u_op: vec![ControllerInput::<S>::default(); 1],
+            x_op: vec![ControllerState::<S>::default(); 1],
 
             estimated_params: None,
 
@@ -86,11 +86,30 @@ impl<S> ControllerOptions<S>
 where
     S: PhysicsSim,
 {
-    pub fn get_u_operating(&self) -> &ControllerInput<S> {
+    pub fn extend_x_and_u(&self) -> Self {
+        let mut new = self.clone();
+        let n_steps = (self.time_horizon / self.dt) as usize;
+
+        if self.u_op.len() == 1 {
+            new.u_op = vec![self.u_op[0].clone(); n_steps];
+        }
+        if self.x_op.len() == 1 {
+            new.x_op = vec![self.x_op[0].clone(); n_steps + 1];
+        }
+        if self.u_ref.len() == 1 {
+            new.u_ref = vec![self.u_ref[0].clone(); n_steps];
+        }
+        if self.x_ref.len() == 1 {
+            new.x_ref = vec![self.x_ref[0].clone(); n_steps + 1];
+        }
+
+        new
+    }
+    pub fn get_u_operating(&self) -> &[ControllerInput<S>] {
         &self.u_op
     }
 
-    pub fn get_x_operating(&self) -> &ControllerState<S> {
+    pub fn get_x_operating(&self) -> &[ControllerState<S>] {
         &self.x_op
     }
 
@@ -121,22 +140,26 @@ where
         self.estimated_params.as_ref()
     }
 
-    pub fn concatenate_operating_point(&self) -> Vec<f64> {
-        let mut vals = self.get_x_operating().to_vec();
-        vals.extend(self.get_u_operating().to_vec());
-
-        vals
+    pub fn concatenate_operating_point(&self, k: usize) -> Result<Vec<f64>, ModelError> {
+        if let (Some(x_op), Some(u_op)) =
+            (self.get_x_operating().get(k), self.get_u_operating().get(k))
+        {
+            let mut vals = x_op.to_vec();
+            vals.extend(u_op.to_vec());
+            return Ok(vals);
+        }
+        Err(ModelError::Other("Operating point not found.".into()))
     }
 
-    pub fn set_u_operating(self, u_op: &ControllerInput<S>) -> Self {
+    pub fn set_u_operating(self, u_op: &[ControllerInput<S>]) -> Self {
         let mut new = self;
-        new.u_op = u_op.clone();
+        new.u_op = u_op.to_owned();
         new
     }
 
-    pub fn set_x_operating(self, x_op: &ControllerState<S>) -> Self {
+    pub fn set_x_operating(self, x_op: &[ControllerState<S>]) -> Self {
         let mut new = self;
-        new.x_op = x_op.clone();
+        new.x_op = x_op.to_owned();
         new
     }
 
