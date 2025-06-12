@@ -1,4 +1,3 @@
-
 pub fn unzip3<A, B, C>(v: Vec<(A, B, C)>) -> (Vec<A>, Vec<B>, Vec<C>) {
     let mut a = Vec::with_capacity(v.len());
     let mut b = Vec::with_capacity(v.len());
@@ -13,13 +12,21 @@ pub fn unzip3<A, B, C>(v: Vec<(A, B, C)>) -> (Vec<A>, Vec<B>, Vec<C>) {
     (a, b, c)
 }
 
-
 pub fn within_tolerance(param1: f64, param2: f64, tol: f64) -> bool {
     let diff = (param1 - param2).abs();
     let scale = param1.abs().max(param2.abs());
 
     diff <= tol * scale.max(1.0)
 }
+
+pub fn get_or_first<T>(vec: &[T], index: usize) -> &T {
+    if index < vec.len() {
+        &vec[index]
+    } else {
+        &vec[0]
+    }
+}
+
 
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize, de};
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DerivativeType {

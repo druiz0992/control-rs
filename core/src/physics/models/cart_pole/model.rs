@@ -1,5 +1,5 @@
 use super::state::CartPoleState;
-use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
+use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
 use crate::physics::constants as c;
 use crate::utils::Labelizable;
 use macros::LabelOps;
@@ -19,9 +19,9 @@ impl CartPole {
     pub fn new(
         pole_mass: f64,
         cart_mass: f64,
+        l: f64,
         friction_coeff: f64,
         air_resistance_coeff: f64,
-        l: f64,
         registry: Option<&Arc<ExprRegistry>>,
     ) -> Self {
         let model = CartPole {
@@ -67,9 +67,9 @@ mod tests {
         let cart_pole = CartPole::new(
             pole_mass,
             cart_mass,
+            l,
             friction_coeff,
             air_resistance_coeff,
-            l,
             None,
         );
 
@@ -105,9 +105,9 @@ mod tests {
         let cart_pole = CartPole::new(
             pole_mass,
             cart_mass,
+            l,
             friction_coeff,
             air_resistance_coeff,
-            l,
             Some(&registry),
         );
 
@@ -143,7 +143,7 @@ mod tests {
 
     #[test]
     fn test_cart_pole_parameters() {
-        let cart_pole = CartPole::new(1.0, 2.0, 0.0, 0.0, 0.5, None);
+        let cart_pole = CartPole::new(1.0, 2.0, 0.5, 0.0, 0.0, None);
 
         let [
             pole_mass,

@@ -10,7 +10,7 @@ pub mod utils;
 pub use constraints::ConstraintTransform;
 pub use indirect_shooting::lqr::IndirectShootingLQR;
 pub use indirect_shooting::symbolic::IndirectShootingSymbolic;
-use nalgebra::DVector;
+use nalgebra::{DMatrix, DVector};
 pub use options::ControllerOptions;
 pub use qp_lqr::lqr::QPLQR;
 pub use riccati_lqr::lqr::RiccatiRecursionLQR;
@@ -36,7 +36,12 @@ pub trait Controller<S: PhysicsSim> {
 pub trait UpdatableController<S: PhysicsSim>: Controller<S> {
     type Params<'a>;
 
-    fn update_q(&self, state_ref: &DVector<f64>, q: &mut DVector<f64>);
+    fn update_q(&self, state_ref: &[DVector<f64>], q: &mut DVector<f64>);
+    fn update_a(
+        &mut self,
+        a_mat: &mut DMatrix<f64>,
+        general_params: &ControllerOptions<S>,
+    ) -> Result<(), ModelError>;
     fn update_bounds(&self, state: &DVector<f64>, lb: &mut DVector<f64>, ub: &mut DVector<f64>);
     fn update(&self, params: Self::Params<'_>);
 }
@@ -67,8 +72,7 @@ fn into_clamped_input<S: PhysicsSim>(
 fn try_into_noisy_state<S: PhysicsSim>(
     vector: DVector<f64>,
     noise_sources: &NoiseSources,
-    idx: usize,
 ) -> Result<ControllerState<S>, ModelError> {
-    let current_state = noise_sources.add_noise(idx, vector)?;
+    let current_state = noise_sources.add_noise(vector)?;
     Ok(state_from_slice::<S>(current_state.as_slice()))
 }

@@ -72,7 +72,7 @@ where
     fn discretizer(&self) -> &Self::Discretizer {
         &self.discretizer
     }
-    
+
     fn update_model(&mut self, params: &[f64]) -> Result<(), ModelError> {
         self.model.update(params, self.registry.as_ref())
     }

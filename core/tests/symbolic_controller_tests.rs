@@ -19,11 +19,11 @@ enum ControllerType {
     QpLqrUlimits(f64, f64),
     RiccatiRecursionLQRFinite,
     RiccatiRecursionLQRInfinite,
-    RiccatiRecursionLQRFiniteULimitsAndNoise(f64, f64, f64, f64),
-    RiccatiRecursionLQRInfiniteULimitsAndNoise(f64, f64, f64, f64),
+    RiccatiRecursionLQRFiniteULimitsAndNoise(f64, f64, Vec<f64>),
+    RiccatiRecursionLQRInfiniteULimitsAndNoise(f64, f64, Vec<f64>),
     Mpc,
-    MpcULimitsAndNoise(f64, f64, f64, f64),
-    MpcUXLimitsAndNoise(f64, f64, f64, f64, usize, f64, f64),
+    MpcULimitsAndNoise(f64, f64, Vec<f64>),
+    MpcUXLimitsAndNoise(f64, f64, f64, f64, usize, Vec<f64>),
 }
 
 type Sim<M> = BasicSim<M, RK4Symbolic<M>>;
@@ -75,7 +75,7 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
         .set_time_horizon(sim_time)
         .unwrap();
 
-    let mut controller: SymbolicController<Quadrotor2D> = match controller_type {
+    let mut controller: SymbolicController<Quadrotor2D> = match &controller_type {
         ControllerType::QpLqr => {
             let osqp_settings = Settings::default()
                 .verbose(false)
@@ -121,23 +121,23 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
                 RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), Some(options)).unwrap(),
             )
         }
-        ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(lower, upper, std_0, std_n) => {
+        ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(lower, upper, std) => {
             let constraints =
-                ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((lower, upper));
+                ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((*lower, *upper));
             let general_options = general_options
                 .set_u_limits(constraints)
-                .set_noise((std_0, std_n));
+                .set_noise(std.clone());
             let options = RiccatiLQROptions::enable_finite_horizon().set_general(general_options);
             Box::new(
                 RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), Some(options)).unwrap(),
             )
         }
-        ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(lower, upper, std_0, std_n) => {
+        ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(lower, upper, std) => {
             let constraints =
-                ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((lower, upper));
+                ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((*lower, *upper));
             let general_options = general_options
                 .set_u_limits(constraints)
-                .set_noise((std_0, std_n));
+                .set_noise(std.clone());
             let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
             Box::new(
                 RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), Some(options)).unwrap(),
@@ -150,13 +150,14 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
                 .eps_rel(1e-8);
             let options = ConvexMpcOptions::default()
                 .set_general(general_options)
-                .set_osqp_settings(osqp_settings);
+                .set_osqp_settings(osqp_settings)
+                .set_apply_steady_state_cost(true);
             Box::new(
                 ConvexMpcSymbolic::new(sim, Box::new(cost.clone()), &state_0, Some(options))
                     .unwrap(),
             )
         }
-        ControllerType::MpcULimitsAndNoise(lower, upper, std_0, std_n) => {
+        ControllerType::MpcULimitsAndNoise(lower, upper, std) => {
             let [hover] = input_hover.extract(&["u1"]);
             let constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((
                 lower - hover,
@@ -164,28 +165,21 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
             ));
             let general_options = general_options
                 .set_u_limits(constraints)
-                .set_noise((std_0, std_n));
+                .set_noise(std.clone());
             let osqp_settings = Settings::default()
                 .verbose(false)
                 .eps_abs(1e-8)
                 .eps_rel(1e-8);
             let options = ConvexMpcOptions::default()
                 .set_general(general_options)
-                .set_osqp_settings(osqp_settings);
+                .set_osqp_settings(osqp_settings)
+                .set_apply_steady_state_cost(true);
             Box::new(
                 ConvexMpcSymbolic::new(sim, Box::new(cost.clone()), &state_0, Some(options))
                     .unwrap(),
             )
         }
-        ControllerType::MpcUXLimitsAndNoise(
-            lower_u,
-            upper_u,
-            lower_x,
-            upper_x,
-            idx,
-            std_0,
-            std_n,
-        ) => {
+        ControllerType::MpcUXLimitsAndNoise(lower_u, upper_u, lower_x, upper_x, idx, std) => {
             let [hover] = input_hover.extract(&["u1"]);
             let input_constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>(
                 (lower_u - hover, upper_u - hover),
@@ -193,21 +187,22 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
 
             let state_constraints =
                 ConstraintTransform::new_single_bound_state::<Sim<Quadrotor2D>>(
-                    (lower_x, upper_x),
-                    idx,
+                    (*lower_x, *upper_x),
+                    *idx,
                 )
                 .unwrap();
             let general_options = general_options
                 .set_u_limits(input_constraints)
                 .set_x_limits(state_constraints)
-                .set_noise((std_0, std_n));
+                .set_noise(std.clone());
             let osqp_settings = Settings::default()
                 .verbose(false)
                 .eps_abs(1e-8)
                 .eps_rel(1e-8);
             let options = ConvexMpcOptions::default()
                 .set_general(general_options)
-                .set_osqp_settings(osqp_settings);
+                .set_osqp_settings(osqp_settings)
+                .set_apply_steady_state_cost(true);
             Box::new(
                 ConvexMpcSymbolic::new(sim, Box::new(cost.clone()), &state_0, Some(options))
                     .unwrap(),
@@ -233,16 +228,16 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
 
     match controller_type {
         ControllerType::QpLqrUlimits(lower, upper)
-        | ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(lower, upper, _, _)
-        | ControllerType::MpcULimitsAndNoise(lower, upper, _, _)
-        | ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(lower, upper, _, _) => {
+        | ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(lower, upper, _)
+        | ControllerType::MpcULimitsAndNoise(lower, upper, _)
+        | ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(lower, upper, _) => {
             let exceed_limits: Vec<_> = u_traj
                 .iter()
                 .filter(|u| u.to_vec()[0] < lower - tol || u.to_vec()[0] > upper + tol)
                 .collect();
             assert!(exceed_limits.is_empty());
         }
-        ControllerType::MpcUXLimitsAndNoise(_, _, lower, upper, idx, _, _) => {
+        ControllerType::MpcUXLimitsAndNoise(_, _, lower, upper, idx, _) => {
             let exceed_limits: Vec<_> = x_traj
                 .iter()
                 .filter(|x| x.to_vec()[idx] < lower - tol || x.to_vec()[idx] > upper + tol)
@@ -283,8 +278,7 @@ fn test_ricatti_finite_limits_symbolic() {
     symbolic_controller_setup(ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(
         0.2 * c::GRAVITY,
         0.6 * c::GRAVITY,
-        0.0,
-        0.0,
+        vec![0.0; 6],
     ));
 }
 
@@ -293,8 +287,7 @@ fn test_ricatti_infinite_limits_symbolic() {
     symbolic_controller_setup(ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(
         0.2 * c::GRAVITY,
         0.6 * c::GRAVITY,
-        0.0,
-        0.0,
+        vec![0.0; 6],
     ));
 }
 
@@ -308,8 +301,7 @@ fn test_mpc_limits_symbolic() {
     symbolic_controller_setup(ControllerType::MpcULimitsAndNoise(
         0.2 * c::GRAVITY,
         0.6 * c::GRAVITY,
-        0.0,
-        0.0,
+        vec![0.0; 6],
     ));
 }
 
@@ -321,7 +313,6 @@ fn test_mpc_uxlimits_symbolic() {
         -0.2,
         0.2,
         2,
-        0.0,
-        0.0,
+        vec![0.0; 6],
     ));
 }

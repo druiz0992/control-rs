@@ -13,6 +13,10 @@ use std::process::{Command, Stdio};
 const PYTHON_SCRIPT_PATH: &str = "src/numeric_services/differentiation/sympy_engine/backend.py";
 const PYTHON_INTERPRETER: &str = "python3";
 
+type GradientChunk = Vec<String>;
+type JacobianChunk = Vec<Vec<String>>;
+type HessianChunk = Vec<Vec<String>>;
+
 /// The `Sympy` struct provides an implementation of the `DerivativeEngine` trait
 /// for computing derivatives using a Python backend powered by the SymPy library.
 #[derive(Debug, Default)]
@@ -36,7 +40,7 @@ impl Sympy {
         &self,
         req: &DerivativeRequest,
         pairs: &[(&String, &String)],
-    ) -> Result<Vec<(Vec<String>, Vec<Vec<String>>, Vec<Vec<String>>)>, DerivativeError> {
+    ) -> Result<Vec<(GradientChunk, JacobianChunk, HessianChunk)>, DerivativeError> {
         pairs
             .par_iter()
             .map(|(function, variable)| {
@@ -96,12 +100,8 @@ impl Sympy {
 }
 
 fn separate_chunks(
-    chunks: Vec<(Vec<String>, Vec<Vec<String>>, Vec<Vec<String>>)>,
-) -> (
-    Vec<Vec<String>>,
-    Vec<Vec<Vec<String>>>,
-    Vec<Vec<Vec<String>>>,
-) {
+    chunks: Vec<(GradientChunk, JacobianChunk, HessianChunk)>,
+) -> (Vec<GradientChunk>, Vec<JacobianChunk>, Vec<HessianChunk>) {
     let (gradient_chunks, jacobian_chunks, hessian_chunks): (Vec<_>, Vec<_>, Vec<_>) =
         chunks.into_iter().fold(
             (Vec::new(), Vec::new(), Vec::new()),

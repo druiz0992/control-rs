@@ -1,6 +1,6 @@
 use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
+use crate::physics::constants as c;
 use crate::physics::models::DoublePendulumState;
-use crate::physics::{ModelError, constants as c};
 use crate::utils::Labelizable;
 use macros::LabelOps;
 use serde::{Deserialize, Serialize};

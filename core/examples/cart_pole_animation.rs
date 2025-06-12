@@ -20,7 +20,7 @@ async fn main() {
     let theta = PI / 1.8;
     let omega = 0.0;
 
-    let model = CartPole::new(m, cart_mass, friction_coeff, air_resistance_coeff, l, None);
+    let model = CartPole::new(m, cart_mass, l, friction_coeff, air_resistance_coeff, None);
     let state0 = CartPoleState::new(pos_x, v_x, theta, omega);
 
     let integrator = RK4::<CartPole>::new(&model).unwrap();

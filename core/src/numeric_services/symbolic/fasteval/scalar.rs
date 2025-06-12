@@ -5,7 +5,7 @@ use crate::numeric_services::symbolic::dtos::{ExprRecord, SymbolicEvalResult, Sy
 use crate::numeric_services::symbolic::error::SymbolicError;
 use crate::numeric_services::symbolic::fasteval::{ExprMatrix, ExprVector};
 use crate::numeric_services::symbolic::ports::{SymbolicExpr, SymbolicRegistry};
-use fasteval::parser::{DEFAULT_EXPR_DEPTH_LIMIT, DEFAULT_EXPR_LEN_LIMIT, ExpressionOrString};
+use fasteval::parser::{DEFAULT_EXPR_DEPTH_LIMIT, DEFAULT_EXPR_LEN_LIMIT};
 use fasteval::{Compiler, Error, Evaler, Instruction, Parser, Slab};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -192,8 +192,7 @@ impl ExprScalar {
     pub fn smooth_sign(&self, eps: f64) -> Self {
         let eps_expr = ExprScalar::new(eps.to_string());
         let denom = self.pow(2.0).add(&eps_expr).pow(0.5);
-        let result = self.div(&denom.wrap()).wrap();
-        result
+        self.div(&denom.wrap()).wrap()
     }
 
     pub fn gradient(&self, vars: &ExprVector) -> Result<ExprVector, SymbolicError> {

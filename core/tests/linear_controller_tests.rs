@@ -21,7 +21,7 @@ enum LinearControllerType {
     RiccatiRecursionLQRFinite,
     RiccatiRecursionLQRInfinite,
     MpcLinear,
-    MpcLinearULimitsAndNoise(f64, f64, f64, f64),
+    MpcLinearULimitsAndNoise(f64, f64, Vec<f64>),
 }
 
 type LtiSim = BasicSim<LtiModel<2, 0, 1>, ZOH<LtiModel<2, 0, 1>>>;
@@ -55,7 +55,7 @@ fn linear_controller_setup(controller_type: LinearControllerType) {
         .unwrap()
         .set_time_horizon(sim_time)
         .unwrap();
-    let mut controller: LinearContoller = match controller_type {
+    let mut controller: LinearContoller = match &controller_type {
         LinearControllerType::IndirectShootingLqr => Box::new(
             IndirectShootingLQR::new(sim, Box::new(cost.clone()), Some(general_options)).unwrap(),
         ),
@@ -75,7 +75,7 @@ fn linear_controller_setup(controller_type: LinearControllerType) {
         }
         LinearControllerType::QpLqrUlimits(lower, upper) => {
             let contraints =
-                ConstraintTransform::new_uniform_bounds_input::<LtiSim>((lower, upper));
+                ConstraintTransform::new_uniform_bounds_input::<LtiSim>((*lower, *upper));
             let general_options = general_options.set_u_limits(contraints);
             let osqp_settings = Settings::default().verbose(false);
             let qp_options = QPOptions::<LtiSim>::default()
@@ -103,21 +103,23 @@ fn linear_controller_setup(controller_type: LinearControllerType) {
             let osqp_settings = Settings::default().verbose(false).eps_abs(1e-7);
             let options = ConvexMpcOptions::default()
                 .set_general(general_options)
-                .set_osqp_settings(osqp_settings);
+                .set_osqp_settings(osqp_settings)
+                .set_apply_steady_state_cost(true);
             Box::new(
                 ConvexMpc::new(sim, Box::new(cost.clone()), &initial_state, Some(options)).unwrap(),
             )
         }
-        LinearControllerType::MpcLinearULimitsAndNoise(lower, upper, std_0, std_n) => {
+        LinearControllerType::MpcLinearULimitsAndNoise(lower, upper, std) => {
             let constraints =
-                ConstraintTransform::new_uniform_bounds_input::<LtiSim>((lower, upper));
+                ConstraintTransform::new_uniform_bounds_input::<LtiSim>((*lower, *upper));
             let general_options = general_options
                 .set_u_limits(constraints)
-                .set_noise((std_0, std_n));
+                .set_noise(std.clone());
             let osqp_settings = Settings::default().verbose(false).eps_abs(1e-7);
             let options = ConvexMpcOptions::default()
                 .set_general(general_options)
-                .set_osqp_settings(osqp_settings);
+                .set_osqp_settings(osqp_settings)
+                .set_apply_steady_state_cost(true);
             Box::new(
                 ConvexMpc::new(sim, Box::new(cost.clone()), &initial_state, Some(options)).unwrap(),
             )
@@ -182,6 +184,8 @@ fn test_mpc_linear() {
 #[test]
 fn test_mpc_noise_linear() {
     linear_controller_setup(LinearControllerType::MpcLinearULimitsAndNoise(
-        -0.5, 0.5, 0.0, 0.0,
+        -0.5,
+        0.5,
+        vec![0.0, 0.0],
     ));
 }

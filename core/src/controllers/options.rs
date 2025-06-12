@@ -37,7 +37,7 @@ pub struct ControllerOptions<S: PhysicsSim> {
     estimated_params: Option<Vec<f64>>,
 
     /// closed loop options
-    noise: Option<(f64, f64)>,
+    noise: Option<Vec<f64>>,
     u_limits: Option<ConstraintTransform>,
     x_limits: Option<ConstraintTransform>,
 }
@@ -55,7 +55,7 @@ impl<S: PhysicsSim> Clone for ControllerOptions<S> {
 
             estimated_params: self.estimated_params.clone(),
 
-            noise: self.noise,
+            noise: self.noise.clone(),
             u_limits: self.u_limits.clone(),
             x_limits: self.x_limits.clone(),
         }
@@ -64,6 +64,7 @@ impl<S: PhysicsSim> Clone for ControllerOptions<S> {
 
 impl<S: PhysicsSim> Default for ControllerOptions<S> {
     fn default() -> Self {
+        let state_dims = ControllerState::<S>::dim_q() + ControllerState::<S>::dim_v();
         Self {
             x_ref: vec![ControllerState::<S>::default(); 1],
             u_ref: vec![ControllerInput::<S>::default(); 1],
@@ -75,7 +76,7 @@ impl<S: PhysicsSim> Default for ControllerOptions<S> {
 
             estimated_params: None,
 
-            noise: None,
+            noise: Some(vec![0.0; state_dims]),
             u_limits: None,
             x_limits: None,
         }
@@ -86,25 +87,6 @@ impl<S> ControllerOptions<S>
 where
     S: PhysicsSim,
 {
-    pub fn extend_x_and_u(&self) -> Self {
-        let mut new = self.clone();
-        let n_steps = (self.time_horizon / self.dt) as usize;
-
-        if self.u_op.len() == 1 {
-            new.u_op = vec![self.u_op[0].clone(); n_steps];
-        }
-        if self.x_op.len() == 1 {
-            new.x_op = vec![self.x_op[0].clone(); n_steps + 1];
-        }
-        if self.u_ref.len() == 1 {
-            new.u_ref = vec![self.u_ref[0].clone(); n_steps];
-        }
-        if self.x_ref.len() == 1 {
-            new.x_ref = vec![self.x_ref[0].clone(); n_steps + 1];
-        }
-
-        new
-    }
     pub fn get_u_operating(&self) -> &[ControllerInput<S>] {
         &self.u_op
     }
@@ -120,8 +102,8 @@ where
         &self.u_ref
     }
 
-    pub fn get_noise(&self) -> Option<(f64, f64)> {
-        self.noise
+    pub fn get_noise(&self) -> Option<Vec<f64>> {
+        self.noise.clone()
     }
 
     pub fn get_u_limits(&self) -> Option<&ConstraintTransform> {
@@ -175,7 +157,7 @@ where
         new
     }
 
-    pub fn set_noise(self, noise: (f64, f64)) -> Self {
+    pub fn set_noise(self, noise: Vec<f64>) -> Self {
         let mut new = self;
         new.noise = Some(noise);
         new

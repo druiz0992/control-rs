@@ -123,7 +123,7 @@ impl SymbolicDynamics for CartPole {
         let pendulum_damping = air_resistance_coeff
             .scalef(-1.0)
             .mul(&omega_sq)
-            .mul(&omega.smooth_sign(1e-20));
+            .mul(&omega.smooth_sign(1e-10).wrap());
 
         // Common terms
         let sin_theta = theta.sin();
@@ -177,7 +177,7 @@ mod tests {
 
     #[test]
     fn test_dynamics() {
-        let cart_pole = CartPole::new(1.0, 2.0, 0.0, 0.0, 1.0, None);
+        let cart_pole = CartPole::new(1.0, 2.0, 1.0, 0.0, 1.0, None);
         let state = CartPoleState::new(0.0, 0.0, 0.0, 0.0);
 
         let new_state = cart_pole.dynamics(&state, None);

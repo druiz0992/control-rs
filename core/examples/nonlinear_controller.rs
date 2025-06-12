@@ -22,11 +22,11 @@ enum ControllerType {
     QpLqrUlimits(f64, f64),
     RiccatiRecursionLQRFinite,
     RiccatiRecursionLQRInfinite,
-    RiccatiRecursionLQRFiniteULimitsAndNoise(f64, f64, f64, f64),
-    RiccatiRecursionLQRInfiniteULimitsAndNoise(f64, f64, f64, f64),
+    RiccatiRecursionLQRFiniteULimitsAndNoise(f64, f64, Vec<f64>),
+    RiccatiRecursionLQRInfiniteULimitsAndNoise(f64, f64, Vec<f64>),
     Mpc,
-    MpcULimitsAndNoise(f64, f64, f64, f64),
-    MpcUXLimitsAndNoise(f64, f64, f64, f64, f64, f64),
+    MpcULimitsAndNoise(f64, f64, Vec<f64>),
+    MpcUXLimitsAndNoise(f64, f64, f64, f64, Vec<f64>),
 }
 
 // Example iterates over all implemented linear controllers
@@ -125,23 +125,19 @@ async fn build_sim(controller_type: ControllerType) {
                 RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), Some(options)).unwrap(),
             )
         }
-        ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(lower, upper, std_0, std_n) => {
+        ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(lower, upper, std) => {
             let constraints =
                 ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((lower, upper));
-            let general_options = general_options
-                .set_u_limits(constraints)
-                .set_noise((std_0, std_n));
+            let general_options = general_options.set_u_limits(constraints).set_noise(std);
             let options = RiccatiLQROptions::enable_finite_horizon().set_general(general_options);
             Box::new(
                 RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), Some(options)).unwrap(),
             )
         }
-        ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(lower, upper, std_0, std_n) => {
+        ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(lower, upper, std) => {
             let constraints =
                 ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((lower, upper));
-            let general_options = general_options
-                .set_u_limits(constraints)
-                .set_noise((std_0, std_n));
+            let general_options = general_options.set_u_limits(constraints).set_noise(std);
             let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
             Box::new(
                 RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), Some(options)).unwrap(),
@@ -160,7 +156,7 @@ async fn build_sim(controller_type: ControllerType) {
                     .unwrap(),
             )
         }
-        ControllerType::MpcULimitsAndNoise(lower, upper, std_0, std_n) => {
+        ControllerType::MpcULimitsAndNoise(lower, upper, std) => {
             let [hover] = input_hover.extract(&["u1"]);
             let input_constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>(
                 (lower - hover, upper - hover),
@@ -168,7 +164,7 @@ async fn build_sim(controller_type: ControllerType) {
 
             let general_options = general_options
                 .set_u_limits(input_constraints)
-                .set_noise((std_0, std_n));
+                .set_noise(std);
             let osqp_settings = Settings::default()
                 .verbose(false)
                 .eps_abs(1e-8)
@@ -181,7 +177,7 @@ async fn build_sim(controller_type: ControllerType) {
                     .unwrap(),
             )
         }
-        ControllerType::MpcUXLimitsAndNoise(lower_u, upper_u, lower_x, upper_x, std_0, std_n) => {
+        ControllerType::MpcUXLimitsAndNoise(lower_u, upper_u, lower_x, upper_x, std) => {
             let [hover] = input_hover.extract(&["u1"]);
             let input_constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>(
                 (lower_u - hover, upper_u - hover),
@@ -196,7 +192,7 @@ async fn build_sim(controller_type: ControllerType) {
             let general_options = general_options
                 .set_u_limits(input_constraints)
                 .set_x_limits(state_constraints)
-                .set_noise((std_0, std_n));
+                .set_noise(std);
             let osqp_settings = Settings::default()
                 .verbose(false)
                 .eps_abs(1e-8)
@@ -238,13 +234,19 @@ async fn main() {
         ControllerType::QpLqrUlimits(u_limits.0, u_limits.1),
         ControllerType::RiccatiRecursionLQRFinite,
         ControllerType::RiccatiRecursionLQRInfinite,
-        ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(u_limits.0, u_limits.1, 10.0, 0.1),
+        ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(
+            u_limits.0,
+            u_limits.1,
+            vec![0.1; 4],
+        ),
         ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(
-            u_limits.0, u_limits.1, 10.0, 0.1,
+            u_limits.0,
+            u_limits.1,
+            vec![0.1],
         ),
         ControllerType::Mpc,
-        ControllerType::MpcULimitsAndNoise(u_limits.0, u_limits.1, 0.0, 0.0),
-        ControllerType::MpcUXLimitsAndNoise(u_limits.0, u_limits.1, -0.2, 0.2, 0.0, 0.0),
+        ControllerType::MpcULimitsAndNoise(u_limits.0, u_limits.1, vec![0.0; 4]),
+        ControllerType::MpcUXLimitsAndNoise(u_limits.0, u_limits.1, -0.2, 0.2, vec![0.0; 4]),
     ];
     env_logger::init();
 

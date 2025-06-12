@@ -1,3 +1,5 @@
+use std::cmp::min;
+
 use nalgebra::{DMatrix, DVector};
 
 use super::options::QPOptions;
@@ -14,7 +16,46 @@ use crate::solver::osqp::solver::OSQPSolverHandle;
 use crate::solver::{Minimizer, OSQPBuilder};
 use crate::utils::Labelizable;
 use crate::utils::evaluable::EvaluableDMatrix;
+use crate::utils::helpers::get_or_first;
 use crate::utils::{matrix, vector};
+
+type LinearDynamicsEvaluation = (Vec<DMatrix<f64>>, Vec<DMatrix<f64>>);
+
+fn linearize<S>(
+    sim: &mut S,
+    jacobian_x_fn: &EvaluableDMatrix,
+    jacobian_u_fn: &EvaluableDMatrix,
+    n_steps: usize,
+    general_options: &ControllerOptions<S>,
+) -> Result<LinearDynamicsEvaluation, ModelError>
+where
+    S: PhysicsSim,
+    S::Model: Dynamics + Labelizable,
+    S::Discretizer: Discretizer<S::Model>,
+{
+    let n_op = min(general_options.get_u_operating().len(), n_steps - 1);
+    let mut a_mat: Vec<DMatrix<f64>> = Vec::with_capacity(n_op);
+    let mut b_mat: Vec<DMatrix<f64>> = Vec::with_capacity(n_op);
+
+    let mut real_params: Option<Vec<f64>> = None;
+    if let Some(estimated_params) = general_options.get_estimated_params() {
+        let labels = S::Model::labels();
+        real_params = Some(sim.model().vectorize(labels));
+        sim.update_model(estimated_params)?;
+    }
+
+    for k in 0..n_op {
+        let vals = general_options.concatenate_operating_point(k)?;
+        a_mat.push(jacobian_x_fn.evaluate(&vals)?);
+        b_mat.push(jacobian_u_fn.evaluate(&vals)?);
+    }
+
+    if let Some(real_params) = real_params {
+        sim.update_model(&real_params)?;
+    }
+
+    Ok((a_mat, b_mat))
+}
 
 pub struct QPLQRGeneric<S: PhysicsSim> {
     #[allow(dead_code)]
@@ -22,25 +63,26 @@ pub struct QPLQRGeneric<S: PhysicsSim> {
     solver: OSQPSolverHandle,
 
     n_steps: usize,
-    dt: f64,
-
     u_ref: Vec<ControllerInput<S>>,
-    x_ref: Vec<ControllerState<S>>,
 
-    control_mat: DMatrix<f64>,
-    state_mat: DMatrix<f64>,
+    state_mat: Vec<DMatrix<f64>>,
+
+    jacobian_x_fn: EvaluableDMatrix,
+    jacobian_u_fn: EvaluableDMatrix,
 
     cost_fn: CostFn<S>,
+
+    options: QPOptions<S>,
 }
 
 impl<S> QPLQRGeneric<S>
 where
     S: PhysicsSim,
-    S::Model: Dynamics,
+    S::Model: Dynamics + Labelizable,
     S::Discretizer: Discretizer<S::Model>,
 {
     pub fn new(
-        sim: S,
+        mut sim: S,
         cost_fn: CostFn<S>,
         jacobian_x_fn: EvaluableDMatrix,
         jacobian_u_fn: EvaluableDMatrix,
@@ -51,12 +93,13 @@ where
             as usize
             + 1;
 
-        let new_general_options = options.get_general().clone().extend_x_and_u();
-        let options = options.set_general(new_general_options);
-
-        let vals = options.general.concatenate_operating_point(0)?;
-        let control_mat = jacobian_u_fn.evaluate(&vals)?;
-        let state_mat = jacobian_x_fn.evaluate(&vals)?;
+        let (state_mat, control_mat) = linearize(
+            &mut sim,
+            &jacobian_x_fn,
+            &jacobian_u_fn,
+            n_steps,
+            options.get_general(),
+        )?;
 
         let state_dim = ControllerState::<S>::dim_q() + ControllerState::<S>::dim_v();
         let input_dim = ControllerInput::<S>::dim_q();
@@ -70,7 +113,7 @@ where
         let q = utils::build_q_vec::<S>(&cost_fn, &x_ref, n_steps - 1);
         // equality matrix => C * x = d
         let mut c = utils::build_c(&state_mat, &control_mat, n_steps - 1);
-        let mut lb_vec = utils::build_d(x0.to_vector(), &state_mat, c.nrows());
+        let mut lb_vec = utils::build_d(x0.to_vector(), &state_mat[0].clone(), c.nrows());
         let mut ub_vec = lb_vec.clone();
 
         // inequality input matrix => lb <= g * input <= ub; c = [c; g]
@@ -107,11 +150,11 @@ where
                 solver,
                 n_steps,
                 u_ref,
-                x_ref,
-                dt: options.get_general().get_dt(),
-                state_mat,   // A
-                control_mat, // B
-                cost_fn,     // can get Q, Qn, R
+                state_mat, // A
+                cost_fn,   // can get Q, Qn, R
+                jacobian_u_fn,
+                jacobian_x_fn,
+                options,
             },
             updatable_qp_params,
         ))
@@ -122,7 +165,10 @@ where
     }
 }
 
-impl<S: PhysicsSim> UpdatableController<S> for QPLQRGeneric<S> {
+impl<S: PhysicsSim> UpdatableController<S> for QPLQRGeneric<S>
+where
+    S::Model: Dynamics + Labelizable,
+{
     type Params<'a> = OSQPBuilder<'a>;
 
     fn update(&self, params: Self::Params<'_>) {
@@ -136,31 +182,53 @@ impl<S: PhysicsSim> UpdatableController<S> for QPLQRGeneric<S> {
         ub: &mut DVector<f64>,
     ) {
         // update vector d[0] to -A * x0; => lb <= Az <= ub;
-        let a_x = -&self.state_mat * current_state;
+        let a_x = -&self.state_mat[0] * current_state;
         lb.rows_mut(0, current_state.len()).copy_from(&a_x);
         ub.rows_mut(0, current_state.len()).copy_from(&a_x);
     }
 
-    fn update_q(&self, state_ref: &DVector<f64>, q: &mut DVector<f64>) {
+    fn update_q(&self, state_ref: &[DVector<f64>], q: &mut DVector<f64>) {
         let n_steps = self.n_steps;
-        let state_dims = state_ref.len();
+        let state_dims = state_ref[0].len();
         let input_dims = ControllerInput::<S>::dim_q();
 
         if let (Some(running_cost), Some(terminal_cost)) =
             (self.cost_fn.get_q(), self.cost_fn.get_qn())
         {
-            let q_x = -running_cost * state_ref;
-            let qn_x = -terminal_cost * state_ref;
+            let default_q_x = -running_cost * &state_ref[0];
+            let qn_x = -terminal_cost * state_ref.last().unwrap();
 
             for j in 0..n_steps - 2 {
                 let offset = input_dims + j * (state_dims + input_dims);
-                q.rows_mut(offset, state_dims).copy_from(&q_x);
+                let q_x = if state_ref.is_empty() {
+                    &default_q_x
+                } else {
+                    &(-running_cost * get_or_first(state_ref, j))
+                };
+                q.rows_mut(offset, state_dims).copy_from(q_x);
             }
 
             // Final step (for j = Nh)
             let offset = input_dims + (n_steps - 2) * (state_dims + input_dims);
             q.rows_mut(offset, state_dims).copy_from(&qn_x);
         }
+    }
+
+    fn update_a(
+        &mut self,
+        a_mat: &mut DMatrix<f64>,
+        general_params: &ControllerOptions<S>,
+    ) -> Result<(), ModelError> {
+        let (state_mat, control_mat) = linearize(
+            &mut self.sim,
+            &self.jacobian_x_fn,
+            &self.jacobian_u_fn,
+            self.n_steps,
+            general_params,
+        )?;
+        let c = utils::build_c(&state_mat, &control_mat, self.n_steps - 1);
+        a_mat.view_mut((0, 0), (c.nrows(), c.ncols())).copy_from(&c);
+        Ok(())
     }
 }
 
@@ -175,7 +243,7 @@ impl<S: PhysicsSim> Controller<S> for QPLQRGeneric<S> {
         let mut u_traj = vec![ControllerInput::<S>::default(); self.n_steps - 1];
         let mut x_traj = vec![initial_state.clone(); self.n_steps];
 
-        let dt = self.dt;
+        let dt = self.options.get_general().get_dt();
 
         // retuls are in r.0 : [u1, x2, u2, ...]
         let r = self.solver.minimize(&[])?;
@@ -183,7 +251,8 @@ impl<S: PhysicsSim> Controller<S> for QPLQRGeneric<S> {
         for i in 0..self.n_steps - 1 {
             let base = i * (state_dim + input_dim);
             let next_input = ControllerInput::<S>::from_slice(&r.0[base..base + input_dim]);
-            u_traj[i] = next_input + self.u_ref[0].clone();
+            let u_ref = get_or_first(self.u_ref.as_slice(), i);
+            u_traj[i] = next_input + u_ref.clone();
             x_traj[i + 1] = self.sim.step(&x_traj[i], Some(&u_traj[i]), dt)?;
         }
         Ok((x_traj, u_traj))

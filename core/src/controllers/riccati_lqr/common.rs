@@ -9,11 +9,11 @@ use crate::physics::models::Dynamics;
 use crate::physics::traits::{Discretizer, PhysicsSim, State};
 use crate::utils::Labelizable;
 use crate::utils::evaluable::EvaluableDMatrix;
+use crate::utils::helpers::get_or_first;
 use crate::utils::noise::NoiseSources;
 use nalgebra::{DMatrix, DVector};
 
-const ZERO_MEAN: f64 = 0.0;
-
+type LinearDynamicsEvaluation = (Vec<DMatrix<f64>>, Vec<DMatrix<f64>>);
 pub struct RiccatiRecursionGeneric<S: PhysicsSim> {
     sim: S,
     cost_fn: CostFn<S>,
@@ -45,9 +45,6 @@ where
             as usize
             + 1;
 
-        let new_general_options = options.get_general().clone().extend_x_and_u();
-        let options = options.set_general(new_general_options);
-
         Ok(RiccatiRecursionGeneric {
             sim,
             cost_fn,
@@ -60,7 +57,7 @@ where
         })
     }
 
-    fn linearize(&mut self) -> Result<(Vec<DMatrix<f64>>, Vec<DMatrix<f64>>), ModelError> {
+    fn linearize(&mut self) -> Result<LinearDynamicsEvaluation, ModelError> {
         let n_op = self.options.general.get_u_operating().len();
         let mut a_mat: Vec<DMatrix<f64>> = Vec::with_capacity(n_op);
         let mut b_mat: Vec<DMatrix<f64>> = Vec::with_capacity(n_op);
@@ -74,8 +71,6 @@ where
 
         for k in 0..self.options.general.get_u_operating().len() {
             let vals = self.options.general.concatenate_operating_point(k)?;
-            let a = self.jacobian_x_fn.evaluate(&vals)?;
-            dbg!(&vals, &a);
             a_mat.push(self.jacobian_x_fn.evaluate(&vals)?);
             b_mat.push(self.jacobian_u_fn.evaluate(&vals)?);
         }
@@ -126,8 +121,10 @@ where
                 .unwrap_or(DMatrix::zeros(state_dim, state_dim));
             let mut k_seq = vec![DMatrix::zeros(input_dim, state_dim); self.n_steps - 1];
             for k in (0..self.n_steps - 1).rev() {
+                let state_mat = get_or_first(a_mat, k);
+                let control_mat = get_or_first(b_mat, k);
                 let (p, k_gain) =
-                    recursion::riccati_recursion(&a_mat[k], &b_mat[k], &q_mat, &r_mat, &p_next)?;
+                    recursion::riccati_recursion(state_mat, control_mat, &q_mat, &r_mat, &p_next)?;
                 k_seq[k] = k_gain;
                 p_next = p;
             }
@@ -159,27 +156,27 @@ where
         let dt = self.options.get_general().get_dt();
 
         // enable noise if configured
-        let (noise_0_std, noise_std) = self.options.general.get_noise().unwrap_or_default();
-
         let noise_sources =
-            NoiseSources::from_stats(vec![(ZERO_MEAN, noise_0_std), (ZERO_MEAN, noise_std)])?;
-        let mut current_state = noise_sources.add_noise(0, x_traj[0].to_vector())?;
+            NoiseSources::from_stats(self.options.general.get_noise().unwrap_or_default())?;
+        let mut current_state = noise_sources.add_noise(x_traj[0].to_vector())?;
         x_traj[0] = ControllerState::<S>::from_slice(current_state.as_slice());
 
         let u_limits = self.options.general.get_u_limits();
 
         // Common rollout using `k_seq`
         for k in 0..self.n_steps - 1 {
+            let x_reference = get_or_first(x_ref, k);
+            let u_operating = get_or_first(u_op, k);
             let current_input = gain_to_input_vector(
                 &current_state,
                 &k_seq[k],
-                &x_ref[k].to_vector(),
-                &u_op[k].to_vector(),
+                &x_reference.to_vector(),
+                &u_operating.to_vector(),
             );
             u_traj[k] = into_clamped_input::<S>(current_input, u_limits);
 
             let x_next = self.sim.step(&x_traj[k], Some(&u_traj[k]), dt)?;
-            x_traj[k + 1] = try_into_noisy_state::<S>(x_next.to_vector(), &noise_sources, 1)?;
+            x_traj[k + 1] = try_into_noisy_state::<S>(x_next.to_vector(), &noise_sources)?;
             current_state = x_traj[k + 1].to_vector();
         }
 

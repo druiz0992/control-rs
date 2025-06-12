@@ -9,69 +9,15 @@ use control_rs::physics::models::{LtiInput, LtiModel, LtiState};
 use control_rs::physics::simulator::BasicSim;
 use control_rs::physics::traits::{Discretizer, State};
 use control_rs::plotter;
-use control_rs::utils::NoiseSource;
-use nalgebra::{DMatrix, DVector, dmatrix};
+use control_rs::utils::noise::NoiseSources;
+use hw::TrajOptions;
+use nalgebra::{DMatrix, dmatrix};
 use osqp::Settings;
 
 type DoubleIntegrator = LtiModel<4, 0, 2>;
 type DoubleIntegratorState = LtiState<4, 0>;
 type DoubleIntegratorInput = LtiInput<2, 0>;
 type DoubleIntegratorSim = BasicSim<DoubleIntegrator, ZOH<DoubleIntegrator>>;
-
-const DEFAULT_QF_FACTOR: f64 = 5.0;
-const DEFAULT_TF: f64 = 5.0;
-
-#[derive(Clone, Debug)]
-struct TrajOptions {
-    qf_factor: f64,
-    noise_std: Option<(f64, f64)>,
-    tf: f64,
-    plot_flag: bool,
-    goal: DoubleIntegratorState,
-}
-
-impl TrajOptions {
-    fn new() -> Self {
-        TrajOptions::default()
-    }
-    fn set_qf(self, qf: f64) -> Self {
-        let mut new = self;
-        new.qf_factor = qf;
-        new
-    }
-    fn set_noise(self, noise_sources: Option<(f64, f64)>) -> Self {
-        let mut new = self;
-        new.noise_std = noise_sources;
-        new
-    }
-    fn set_tf(self, tf: f64) -> Self {
-        let mut new = self;
-        new.tf = tf;
-        new
-    }
-    fn set_plot_flag(self, flag: bool) -> Self {
-        let mut new = self;
-        new.plot_flag = flag;
-        new
-    }
-    fn set_goal(self, goal: DoubleIntegratorState) -> Self {
-        let mut new = self;
-        new.goal = goal;
-        new
-    }
-}
-
-impl Default for TrajOptions {
-    fn default() -> Self {
-        Self {
-            tf: DEFAULT_TF,
-            qf_factor: DEFAULT_QF_FACTOR,
-            noise_std: None,
-            plot_flag: false,
-            goal: DoubleIntegratorState::default(),
-        }
-    }
-}
 
 fn double_integrator() -> DoubleIntegrator {
     let state_matrix =
@@ -98,10 +44,10 @@ fn check_discrete_time_dynamics(model: &DoubleIntegrator) {
 fn convex_trajopt(
     model: &DoubleIntegrator,
     x_ic: &DoubleIntegratorState,
-    traj_options: &TrajOptions,
+    traj_options: &TrajOptions<DoubleIntegratorState, DoubleIntegratorInput>,
 ) -> (Vec<DoubleIntegratorState>, Vec<DoubleIntegratorInput>) {
     let tf = traj_options.tf;
-    let qf_factor = traj_options.qf_factor;
+    let qf = traj_options.qf.clone();
 
     // setup sim params
     let dt = 0.1;
@@ -112,10 +58,8 @@ fn convex_trajopt(
 
     // cost
     let q_matrix = DMatrix::<f64>::identity(4, 4);
-    let qn_matrix = DMatrix::<f64>::identity(4, 4) * qf_factor;
     let r_matrix = DMatrix::<f64>::identity(2, 2);
-    let cost =
-        GenericCost::<_, DoubleIntegratorInput>::new(q_matrix, qn_matrix, r_matrix, None).unwrap();
+    let cost = GenericCost::<_, DoubleIntegratorInput>::new(q_matrix, qf, r_matrix, None).unwrap();
 
     // setup QP controller
     let mut general_options = ControllerOptions::<DoubleIntegratorSim>::default()
@@ -123,9 +67,9 @@ fn convex_trajopt(
         .unwrap()
         .set_time_horizon(tf)
         .unwrap()
-        .set_x_ref(&[traj_options.goal.clone()]);
-    if let Some(noise) = traj_options.noise_std {
-        general_options = general_options.set_noise(noise);
+        .set_x_ref(&traj_options.x_goal);
+    if let Some(noise) = &traj_options.noise_std {
+        general_options = general_options.set_noise(noise.clone());
     }
     let osqp_settings = Settings::default()
         .verbose(false)
@@ -135,9 +79,9 @@ fn convex_trajopt(
         .set_general(general_options)
         .set_osqp_settings(osqp_settings);
     let (mut controller, _) =
-        QPLQR::new(sim, Box::new(cost.clone()), &x_ic, Some(qp_options)).unwrap();
+        QPLQR::new(sim, Box::new(cost.clone()), x_ic, Some(qp_options)).unwrap();
 
-    let (x_traj, u_traj) = controller.solve(&x_ic).unwrap();
+    let (x_traj, u_traj) = controller.solve(x_ic).unwrap();
 
     if traj_options.plot_flag {
         let times: Vec<_> = (0..u_traj.len()).map(|i| i as f64 * dt).collect();
@@ -156,10 +100,10 @@ fn convex_trajopt(
 fn fhlqr(
     model: &DoubleIntegrator,
     x_ic: &DoubleIntegratorState,
-    traj_options: &TrajOptions,
+    traj_options: &TrajOptions<DoubleIntegratorState, DoubleIntegratorInput>,
 ) -> (Vec<DoubleIntegratorState>, Vec<DoubleIntegratorInput>) {
     let tf = traj_options.tf;
-    let qf_factor = traj_options.qf_factor;
+    let qf = traj_options.qf.clone();
 
     // setup sim params
     let dt = 0.1;
@@ -170,10 +114,8 @@ fn fhlqr(
 
     // cost
     let q_matrix = DMatrix::<f64>::identity(4, 4);
-    let qn_matrix = DMatrix::<f64>::identity(4, 4) * qf_factor;
     let r_matrix = DMatrix::<f64>::identity(2, 2);
-    let cost =
-        GenericCost::<_, DoubleIntegratorInput>::new(q_matrix, qn_matrix, r_matrix, None).unwrap();
+    let cost = GenericCost::<_, DoubleIntegratorInput>::new(q_matrix, qf, r_matrix, None).unwrap();
 
     // setup QP controller
     let mut general_options = ControllerOptions::<DoubleIntegratorSim>::default()
@@ -181,17 +123,17 @@ fn fhlqr(
         .unwrap()
         .set_time_horizon(tf)
         .unwrap()
-        .set_x_ref(&[traj_options.goal.clone()]);
+        .set_x_ref(&traj_options.x_goal);
 
-    if let Some(noise) = traj_options.noise_std {
-        general_options = general_options.set_noise(noise);
+    if let Some(noise) = &traj_options.noise_std {
+        general_options = general_options.set_noise(noise.clone());
     }
 
     let options = RiccatiLQROptions::enable_finite_horizon().set_general(general_options);
     let mut controller =
         RiccatiRecursionLQR::new(sim, Box::new(cost.clone()), Some(options)).unwrap();
 
-    let (x_traj, u_traj) = controller.solve(&x_ic).unwrap();
+    let (x_traj, u_traj) = controller.solve(x_ic).unwrap();
 
     if traj_options.plot_flag {
         let times: Vec<_> = (0..u_traj.len()).map(|i| i as f64 * dt).collect();
@@ -207,32 +149,22 @@ fn fhlqr(
     (x_traj, u_traj)
 }
 
-fn add_noise<S: State>(noise_sources: (&NoiseSource, &NoiseSource, usize), state: S) -> S {
-    let (noise_source_1, noise_source_2, idx) = noise_sources;
-    let s = S::default().to_vector();
-
-    let s1 = noise_source_1.add_noise(DVector::from_vec(s.as_slice()[..idx].to_vec()));
-    let s2 = noise_source_2.add_noise(DVector::from_vec(s.as_slice()[idx..].to_vec()));
-    let mut x_ic = s1.as_slice().to_vec();
-    x_ic.extend_from_slice(s2.as_slice());
-
-    let noise = S::from_vec(x_ic);
-    noise + state
-}
-
-fn sample_x_ic(model: &DoubleIntegrator, n_iter: usize, traj_options: &TrajOptions) {
-    let noise_source_1 = NoiseSource::new_zero_mean(5.0).unwrap();
-    let noise_source_2 = NoiseSource::new_zero_mean(1.0).unwrap();
+fn sample_x_ic(
+    model: &DoubleIntegrator,
+    n_iter: usize,
+    traj_options: &TrajOptions<DoubleIntegratorState, DoubleIntegratorInput>,
+) {
+    let noise_sources = NoiseSources::from_stats(vec![5.0, 5.0, 1.0, 1.0]).unwrap();
     for _ in 0..n_iter {
-        let x_ic = add_noise::<DoubleIntegratorState>(
-            (&noise_source_1, &noise_source_2, 2),
-            DoubleIntegratorState::default(),
-        );
-        let (x_cvx_traj, u_cvx_traj) = convex_trajopt(&model, &x_ic, traj_options);
-        let (x_fhlqr_traj, u_fhlqr_traj) = fhlqr(&model, &x_ic, traj_options);
+        let x = noise_sources
+            .add_noise(DoubleIntegratorState::default().to_vector())
+            .unwrap();
+        let x_ic = DoubleIntegratorState::from_slice(x.as_slice());
+        let (x_cvx_traj, u_cvx_traj) = convex_trajopt(model, &x_ic, traj_options);
+        let (x_fhlqr_traj, u_fhlqr_traj) = fhlqr(model, &x_ic, traj_options);
 
-        let _u_err = check_input_trajectory_error(&u_cvx_traj[..], &u_fhlqr_traj[..]);
-        let _x_err = check_state_trajectory_error(&x_cvx_traj[..], &x_fhlqr_traj[..]);
+        check_input_trajectory_error(&u_cvx_traj[..], &u_fhlqr_traj[..]);
+        check_state_trajectory_error(&x_cvx_traj[..], &x_fhlqr_traj[..]);
     }
 }
 fn check_input_trajectory_error(
@@ -308,9 +240,10 @@ fn main() {
     sample_x_ic(&model, 20, &traj_options);
 
     //  Part D - Add noise and compare Convex optimization and  LQR.
+    let qf = DMatrix::<f64>::identity(4, 4) * 10.0;
     let traj_options = TrajOptions::new()
-        .set_noise(Some((0.1, 1.0)))
-        .set_qf(10.0)
+        .set_noise(vec![0.1, 0.1, 1.0, 1.0])
+        .set_qf(qf.clone())
         .set_tf(7.0);
 
     convex_trajopt(&model, &x_ic, &traj_options);
@@ -319,10 +252,9 @@ fn main() {
     // Add goal state
     let x_goal = DoubleIntegratorState::new([-3.5, -3.5, 0.0, 0.0]);
     let traj_options = TrajOptions::new()
-        .set_qf(10.0)
+        .set_qf(qf)
         .set_tf(7.0)
-        .set_plot_flag(true)
-        .set_goal(x_goal);
+        .set_x_goal(vec![x_goal]);
 
     let x_ic = DoubleIntegratorState::new([5.0, 7.0, 2.0, -1.4]);
     convex_trajopt(&model, &x_ic, &traj_options);

@@ -3,21 +3,22 @@ use nalgebra::DVector;
 use super::common::QPLQRGeneric;
 use super::options::QPOptions;
 use crate::controllers::{
-    Controller, ControllerInput, ControllerState, CostFn, SteppableController, TrajectoryHistory,
-    UpdatableController,
+    Controller, ControllerInput, ControllerOptions, ControllerState, CostFn, SteppableController,
+    TrajectoryHistory, UpdatableController,
 };
 use crate::physics::ModelError;
 use crate::physics::discretizer::LinearDiscretizer;
 use crate::physics::traits::{LinearDynamics, PhysicsSim};
 use crate::solver::OSQPBuilder;
 use crate::solver::osqp::builder::QPParams;
+use crate::utils::Labelizable;
 
 pub struct QPLQR<S: PhysicsSim>(QPLQRGeneric<S>);
 
 impl<S> QPLQR<S>
 where
     S: PhysicsSim,
-    S::Model: LinearDynamics,
+    S::Model: LinearDynamics + Labelizable,
     S::Discretizer: LinearDiscretizer<S::Model>,
 {
     pub fn new(
@@ -60,7 +61,10 @@ impl<S: PhysicsSim> SteppableController<S> for QPLQR<S> {
     }
 }
 
-impl<S: PhysicsSim> UpdatableController<S> for QPLQR<S> {
+impl<S: PhysicsSim> UpdatableController<S> for QPLQR<S>
+where
+    S::Model: LinearDynamics + Labelizable,
+{
     type Params<'a> = OSQPBuilder<'a>;
 
     fn update(&self, params: Self::Params<'_>) {
@@ -69,7 +73,14 @@ impl<S: PhysicsSim> UpdatableController<S> for QPLQR<S> {
     fn update_bounds(&self, state: &DVector<f64>, lb: &mut DVector<f64>, ub: &mut DVector<f64>) {
         self.0.update_bounds(state, lb, ub);
     }
-    fn update_q(&self, state_ref: &DVector<f64>, q: &mut DVector<f64>) {
+    fn update_q(&self, state_ref: &[DVector<f64>], q: &mut DVector<f64>) {
         self.0.update_q(state_ref, q);
+    }
+    fn update_a(
+        &mut self,
+        a_mat: &mut nalgebra::DMatrix<f64>,
+        general_params: &ControllerOptions<S>,
+    ) -> Result<(), ModelError> {
+        self.0.update_a(a_mat, general_params)
     }
 }
