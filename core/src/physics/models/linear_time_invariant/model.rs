@@ -1,4 +1,4 @@
-use crate::physics::ModelError;
+use crate::{physics::ModelError, utils::Labelizable};
 use nalgebra::DMatrix;
 use serde::{Deserialize, Serialize};
 
@@ -6,6 +6,22 @@ use serde::{Deserialize, Serialize};
 pub struct LtiModel<const N: usize, const C: usize, const I: usize> {
     state_matrix: DMatrix<f64>,
     control_matrix: DMatrix<f64>,
+}
+
+impl<const N: usize, const C: usize, const I: usize> Labelizable for LtiModel<N, C, I> {
+    fn extract<const K: usize>(&self, _labels: &[&str]) -> [f64; K] {
+        [0.0; K]
+    }
+    fn index_of(_label: &str) -> usize {
+        0
+    }
+
+    fn labels() -> &'static [&'static str] {
+        &[""]
+    }
+    fn vectorize(&self, _labels: &[&str]) -> Vec<f64> {
+        vec![]
+    }
 }
 
 impl<const N: usize, const C: usize, const I: usize> LtiModel<N, C, I> {

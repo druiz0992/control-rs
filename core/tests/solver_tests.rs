@@ -450,7 +450,6 @@ fn test_qp() {
     let (_, status, _, _) = solver.solve_qp(&[0.0, 0.0, 0.0, 0.0]).unwrap();
 
     let tol = 1e-5;
-    dbg!(&status);
     assert!(status.stationarity < tol);
     assert!(status.max_primal_feasibility_c.unwrap() < tol);
     assert!(status.min_primal_feasibility_h.unwrap() > -tol);

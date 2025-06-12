@@ -28,11 +28,16 @@ pub struct ControllerOptions<S: PhysicsSim> {
     dt: f64,
 
     /// Operating points => linearization points
-    u_op: ControllerInput<S>,
-    x_op: ControllerState<S>,
+    u_op: Vec<ControllerInput<S>>,
+    x_op: Vec<ControllerState<S>>,
+
+    /// Estimated params => real model params are those
+    /// used to carry out physics. Estimated params are those
+    /// used to compute controls. They can differ.
+    estimated_params: Option<Vec<f64>>,
 
     /// closed loop options
-    noise: Option<(f64, f64)>,
+    noise: Option<Vec<f64>>,
     u_limits: Option<ConstraintTransform>,
     x_limits: Option<ConstraintTransform>,
 }
@@ -48,7 +53,9 @@ impl<S: PhysicsSim> Clone for ControllerOptions<S> {
             u_op: self.u_op.clone(),
             x_op: self.x_op.clone(),
 
-            noise: self.noise,
+            estimated_params: self.estimated_params.clone(),
+
+            noise: self.noise.clone(),
             u_limits: self.u_limits.clone(),
             x_limits: self.x_limits.clone(),
         }
@@ -57,16 +64,19 @@ impl<S: PhysicsSim> Clone for ControllerOptions<S> {
 
 impl<S: PhysicsSim> Default for ControllerOptions<S> {
     fn default() -> Self {
+        let state_dims = ControllerState::<S>::dim_q() + ControllerState::<S>::dim_v();
         Self {
             x_ref: vec![ControllerState::<S>::default(); 1],
             u_ref: vec![ControllerInput::<S>::default(); 1],
             dt: DEFAULT_DT,
             time_horizon: DEFAULT_TIME_HORIZON,
 
-            u_op: ControllerInput::<S>::default(),
-            x_op: ControllerState::<S>::default(),
+            u_op: vec![ControllerInput::<S>::default(); 1],
+            x_op: vec![ControllerState::<S>::default(); 1],
 
-            noise: None,
+            estimated_params: None,
+
+            noise: Some(vec![0.0; state_dims]),
             u_limits: None,
             x_limits: None,
         }
@@ -77,11 +87,11 @@ impl<S> ControllerOptions<S>
 where
     S: PhysicsSim,
 {
-    pub fn get_u_operating(&self) -> &ControllerInput<S> {
+    pub fn get_u_operating(&self) -> &[ControllerInput<S>] {
         &self.u_op
     }
 
-    pub fn get_x_operating(&self) -> &ControllerState<S> {
+    pub fn get_x_operating(&self) -> &[ControllerState<S>] {
         &self.x_op
     }
 
@@ -92,8 +102,8 @@ where
         &self.u_ref
     }
 
-    pub fn get_noise(&self) -> Option<(f64, f64)> {
-        self.noise
+    pub fn get_noise(&self) -> Option<Vec<f64>> {
+        self.noise.clone()
     }
 
     pub fn get_u_limits(&self) -> Option<&ConstraintTransform> {
@@ -108,23 +118,30 @@ where
     pub fn get_time_horizon(&self) -> f64 {
         self.time_horizon
     }
-
-    pub fn concatenate_operating_point(&self) -> Vec<f64> {
-        let mut vals = self.get_x_operating().to_vec();
-        vals.extend(self.get_u_operating().to_vec());
-
-        vals
+    pub fn get_estimated_params(&self) -> Option<&Vec<f64>> {
+        self.estimated_params.as_ref()
     }
 
-    pub fn set_u_operating(self, u_op: &ControllerInput<S>) -> Self {
+    pub fn concatenate_operating_point(&self, k: usize) -> Result<Vec<f64>, ModelError> {
+        if let (Some(x_op), Some(u_op)) =
+            (self.get_x_operating().get(k), self.get_u_operating().get(k))
+        {
+            let mut vals = x_op.to_vec();
+            vals.extend(u_op.to_vec());
+            return Ok(vals);
+        }
+        Err(ModelError::Other("Operating point not found.".into()))
+    }
+
+    pub fn set_u_operating(self, u_op: &[ControllerInput<S>]) -> Self {
         let mut new = self;
-        new.u_op = u_op.clone();
+        new.u_op = u_op.to_owned();
         new
     }
 
-    pub fn set_x_operating(self, x_op: &ControllerState<S>) -> Self {
+    pub fn set_x_operating(self, x_op: &[ControllerState<S>]) -> Self {
         let mut new = self;
-        new.x_op = x_op.clone();
+        new.x_op = x_op.to_owned();
         new
     }
 
@@ -140,7 +157,7 @@ where
         new
     }
 
-    pub fn set_noise(self, noise: (f64, f64)) -> Self {
+    pub fn set_noise(self, noise: Vec<f64>) -> Self {
         let mut new = self;
         new.noise = Some(noise);
         new
@@ -177,5 +194,12 @@ where
         let mut new = self;
         new.time_horizon = time_horizon;
         Ok(new)
+    }
+
+    pub fn set_estimated_params(self, params: Vec<f64>) -> Self {
+        let mut new = self;
+        new.estimated_params = Some(params);
+
+        new
     }
 }

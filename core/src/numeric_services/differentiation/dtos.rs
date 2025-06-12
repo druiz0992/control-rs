@@ -1,10 +1,18 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DerivativeType {
     Jacobian,
     Gradient,
     Hessian,
+}
+
+fn custom_order(e: &DerivativeType) -> usize {
+    match e {
+        DerivativeType::Gradient => 0,
+        DerivativeType::Jacobian => 1,
+        DerivativeType::Hessian => 2,
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -20,10 +28,13 @@ impl DerivativeRequest {
         variables: Vec<String>,
         derivatives: Vec<DerivativeType>,
     ) -> Self {
+        let mut filtered_derivatives = derivatives.clone();
+        filtered_derivatives.sort_by_key(custom_order);
+        filtered_derivatives.dedup();
         Self {
             functions,
             variables,
-            derivatives,
+            derivatives: filtered_derivatives,
         }
     }
 }

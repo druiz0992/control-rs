@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 const SLAB_DEFAULT_CAPACITY: usize = 4096;
-const SLAB_MAX_CAPACITY: usize = 65536;
+const SLAB_MAX_CAPACITY: usize = 8388608;
 
 /// A symbolic scalar expression represented as a string. This struct provides
 /// methods to construct, manipulate, and evaluate symbolic expressions.
@@ -189,6 +189,12 @@ impl ExprScalar {
         Self::new(format!("sign({})", self.0))
     }
 
+    pub fn smooth_sign(&self, eps: f64) -> Self {
+        let eps_expr = ExprScalar::new(eps.to_string());
+        let denom = self.pow(2.0).add(&eps_expr).pow(0.5);
+        self.div(&denom.wrap()).wrap()
+    }
+
     pub fn gradient(&self, vars: &ExprVector) -> Result<ExprVector, SymbolicError> {
         let resp = compute_derivatives(
             &ExprRecord::Scalar(self.clone()),
@@ -250,7 +256,7 @@ impl ExprScalar {
         let expr_str = self.as_str();
         let parser = Parser {
             expr_depth_limit: DEFAULT_EXPR_DEPTH_LIMIT * 10,
-            expr_len_limit: DEFAULT_EXPR_LEN_LIMIT * 100,
+            expr_len_limit: DEFAULT_EXPR_LEN_LIMIT * 10000,
         };
         let mut capacity = SLAB_DEFAULT_CAPACITY;
         let mut slab = Slab::with_capacity(capacity);
@@ -269,7 +275,12 @@ impl ExprScalar {
                     slab = Slab::with_capacity(capacity);
                     continue;
                 }
-                Err(e) => return Err(SymbolicError::Other(e.to_string())),
+                Err(e) => {
+                    return Err(SymbolicError::Other(format!(
+                        "Fasteval parsed failed with {}",
+                        e
+                    )));
+                }
             };
         }
     }

@@ -1,5 +1,6 @@
 use crate::controllers::{ControllerInput, ControllerState, CostFn};
 use crate::physics::traits::{PhysicsSim, State};
+use crate::utils::helpers::get_or_first;
 use crate::utils::matrix;
 use nalgebra::{DMatrix, DVector};
 use osqp::CscMatrix;
@@ -16,10 +17,10 @@ pub(super) fn build_d(x0: DVector<f64>, a: &DMatrix<f64>, c: usize) -> DVector<f
     d
 }
 
-/// C = [[B1, -I, 0......0],[0, A2, B1, -I, 0,....0], [0....0 An-1, Bn-1, -I]]
-pub(super) fn build_c(a: &DMatrix<f64>, b: &DMatrix<f64>, n_steps: usize) -> DMatrix<f64> {
-    let n = b.nrows();
-    let m = b.ncols();
+/// C = [[B1, -I, 0......0],[0, A2, B2, -I, 0,....0], [0....0 An-1, Bn-1, -I]]
+pub(super) fn build_c(a: &[DMatrix<f64>], b: &[DMatrix<f64>], n_steps: usize) -> DMatrix<f64> {
+    let n = b[0].nrows();
+    let m = b[0].ncols();
 
     // Each constraint row corresponds to:
     // x_{k+1} - A x_k - B u_k = 0
@@ -27,23 +28,34 @@ pub(super) fn build_c(a: &DMatrix<f64>, b: &DMatrix<f64>, n_steps: usize) -> DMa
 
     // Build block: [B  -I]
     let mut b_minus_i = DMatrix::<f64>::zeros(n, m + n);
-    b_minus_i.view_mut((0, 0), (n, m)).copy_from(b);
+    b_minus_i.view_mut((0, 0), (n, m)).copy_from(&b[0]);
     b_minus_i
         .view_mut((0, m), (n, n))
         .copy_from(&-DMatrix::<f64>::identity(n, n));
 
     // Kronecker product: kron(I(N-1), [B -I])
-    let kron_block = matrix::kron(&DMatrix::<f64>::identity(n_steps, n_steps), &b_minus_i);
-
-    let mut c = kron_block;
+    let mut c = matrix::kron(&DMatrix::<f64>::identity(n_steps, n_steps), &b_minus_i);
 
     // Insert A blocks into the correct offsets
     for k in 1..n_steps {
+        let state_matrix = get_or_first(a, k);
+        let control_matrix = get_or_first(b, k);
         let row_start = k * n;
-        let col_start = (k - 1) * a.ncols() + k * m;
+        let col_start = (k - 1) * state_matrix.ncols() + k * m;
 
-        c.view_mut((row_start, col_start), (a.nrows(), a.ncols()))
-            .copy_from(a);
+        c.view_mut(
+            (row_start, col_start),
+            (state_matrix.nrows(), state_matrix.ncols()),
+        )
+        .copy_from(state_matrix);
+
+        let col_start = k * (m + state_matrix.ncols());
+
+        c.view_mut(
+            (row_start, col_start),
+            (control_matrix.nrows(), control_matrix.ncols()),
+        )
+        .copy_from(control_matrix);
     }
 
     c
@@ -167,7 +179,7 @@ mod tests {
         //  A = [[1,2],[2,1]], B = [[1],[1]],
         //  C is 6 x 9 ; [[B, -I, 0x6], [0, A, B, -I, 0x5], [0x2 A,B,I,0x4]....[0x6, A, B, -I]]
 
-        let c = build_c(&a, &b, n_steps);
+        let c = build_c(&[a], &[b], n_steps);
 
         assert_eq!(c.nrows(), 6);
         assert_eq!(c.ncols(), 9);

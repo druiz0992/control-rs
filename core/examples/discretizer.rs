@@ -52,38 +52,38 @@ async fn build_sim(integrator: IntegratorType) {
     let states = match integrator {
         IntegratorType::BackwardEuler => {
             let integrator = BackwardEuler::new(&model, Arc::clone(&registry), None).unwrap();
-            let sim = BasicSim::new(model.clone(), integrator);
+            let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
             sim.rollout(&state0, None, dt, steps).unwrap()
         }
         IntegratorType::HermiteSimpson => {
             let integrator = HermiteSimpson::new(&model, Arc::clone(&registry), None).unwrap();
-            let sim = BasicSim::new(model.clone(), integrator);
+            let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
             sim.rollout(&state0, None, dt, steps).unwrap()
         }
         IntegratorType::ImplicitMidpoint => {
             let integrator =
                 ImplicitMidpoint::new(&model, Arc::clone(&registry), Some(solver_options)).unwrap();
-            let sim = BasicSim::new(model.clone(), integrator);
+            let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
             sim.rollout(&state0, None, dt, steps).unwrap()
         }
         IntegratorType::RK4Symbolic => {
             let integrator = RK4Symbolic::new(&model, Arc::clone(&registry)).unwrap();
-            let sim = BasicSim::new(model.clone(), integrator);
+            let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
             sim.rollout(&state0, None, dt, steps).unwrap()
         }
         IntegratorType::RK4 => {
             let integrator = RK4::new(&model).unwrap();
-            let sim = BasicSim::new(model.clone(), integrator);
+            let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
             sim.rollout(&state0, None, dt, steps).unwrap()
         }
         IntegratorType::MidPoint => {
             let integrator = MidPoint::new(&model).unwrap();
-            let sim = BasicSim::new(model.clone(), integrator);
+            let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
             sim.rollout(&state0, None, dt, steps).unwrap()
         }
         IntegratorType::ForwardEuler => {
             let integrator = ForwardEuler::new(&model).unwrap();
-            let sim = BasicSim::new(model.clone(), integrator);
+            let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
             sim.rollout(&state0, None, dt, steps).unwrap()
         }
     };
@@ -95,7 +95,7 @@ async fn build_sim(integrator: IntegratorType) {
         .await
         .unwrap();
 
-        let times: Vec<_> = (0..states.len()).map(|i| i as f64 * dt).collect();
+    let times: Vec<_> = (0..states.len()).map(|i| i as f64 * dt).collect();
     let energy: Vec<_> = states.iter().filter_map(|s| model.energy(s)).collect();
 
     plotter::plot_states(&times, &states, "/tmp/plot1.png").unwrap();

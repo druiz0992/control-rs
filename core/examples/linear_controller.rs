@@ -22,10 +22,10 @@ enum LinearControllerType {
     QpLqrUlimits(f64, f64),
     RiccatiRecursionLQRFinite,
     RiccatiRecursionLQRInfinite,
-    RiccatiRecursionLQRFiniteULimitsAndNoise(f64, f64, f64, f64),
-    RiccatiRecursionLQRInfiniteULimitsAndNoise(f64, f64, f64, f64),
+    RiccatiRecursionLQRFiniteULimitsAndNoise(f64, f64, Vec<f64>),
+    RiccatiRecursionLQRInfiniteULimitsAndNoise(f64, f64, Vec<f64>),
     MpcLinear,
-    MpcLinearULimitsAndNoise(f64, f64, f64, f64),
+    MpcLinearULimitsAndNoise(f64, f64, Vec<f64>),
 }
 
 // Example iterates over all implemented linear controllers
@@ -45,7 +45,7 @@ fn build_sim(controller_type: LinearControllerType) {
 
     let integrator = ZOH::new(&model, dt).unwrap();
 
-    let sim = BasicSim::new(model.clone(), integrator);
+    let sim = BasicSim::new(model.clone(), integrator, None);
 
     let q_matrix = DMatrix::<f64>::identity(2, 2);
     let qn_matrix = DMatrix::<f64>::identity(2, 2);
@@ -105,31 +105,17 @@ fn build_sim(controller_type: LinearControllerType) {
             let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
             Box::new(RiccatiRecursionLQR::new(sim, Box::new(cost.clone()), Some(options)).unwrap())
         }
-        LinearControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(
-            lower,
-            upper,
-            std_0,
-            std_n,
-        ) => {
+        LinearControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(lower, upper, std) => {
             let constraints =
                 ConstraintTransform::new_uniform_bounds_input::<LtiSim>((lower, upper));
-            let general_options = general_options
-                .set_u_limits(constraints)
-                .set_noise((std_0, std_n));
+            let general_options = general_options.set_u_limits(constraints).set_noise(std);
             let options = RiccatiLQROptions::enable_finite_horizon().set_general(general_options);
             Box::new(RiccatiRecursionLQR::new(sim, Box::new(cost.clone()), Some(options)).unwrap())
         }
-        LinearControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(
-            lower,
-            upper,
-            std_0,
-            std_n,
-        ) => {
+        LinearControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(lower, upper, std) => {
             let constraints =
                 ConstraintTransform::new_uniform_bounds_input::<LtiSim>((lower, upper));
-            let general_options = general_options
-                .set_u_limits(constraints)
-                .set_noise((std_0, std_n));
+            let general_options = general_options.set_u_limits(constraints).set_noise(std);
             let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
             Box::new(RiccatiRecursionLQR::new(sim, Box::new(cost.clone()), Some(options)).unwrap())
         }
@@ -142,12 +128,10 @@ fn build_sim(controller_type: LinearControllerType) {
                 ConvexMpc::new(sim, Box::new(cost.clone()), &initial_state, Some(options)).unwrap(),
             )
         }
-        LinearControllerType::MpcLinearULimitsAndNoise(lower, upper, std_0, std_n) => {
+        LinearControllerType::MpcLinearULimitsAndNoise(lower, upper, std) => {
             let constraints =
                 ConstraintTransform::new_uniform_bounds_input::<LtiSim>((lower, upper));
-            let general_options = general_options
-                .set_u_limits(constraints)
-                .set_noise((std_0, std_n));
+            let general_options = general_options.set_u_limits(constraints).set_noise(std);
             let osqp_settings = Settings::default().verbose(false).eps_abs(1e-7);
             let options = ConvexMpcOptions::default()
                 .set_general(general_options)
@@ -175,10 +159,10 @@ fn main() {
         LinearControllerType::QpLqrUlimits(-0.5, 0.5),
         LinearControllerType::RiccatiRecursionLQRFinite,
         LinearControllerType::RiccatiRecursionLQRInfinite,
-        LinearControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(-4.5, 4.5, 10.0, 0.1),
-        LinearControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(-4.5, 4.5, 10.0, 0.1),
+        LinearControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(-4.5, 4.5, vec![0.1; 2]),
+        LinearControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(-4.5, 4.5, vec![0.1; 2]),
         LinearControllerType::MpcLinear,
-        LinearControllerType::MpcLinearULimitsAndNoise(-19.5, 19.5, 10.0, 0.1),
+        LinearControllerType::MpcLinearULimitsAndNoise(-19.5, 19.5, vec![0.1; 2]),
     ];
     env_logger::init();
 

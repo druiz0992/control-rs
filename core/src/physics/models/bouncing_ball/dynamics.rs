@@ -1,11 +1,12 @@
 use super::model::BouncingBall;
 use super::state::BouncingBallState;
-use crate::utils::Labelizable;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
-use crate::physics::models::NoInput;
+use crate::physics::ModelError;
 use crate::physics::models::dynamics::SymbolicDynamics;
+use crate::physics::models::no_input::NoInput;
 use crate::physics::traits::State;
 use crate::physics::{Energy, constants as c, traits::Dynamics};
+use crate::utils::Labelizable;
 use std::sync::Arc;
 
 /// M * v_dot  + M * g = J' * u + f_friction, where M = mass * identity(2), g = [0, 9.81], J = [0,1]
@@ -57,6 +58,18 @@ impl Dynamics for BouncingBall {
         let potential = m * c::GRAVITY * pos_y;
 
         Some(Energy::new(kinetic, potential))
+    }
+    
+    fn update(
+        &mut self,
+        params: &[f64],
+        registry: Option<&Arc<ExprRegistry>>,
+    ) -> Result<(), ModelError> {
+        let [m, friction_coeff]: [f64; 2] = params
+            .try_into()
+            .map_err(|_| ModelError::ConfigError("Incorrect number of parameters.".into()))?;
+        *self = BouncingBall::new(m, friction_coeff, registry);
+        Ok(())
     }
 }
 
@@ -111,8 +124,8 @@ impl SymbolicDynamics for BouncingBall {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::helpers::within_tolerance;
     use crate::numeric_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
+    use crate::utils::helpers::within_tolerance;
 
     use super::*;
     use proptest::prelude::*;

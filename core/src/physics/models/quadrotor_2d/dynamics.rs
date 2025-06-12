@@ -4,6 +4,7 @@ use super::state::Quadrotor2DState;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Dynamics, State};
+use crate::physics::ModelError;
 use crate::physics::{constants as c, energy::Energy};
 use crate::utils::Labelizable;
 use std::sync::Arc;
@@ -47,6 +48,18 @@ impl Dynamics for Quadrotor2D {
 
     fn state_dims(&self) -> (usize, usize) {
         (Quadrotor2DState::dim_q(), Quadrotor2DState::dim_v())
+    }
+
+    fn update(
+        &mut self,
+        params: &[f64],
+        registry: Option<&Arc<ExprRegistry>>,
+    ) -> Result<(), ModelError> {
+        let [m, j, l]: [f64; 3] = params
+            .try_into()
+            .map_err(|_| ModelError::ConfigError("Incorrect number of parameters.".into()))?;
+        *self = Self::new(m, j, l, registry);
+        Ok(())
     }
 }
 

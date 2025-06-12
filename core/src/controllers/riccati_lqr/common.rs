@@ -7,12 +7,13 @@ use crate::controllers::{
 use crate::physics::ModelError;
 use crate::physics::models::Dynamics;
 use crate::physics::traits::{Discretizer, PhysicsSim, State};
+use crate::utils::Labelizable;
 use crate::utils::evaluable::EvaluableDMatrix;
+use crate::utils::helpers::get_or_first;
 use crate::utils::noise::NoiseSources;
 use nalgebra::{DMatrix, DVector};
 
-const ZERO_MEAN: f64 = 0.0;
-
+type LinearDynamicsEvaluation = (Vec<DMatrix<f64>>, Vec<DMatrix<f64>>);
 pub struct RiccatiRecursionGeneric<S: PhysicsSim> {
     sim: S,
     cost_fn: CostFn<S>,
@@ -30,7 +31,7 @@ pub struct RiccatiRecursionGeneric<S: PhysicsSim> {
 impl<S> RiccatiRecursionGeneric<S>
 where
     S: PhysicsSim,
-    S::Model: Dynamics,
+    S::Model: Dynamics + Labelizable,
     S::Discretizer: Discretizer<S::Model>,
 {
     pub fn new(
@@ -56,14 +57,38 @@ where
         })
     }
 
-    fn compute_gain(&mut self) -> Result<Vec<DMatrix<f64>>, ModelError> {
+    fn linearize(&mut self) -> Result<LinearDynamicsEvaluation, ModelError> {
+        let n_op = self.options.general.get_u_operating().len();
+        let mut a_mat: Vec<DMatrix<f64>> = Vec::with_capacity(n_op);
+        let mut b_mat: Vec<DMatrix<f64>> = Vec::with_capacity(n_op);
+
+        let mut real_params: Option<Vec<f64>> = None;
+        if let Some(estimated_params) = self.options.get_general().get_estimated_params() {
+            let labels = S::Model::labels();
+            real_params = Some(self.sim.model().vectorize(labels));
+            self.sim.update_model(estimated_params)?;
+        }
+
+        for k in 0..self.options.general.get_u_operating().len() {
+            let vals = self.options.general.concatenate_operating_point(k)?;
+            a_mat.push(self.jacobian_x_fn.evaluate(&vals)?);
+            b_mat.push(self.jacobian_u_fn.evaluate(&vals)?);
+        }
+
+        if let Some(real_params) = real_params {
+            self.sim.update_model(&real_params)?;
+        }
+
+        Ok((a_mat, b_mat))
+    }
+
+    fn compute_gain(
+        &mut self,
+        a_mat: &[DMatrix<f64>],
+        b_mat: &[DMatrix<f64>],
+    ) -> Result<Vec<DMatrix<f64>>, ModelError> {
         let state_dim = ControllerState::<S>::dim_q() + ControllerState::<S>::dim_v();
         let input_dim = ControllerInput::<S>::dim_q();
-
-        let vals = self.options.general.concatenate_operating_point();
-
-        let a_mat = self.jacobian_x_fn.evaluate(&vals)?;
-        let b_mat = self.jacobian_u_fn.evaluate(&vals)?;
 
         let q_mat = self
             .cost_fn
@@ -78,8 +103,13 @@ where
             .unwrap_or(DMatrix::zeros(input_dim, input_dim));
 
         let k_seq = if self.options.get_steady_state() {
-            let (p_ss, k_ss) =
-                recursion::solve_steady_state_lqr(&a_mat, &b_mat, &q_mat, &r_mat, &self.options)?;
+            let (p_ss, k_ss) = recursion::solve_steady_state_lqr(
+                &a_mat[0],
+                &b_mat[0],
+                &q_mat,
+                &r_mat,
+                &self.options,
+            )?;
             self.k_ss = k_ss.clone();
             self.p_ss = p_ss.clone();
             vec![k_ss; self.n_steps - 1]
@@ -91,8 +121,10 @@ where
                 .unwrap_or(DMatrix::zeros(state_dim, state_dim));
             let mut k_seq = vec![DMatrix::zeros(input_dim, state_dim); self.n_steps - 1];
             for k in (0..self.n_steps - 1).rev() {
+                let state_mat = get_or_first(a_mat, k);
+                let control_mat = get_or_first(b_mat, k);
                 let (p, k_gain) =
-                    recursion::riccati_recursion(&a_mat, &b_mat, &q_mat, &r_mat, &p_next)?;
+                    recursion::riccati_recursion(state_mat, control_mat, &q_mat, &r_mat, &p_next)?;
                 k_seq[k] = k_gain;
                 p_next = p;
             }
@@ -106,40 +138,45 @@ where
 impl<S> Controller<S> for RiccatiRecursionGeneric<S>
 where
     S: PhysicsSim,
-    S::Model: Dynamics,
+    S::Model: Dynamics + Labelizable,
     S::Discretizer: Discretizer<S::Model>,
 {
     fn solve(
         &mut self,
         initial_state: &ControllerState<S>,
     ) -> Result<TrajectoryHistory<S>, ModelError> {
-        let k_seq = self.compute_gain()?;
+        let (a_mat, b_mat) = self.linearize()?;
+        let k_seq = self.compute_gain(&a_mat, &b_mat)?;
 
-        // TODO >>> review
-        let x_ref = self.options.general.get_x_ref()[0].to_vector();
-        let u_op = self.options.general.get_u_operating().to_vector();
+        let x_ref = self.options.general.get_x_ref();
+        let u_op = self.options.general.get_u_operating();
 
         let mut x_traj = vec![initial_state.clone(); self.n_steps];
         let mut u_traj = vec![ControllerInput::<S>::default(); self.n_steps - 1];
         let dt = self.options.get_general().get_dt();
 
         // enable noise if configured
-        let (noise_0_std, noise_std) = self.options.general.get_noise().unwrap_or_default();
-
         let noise_sources =
-            NoiseSources::from_stats(vec![(ZERO_MEAN, noise_0_std), (ZERO_MEAN, noise_std)])?;
-        let mut current_state = noise_sources.add_noise(0, x_traj[0].to_vector())?;
+            NoiseSources::from_stats(self.options.general.get_noise().unwrap_or_default())?;
+        let mut current_state = noise_sources.add_noise(x_traj[0].to_vector())?;
         x_traj[0] = ControllerState::<S>::from_slice(current_state.as_slice());
 
         let u_limits = self.options.general.get_u_limits();
 
         // Common rollout using `k_seq`
         for k in 0..self.n_steps - 1 {
-            let current_input = gain_to_input_vector(&current_state, &k_seq[k], &x_ref, &u_op);
+            let x_reference = get_or_first(x_ref, k);
+            let u_operating = get_or_first(u_op, k);
+            let current_input = gain_to_input_vector(
+                &current_state,
+                &k_seq[k],
+                &x_reference.to_vector(),
+                &u_operating.to_vector(),
+            );
             u_traj[k] = into_clamped_input::<S>(current_input, u_limits);
 
             let x_next = self.sim.step(&x_traj[k], Some(&u_traj[k]), dt)?;
-            x_traj[k + 1] = try_into_noisy_state::<S>(x_next.to_vector(), &noise_sources, 1)?;
+            x_traj[k + 1] = try_into_noisy_state::<S>(x_next.to_vector(), &noise_sources)?;
             current_state = x_traj[k + 1].to_vector();
         }
 

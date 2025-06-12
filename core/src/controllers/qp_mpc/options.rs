@@ -7,16 +7,18 @@ use osqp::Settings;
 const DEFAULT_FINITIE_HORIZON: f64 = 1.0;
 
 pub struct ConvexMpcOptions<S: PhysicsSim> {
-    pub finite_horizon: f64,
+    pub mpc_finite_horizon: f64,
 
     pub general: ControllerOptions<S>,
     pub osqp_settings: Settings,
+    pub apply_steady_state_cost: bool,
 }
 
 impl<S: PhysicsSim> Clone for ConvexMpcOptions<S> {
     fn clone(&self) -> Self {
         Self {
-            finite_horizon: self.finite_horizon,
+            mpc_finite_horizon: self.mpc_finite_horizon,
+            apply_steady_state_cost: self.apply_steady_state_cost,
             general: self.get_general().clone(),
             osqp_settings: self.get_osqp_settings().clone(),
         }
@@ -26,7 +28,8 @@ impl<S: PhysicsSim> Clone for ConvexMpcOptions<S> {
 impl<S: PhysicsSim> Default for ConvexMpcOptions<S> {
     fn default() -> Self {
         Self {
-            finite_horizon: DEFAULT_FINITIE_HORIZON,
+            mpc_finite_horizon: DEFAULT_FINITIE_HORIZON,
+            apply_steady_state_cost: false,
             general: ControllerOptions::<S>::default(),
             osqp_settings: Settings::default(),
         }
@@ -40,16 +43,19 @@ where
     pub fn get_general(&self) -> &ControllerOptions<S> {
         &self.general
     }
-    pub fn get_horizon(&self) -> f64 {
-        self.finite_horizon
+    pub fn get_mpc_horizon(&self) -> f64 {
+        self.mpc_finite_horizon
+    }
+    pub fn get_apply_steady_state_cost(&self) -> bool {
+        self.apply_steady_state_cost
     }
     pub fn get_osqp_settings(&self) -> &Settings {
         &self.osqp_settings
     }
 
-    pub fn set_horizon(self, finite_horizon: f64) -> Self {
+    pub fn set_mpc_horizon(self, finite_horizon: f64) -> Self {
         let mut new = self;
-        new.finite_horizon = finite_horizon;
+        new.mpc_finite_horizon = finite_horizon;
         new
     }
 
@@ -62,6 +68,12 @@ where
     pub fn set_osqp_settings(self, settings: Settings) -> Self {
         let mut new = self;
         new.osqp_settings = settings;
+        new
+    }
+
+    pub fn set_apply_steady_state_cost(self, flag: bool) -> Self {
+        let mut new = self;
+        new.apply_steady_state_cost = flag;
         new
     }
 }

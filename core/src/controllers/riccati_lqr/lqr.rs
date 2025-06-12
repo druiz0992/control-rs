@@ -4,13 +4,14 @@ use crate::controllers::{Controller, ControllerState, CostFn, TrajectoryHistory}
 use crate::physics::ModelError;
 use crate::physics::discretizer::LinearDiscretizer;
 use crate::physics::traits::{LinearDynamics, PhysicsSim};
+use crate::utils::Labelizable;
 
 pub struct RiccatiRecursionLQR<S: PhysicsSim>(RiccatiRecursionGeneric<S>);
 
 impl<S> RiccatiRecursionLQR<S>
 where
     S: PhysicsSim,
-    S::Model: LinearDynamics,
+    S::Model: LinearDynamics + Labelizable,
     S::Discretizer: LinearDiscretizer<S::Model>,
 {
     pub fn new(
@@ -33,7 +34,7 @@ where
 impl<S> Controller<S> for RiccatiRecursionLQR<S>
 where
     S: PhysicsSim,
-    S::Model: LinearDynamics,
+    S::Model: LinearDynamics + Labelizable,
     S::Discretizer: LinearDiscretizer<S::Model>,
 {
     fn solve(
