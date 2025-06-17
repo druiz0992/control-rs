@@ -7,9 +7,11 @@ pub mod rk4;
 pub mod utils;
 pub mod zero_order_hold;
 
-use crate::numeric_services::symbolic::SymbolicFunction;
+use std::sync::Arc;
+
 use crate::physics::ModelError;
 use crate::physics::traits::Dynamics;
+use crate::{numeric_services::symbolic::SymbolicFunction, utils::evaluable::Evaluable};
 pub use backward_euler::BackwardEuler;
 pub use forward_euler::ForwardEuler;
 pub use hermite_simpson::HermiteSimpson;
@@ -40,3 +42,6 @@ pub trait LinearDiscretizer<D: LinearDynamics>: Discretizer<D> {
     fn jacobian_x(&self) -> &DMatrix<f64>;
     fn jacobian_u(&self) -> &DMatrix<f64>;
 }
+
+pub type NumericFunction = Box<dyn Fn(&[f64]) -> DMatrix<f64>>;
+

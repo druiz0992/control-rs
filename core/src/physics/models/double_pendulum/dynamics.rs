@@ -22,28 +22,31 @@ impl Dynamics for DoublePendulum {
         let [m1, m2, l1, l2, air_resistance_coeff] =
             self.extract(&["m1", "m2", "l1", "l2", "air_resistance_coeff"]);
         let [theta1, omega1, theta2, omega2] = s.extract(&["theta1", "omega1", "theta2", "omega2"]);
-        let input = input.unwrap_or(&Self::Input::default()).clone();
+        let input = input.cloned().unwrap_or_default();
         let [u1, u2] = input.extract(&["u1", "u2"]);
 
         let g = c::GRAVITY;
 
-        let c = (theta1 - theta2).cos();
-        let s = (theta1 - theta2).sin();
+        let cos = (theta1 - theta2).cos();
+        let sin = (theta1 - theta2).sin();
+        let sin_sq = sin * sin;
+        let omega1_sq = omega1 * omega1;
+        let omega2_sq = omega2 * omega2;
 
-        let damping1 = -air_resistance_coeff * omega1 * omega1.abs();
-        let damping2 = -air_resistance_coeff * omega2 * omega2.abs();
+        let damping1 = -air_resistance_coeff * omega1_sq * omega1.signum();
+        let damping2 = -air_resistance_coeff * omega2_sq * omega2.signum();
 
         let dtheta1 = omega1;
-        let dω1 = (m2 * g * theta2.sin() * c
-            - m2 * s * (l1 * c * omega1.powi(2) + l2 * omega2.powi(2))
+        let dω1 = (m2 * g * theta2.sin() * cos
+            - m2 * sin * (l1 * cos * omega1_sq + l2 * omega2_sq)
             - (m1 + m2) * g * theta1.sin()
             + (u1 + damping1))
-            / (l1 * (m1 + m2 * s * s));
+            / (l1 * (m1 + m2 * sin_sq));
         let dtheta2 = omega2;
-        let dω2 = ((m1 + m2) * (l1 * omega1.powi(2) * s - g * theta2.sin() + g * theta1.sin() * c)
-            + m2 * l2 * omega2.powi(2) * s * c
+        let dω2 = ((m1 + m2) * (l1 * omega1_sq * sin - g * theta2.sin() + g * theta1.sin() * cos)
+            + m2 * l2 * omega2_sq * sin * cos
             + (u2 + damping2))
-            / (l2 * (m1 + m2 * s * s));
+            / (l2 * (m1 + m2 * sin_sq));
 
         DoublePendulumState {
             theta1: dtheta1,
@@ -110,27 +113,25 @@ impl SymbolicDynamics for DoublePendulum {
         // Common terms
         let c = theta1.sub(&theta2).cos();
         let s = theta1.sub(&theta2).sin();
+        let s_sq = s.mul(&s);
+        let omega1_sq = omega1.mul(&omega1);
+        let omega2_sq = omega2.mul(&omega2);
 
         let damping1 = air_resistance_coeff
             .scalef(-1.0)
-            .mul(&omega1)
-            .mul(&omega1.abs());
+            .mul(&omega1_sq)
+            .mul(&omega1.smooth_sign(1e-10).wrap());
         let damping2 = air_resistance_coeff
             .scalef(-1.0)
-            .mul(&omega2)
-            .mul(&omega2.abs());
+            .mul(&omega2_sq)
+            .mul(&omega2.smooth_sign(1e-10).wrap());
 
         // Dynamics equations
         let dtheta1 = omega1.clone();
         let mut domega1 = m2.mul(&g).mul(&theta2.sin()).mul(&c);
         domega1 = domega1.sub(
-            &m2.mul(&s).mul(
-                &l1.mul(&c)
-                    .mul(&omega1.pow(2.0).wrap())
-                    .add(&l2)
-                    .mul(&omega2.pow(2.0).wrap())
-                    .wrap(),
-            ),
+            &m2.mul(&s)
+                .mul(&l1.mul(&c).mul(&omega1_sq).add(&l2).mul(&omega2_sq).wrap()),
         );
         domega1 = domega1
             .sub(&m1.add(&m2).wrap())
@@ -139,15 +140,15 @@ impl SymbolicDynamics for DoublePendulum {
             .add(&damping1.add(&u[0]).wrap())
             .wrap();
         domega1 = domega1
-            .div(&m1.add(&m2).mul(&s).mul(&s).wrap().mul(&l1).wrap())
+            .div(&m1.add(&m2).mul(&s_sq).wrap().mul(&l1).wrap())
             .wrap();
 
-        let denom = l2.mul(&m1.add(&m2).mul(&s).mul(&s).wrap()).wrap();
-        let mut domega2 = l1.mul(&omega1.pow(2.0)).mul(&s).wrap();
+        let denom = l2.mul(&m1.add(&m2).mul(&s_sq).wrap()).wrap();
+        let mut domega2 = l1.mul(&omega1_sq).mul(&s).wrap();
         domega2 = domega2.sub(&g.mul(&theta2.sin()).wrap());
         domega2 = domega2.add(&g.mul(&theta1.sin().mul(&c)).wrap()).wrap();
         domega2 = m1.add(&m2).wrap().mul(&domega2);
-        domega2 = domega2.add(&m2.mul(&l2).mul(&omega2.pow(2.0)).mul(&s).mul(&c).wrap());
+        domega2 = domega2.add(&m2.mul(&l2).mul(&omega2_sq).mul(&s).mul(&c).wrap());
         domega2 = domega2.add(&damping2.add(&u[1]).wrap()).wrap();
         domega2 = domega2.div(&denom).wrap();
 

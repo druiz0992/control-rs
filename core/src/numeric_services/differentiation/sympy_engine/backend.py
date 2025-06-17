@@ -14,14 +14,6 @@ def extract_symbols(functions, variable_names):
     
     return function, variables
 
-#def compute_gradient(function, variables):
-    # Compute the gradient (partial derivatives)
-    #gradient = [sp.diff(function, var) for var in variables]
-#
-    #gradient_str = [str(g) for g in gradient]
-#
-    #return gradient_str, gradient
-
 import sympy as sp
 
 def compute_gradient(function, variables):

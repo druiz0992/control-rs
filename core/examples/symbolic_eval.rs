@@ -1,235 +1,201 @@
 use control_rs::numeric_services::symbolic::ExprRegistry;
-use control_rs::numeric_services::symbolic::fasteval::slab::ExprSlab;
 use control_rs::physics::constants as c;
 use control_rs::physics::models::{DoublePendulum, DoublePendulumInput, DoublePendulumState};
 use control_rs::physics::traits::SymbolicDynamics;
 use control_rs::utils::Labelizable;
-use fasteval::compiler::IC;
-use fasteval::slab::CompileSlab;
-use fasteval::{Evaler, ExpressionI, Slab};
-use fasteval::{Instruction, InstructionI};
-use std::collections::HashMap;
+use std::fs;
 use std::sync::Arc;
 
 fn main() {
     let registry = Arc::new(ExprRegistry::new());
 
-    let pendulum = DoublePendulum::new(1.0, 2.0, 1.0, 1.0, 1.0, Some(&registry));
+    let pendulum = DoublePendulum::new(1.0, 1.0, 1.0, 1.0, 1.0, Some(&registry));
     let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
+    let input_symbol = registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
     let dynamics_expr = pendulum.dynamics_symbolic(&state_symbol, &registry);
 
     let states = DoublePendulumState::labels();
     let actions = DoublePendulumInput::labels();
-    let mut labels = Vec::with_capacity(states.len() + actions.len());
+    let mut params = Vec::with_capacity(states.len() + actions.len());
 
-    labels.extend_from_slice(states);
-    labels.extend_from_slice(actions);
+    params.extend_from_slice(states);
+    params.extend_from_slice(actions);
 
-    let slab = dynamics_expr.get_slab().unwrap();
-    let code = generate_fn_from_slab(&slab, &labels);
+    let slab_df_dx = dynamics_expr
+        .jacobian(&state_symbol)
+        .unwrap()
+        .get_slab()
+        .unwrap();
 
-    dbg!(&code);
+    let slab_df_du = dynamics_expr
+        .jacobian(&input_symbol)
+        .unwrap()
+        .get_slab()
+        .unwrap();
+
+    let mut code = slab_df_dx.generate_fn_from_slab("eval_dfdx", &params);
+    code += slab_df_du
+        .generate_fn_from_slab("eval_dfdu", &params)
+        .as_str();
+
+    fs::write("./core/examples/rk4_numeric.rs", code).unwrap();
 }
 
-fn build_hash(labels: &[&str]) -> HashMap<String, usize> {
-    labels
-        .iter()
-        .enumerate()
-        .map(|(i, s)| (s.to_string(), i))
-        .collect()
+/*
+
+use std::f64::consts::PI;
+use std::sync::Arc;
+
+use control_rs::numeric_services::symbolic::{
+    ExprRegistry, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
+};
+use control_rs::physics::constants as c;
+use control_rs::physics::discretizer::rk4::RK4Numeric;
+use control_rs::physics::discretizer::{NumericDiscretizer, RK4Symbolic, SymbolicDiscretizer};
+use control_rs::physics::models::{DoublePendulum, DoublePendulumState};
+use control_rs::physics::traits::{Dynamics, State, SymbolicDynamics};
+use control_rs::utils::evaluable::Evaluable;
+use control_rs::utils::matrix::vec_to_dmat;
+use nalgebra::{DMatrix, DVector};
+use std::time::Instant;
+
+fn main() {
+    let m1 = 1.0;
+    let m2 = 1.0;
+    let l1 = 1.0;
+    let l2 = 1.0;
+    let air_resistance_coeff = 0.0;
+
+    let theta1 = PI / 1.6;
+    let omega1 = 0.0;
+    let theta2 = PI / 1.8;
+    let omega2 = 0.0;
+    let dt = 0.01;
+
+    let registry = Arc::new(ExprRegistry::new());
+
+    let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry));
+    let state_0 = DoublePendulumState::new(theta1, omega1, theta2, omega2);
+    let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
+    let input_symbol = registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
+    let jacobian_symbols = state_symbol.extend(&input_symbol);
+    let symbolic_f = model.dynamics_symbolic(&state_symbol, &registry);
+
+    let params_state = DVector::from_vec(vec![theta1, omega1, theta2, omega2]);
+    let params_input = DVector::from_vec(vec![0.0, 0.0]);
+    let mut params = params_state.as_slice().to_vec();
+    params.extend(params_input.as_slice());
+
+    let symbolic_eval_f: DVector<f64> =
+        SymbolicFunction::new(symbolic_f.to_fn(&registry).unwrap(), &jacobian_symbols)
+            .eval(&params)
+            .try_into_eval_result()
+            .unwrap();
+
+    let symbolic_f_dx = SymbolicFunction::new(
+        symbolic_f
+            .jacobian(&state_symbol)
+            .unwrap()
+            .to_fn(&registry)
+            .unwrap(),
+        &jacobian_symbols,
+    )
+    .evaluate(&params)
+    .unwrap();
+    let symbolic_f_du = SymbolicFunction::new(
+        symbolic_f
+            .jacobian(&input_symbol)
+            .unwrap()
+            .to_fn(&registry)
+            .unwrap(),
+        &jacobian_symbols,
+    )
+    .evaluate(&params)
+    .unwrap();
+
+    /////
+    let discretizer = RK4Symbolic::new(&model, Arc::clone(&registry)).unwrap();
+    registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
+    let fa = discretizer.jacobian_x().unwrap();
+    let fb = discretizer.jacobian_u().unwrap();
+    let start = Instant::now();
+    let a = fa.evaluate(&params).unwrap();
+    let b = fb.evaluate(&params).unwrap();
+    let duration_symbolic = start.elapsed();
+
+    //let c = discretizer.step(&model, &state_0, None, dt).unwrap();
+
+    let start = Instant::now();
+
+    let df_dx = eval_dfdx(&params);
+    let df_du = eval_dfdu(&params);
+    let f = model.dynamics(&state_0, None).to_vec();
+
+    //RK4
+    let k1 = DVector::from_vec(f.clone());
+    let dk1_dx = &df_dx;
+    let dk1_du = &df_du;
+
+    let new_params_state = &params_state + dt / 2.0 * &k1;
+    params = new_params_state.as_slice().to_vec();
+    params.extend(params_input.as_slice());
+    let k2 = model
+        .dynamics(
+            &DoublePendulumState::from_slice(new_params_state.as_slice()),
+            None,
+        )
+        .to_vector();
+    let a_k2 = eval_dfdx(&params);
+    let b_k2 = eval_dfdu(&params);
+    let tmp_dx = &a_k2 * dk1_dx * dt / 2.0;
+    let dk2_dx = &tmp_dx + &a_k2;
+    let tmp_du = &a_k2 * dk1_du * dt / 2.0;
+    let dk2_du = &tmp_du + b_k2;
+
+    let new_params_state = &params_state + dt / 2.0 * &k2;
+    params = new_params_state.as_slice().to_vec();
+    params.extend(params_input.as_slice());
+    let k3 = model
+        .dynamics(
+            &DoublePendulumState::from_slice(new_params_state.as_slice()),
+            None,
+        )
+        .to_vector();
+    let a_k3 = eval_dfdx(&params);
+    let b_k3 = eval_dfdu(&params);
+    let tmp_dx = &a_k3 * &dk2_dx * dt / 2.0;
+    let dk3_dx = &tmp_dx + &a_k3;
+    let tmp_du = &a_k3 * &dk2_du * dt / 2.0;
+    let dk3_du = &tmp_du + b_k3;
+
+    let new_params_state = &params_state + dt * &k3;
+    params = new_params_state.as_slice().to_vec();
+    params.extend(params_input.as_slice());
+    //let k4 = DVector::from_vec(eval_f(&params));
+    let a_k4 = eval_dfdx(&params);
+    let b_k4 = eval_dfdu(&params);
+    let tmp_dx = &a_k4 * &dk3_dx * dt;
+    let dk4_dx = &tmp_dx + &a_k4;
+    let tmp_du = &a_k4 * &dk3_du * dt;
+    let dk4_du = &tmp_du + b_k4;
+
+    let dx_next_dx =
+        dt / 6.0 * (dk1_dx + 2.0 * dk2_dx + 2.0 * dk3_dx + dk4_dx) + DMatrix::identity(4, 4);
+    let dx_next_du = dt / 6.0 * (dk1_du + 2.0 * dk2_du + 2.0 * dk3_du + dk4_du);
+    let duration_numeric = start.elapsed();
+
+    println!("{}, {:?}", symbolic_f_dx, df_dx);
+    println!("{}, {:?}", symbolic_f_du, df_du);
+    println!("{}, {:?}", symbolic_eval_f, f);
+    println!("{}, {}", dx_next_dx, a);
+    println!("{}, {}", dx_next_du, b);
+
+    println!("{:?}, {:?}", duration_symbolic, duration_numeric);
+
+    //
+    let discretizer = RK4Numeric::new(&model, Box::new(eval_dfdx), Box::new(eval_dfdu)).unwrap();
+    let (j1, j2) = discretizer.jacobians(&model, &state_0, None, dt);
+    println!("{}, {}", j1, j2);
 }
 
-fn generate_fn_from_slab(slabs: &ExprSlab, labels: &[&str]) -> String {
-    match slabs {
-        ExprSlab::Scalar(slab) => generate_fn_from_slab_scalar(slab, labels),
-        ExprSlab::Vector(slabs) => generate_fn_from_slab_vec(slabs, labels),
-        ExprSlab::Matrix(slabs) => generate_fn_from_slab_matrix(slabs, labels),
-    }
-}
-
-fn process_parse_slab(
-    slab: &Slab,
-    r: &HashMap<String, usize>,
-    code: &mut String,
-    idx: &mut usize,
-) -> bool {
-    let Slab { cs, ps } = slab;
-    let mut flag = false;
-    match cs.get_instr(InstructionI(0)) {
-        Instruction::IConst(c) if c.is_nan() => {
-            let name = ps.get_expr(ExpressionI(0)).var_names(slab);
-            if let Some(var_name) = name.first() {
-                if let Some(i) = r.get(var_name) {
-                    code.push_str(&format!("    let t{idx} = vals[{}];\n", i));
-                    *idx += 1;
-                    flag = true;
-                } else {
-                    panic!("Variable {} doesnt exist!", var_name);
-                }
-            } else {
-                panic!("Variable");
-            }
-        }
-        _ => (),
-    };
-    flag
-}
-
-fn process_compile_slab(
-    cs: &CompileSlab,
-    r: &HashMap<String, usize>,
-    code: &mut String,
-    idx: &mut usize,
-) {
-    loop {
-        let instr = cs.get_instr(InstructionI(*idx));
-        match instr {
-            Instruction::IConst(c) if c.is_nan() => break,
-            Instruction::IVar(name) => {
-                if let Some(i) = r.get(name) {
-                    code.push_str(&format!("    let t{idx} = vals[{}];\n", i));
-                } else {
-                    panic!("Variable {} doesnt exist!", name);
-                }
-            }
-            Instruction::INeg(a) => {
-                code.push_str(&format!("    let t{idx} = -t{}\n", a.0));
-            }
-            Instruction::IAdd(a, IC::I(b)) => {
-                code.push_str(&format!("    let t{idx} = t{} + t{};\n", a.0, b.0));
-            }
-            Instruction::IAdd(a, IC::C(c)) => {
-                code.push_str(&format!("    let t{idx} = t{} + {:.8};\n", a.0, c));
-            }
-            Instruction::IMul(a, IC::I(b)) => {
-                code.push_str(&format!("    let t{idx} = t{} * t{};\n", a.0, b.0));
-            }
-            Instruction::IMul(a, IC::C(c)) => {
-                code.push_str(&format!("    let t{idx} = t{} * {:.8};\n", a.0, c));
-            }
-            Instruction::IFuncLog { base, of } => {
-                let base_str = match base {
-                    IC::I(i) => format!("t{}", i.0),
-                    IC::C(c) => format!("{}", c),
-                };
-                let of_str = match of {
-                    IC::I(i) => format!("t{}", i.0),
-                    IC::C(c) => format!("{}", c),
-                };
-                code.push_str(&format!("    let t{idx} = {}.log({});\n", of_str, base_str));
-            }
-            Instruction::IExp { base, power } => {
-                let base_str = match base {
-                    IC::I(i) => format!("t{}", i.0),
-                    IC::C(c) => format!("{}", c),
-                };
-                let power_str = match power {
-                    IC::I(i) => format!("t{}", i.0),
-                    IC::C(c) => format!("{}", c),
-                };
-                code.push_str(&format!(
-                    "    let t{idx} = {}.powf({});\n",
-                    base_str, power_str
-                ));
-            }
-
-            Instruction::IInv(a) => {
-                code.push_str(&format!("    let t{idx} = 1.0 / t{};\n", a.0));
-            }
-            Instruction::IFuncSin(a) => {
-                code.push_str(&format!("    let t{idx} = t{}.sin();\n", a.0));
-            }
-            Instruction::IFuncCos(a) => {
-                code.push_str(&format!("    let t{idx} = t{}.cos();\n", a.0));
-            }
-            Instruction::IFuncTan(a) => {
-                code.push_str(&format!("    let t{idx} = t{}.tan();\n", a.0));
-            }
-            Instruction::IFuncAbs(a) => {
-                code.push_str(&format!("    let t{idx} = t{}.abs();\n", a.0));
-            }
-            // ... handle other instructions
-            _ => panic!("Unsupported instruction {:?}", instr),
-        }
-        *idx += 1;
-    }
-}
-
-fn generate_fn_from_slab_scalar(slab: &Slab, labels: &[&str]) -> String {
-    let mut code = String::new();
-    let mut idx = 0;
-    let r = build_hash(labels);
-
-    code.push_str("fn eval(vals: &f64) -> Vec<f64> {\n");
-
-    if process_parse_slab(slab, &r, &mut code, &mut idx) {
-        code.push_str(&format!("    t{idx}\n"));
-        return code;
-    }
-
-    let cs = &slab.cs;
-    process_compile_slab(cs, &r, &mut code, &mut idx);
-
-    code.push_str(&format!("    t{}\n", idx - 1)); // assuming last valid index is result
-    code.push_str("}\n");
-
-    code
-}
-
-fn generate_fn_from_slab_vec(slabs: &Vec<Slab>, labels: &[&str]) -> String {
-    let mut code = String::new();
-    let mut idx = 0;
-    let mut v_idx = 0;
-    let r = build_hash(labels);
-
-    code.push_str("fn eval(vals: &[f64]) -> Vec<f64> {\n");
-    code.push_str(&format!("    let mut v = vec![0.0; {}];\n", slabs.len()));
-
-    for slab in slabs {
-        if process_parse_slab(slab, &r, &mut code, &mut idx) {
-            code.push_str(&format!("    v[{v_idx}] = t{idx};\n"));
-            continue;
-        }
-        let cs = &slab.cs;
-        process_compile_slab(cs, &r, &mut code, &mut idx);
-        code.push_str(&format!("   v[{v_idx}] = t{};\n", idx - 1)); // assuming last valid index is result
-        v_idx += 1;
-    }
-    code.push_str("    v\n"); // assuming last valid index is result
-    code.push_str("}\n");
-
-    code
-}
-
-fn generate_fn_from_slab_matrix(slabs: &Vec<Vec<Slab>>, labels: &[&str]) -> String {
-    let mut code = String::new();
-    let mut idx = 0;
-    let mut r_idx = 0;
-    let mut c_idx = 0;
-    let r = build_hash(labels);
-
-    code.push_str("fn eval(vals: &[Vec<f64>]) -> Vec<Vec<f64>> {\n");
-    code.push_str(&format!(
-        "    let mut v = vec![vec![0.0;{}];{}];\n",
-        slabs[0].len(),
-        slabs.len()
-    ));
-
-    for row in slabs {
-        for slab in row {
-            if process_parse_slab(slab, &r, &mut code, &mut idx) {
-                code.push_str(&format!("    v[{r_idx}][{c_idx}] = t{idx};\n"));
-                continue;
-            }
-            let cs = &slab.cs;
-            process_compile_slab(cs, &r, &mut code, &mut idx);
-            code.push_str(&format!("   v[{r_idx}][{c_idx}] = t{};\n", idx - 1)); // assuming last valid index is result
-            c_idx += 1;
-        }
-        r_idx += 1;
-    }
-    code.push_str("    v\n"); // assuming last valid index is result
-    code.push_str("}\n");
-
-    code
-}
+*/

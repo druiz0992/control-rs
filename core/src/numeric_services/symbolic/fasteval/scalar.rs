@@ -1,5 +1,5 @@
 use super::derivatives::compute_derivatives;
-use super::slab::ExprSlab;
+use super::slab::InstructionSlab;
 use crate::numeric_services::differentiation::dtos::DerivativeType;
 use crate::numeric_services::symbolic::dtos::{ExprRecord, SymbolicEvalResult, SymbolicFn};
 use crate::numeric_services::symbolic::error::SymbolicError;
@@ -285,9 +285,9 @@ impl ExprScalar {
         }
     }
 
-    pub fn get_slab(&self) -> Result<ExprSlab, SymbolicError> {
-        let (_, slab) = self.compile_with_retry()?;
-        Ok(ExprSlab::Scalar(Box::new(slab)))
+    pub fn get_slab(&self) -> Result<InstructionSlab, SymbolicError> {
+        let (instruction, slab) = self.compile_with_retry()?;
+        Ok(InstructionSlab::Scalar((instruction, slab)))
     }
 }
 
