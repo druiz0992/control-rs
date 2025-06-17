@@ -1,4 +1,3 @@
-use control_rs::utils::Labelizable;
 use control_rs::numeric_services::symbolic::ExprRegistry;
 use control_rs::physics::discretizer::{
     BackwardEuler, ForwardEuler, HermiteSimpson, ImplicitMidpoint, MidPoint, RK4, RK4Symbolic, ZOH,
@@ -8,6 +7,7 @@ use control_rs::physics::models::linear_time_invariant::model::LtiModel;
 use control_rs::physics::models::linear_time_invariant::state::LtiState;
 use control_rs::physics::models::{BouncingBall, BouncingBallState};
 use control_rs::physics::traits::{Discretizer, State};
+use control_rs::utils::Labelizable;
 use nalgebra::{DMatrix, DVector};
 use std::sync::Arc;
 
@@ -23,7 +23,7 @@ fn init_bouncing_ball() -> (BouncingBall, BouncingBallState, Arc<ExprRegistry>) 
     let registry = Arc::new(ExprRegistry::new());
     let state = BouncingBallState::new(pos_x, pos_y, v_x, v_y);
 
-    let model = BouncingBall::new(m, friction_coeff, Some(&registry));
+    let model = BouncingBall::new(m, friction_coeff, Some(&registry), true);
 
     (model, state, registry)
 }
@@ -170,13 +170,13 @@ fn test_linear_models() {
 fn test_rk4_vs_zoh() {
     let state_matrix = DMatrix::from_vec(3, 3, vec![1.0, 2.0, 3.0, 1.0, 2.0, 3.0, 1.0, 2.0, 3.0]);
     let control_matrix = DMatrix::from_vec(3, 2, vec![1.0, 2.0, 0.0, 1.0, 2.0, 1.0]);
-    let model = LtiModel::<3, 0,2>::new(state_matrix, control_matrix).unwrap();
+    let model = LtiModel::<3, 0, 2>::new(state_matrix, control_matrix).unwrap();
 
     let tol = 1e-5;
     let dt = 0.01;
 
     let state0 = LtiState::<3, 0>::new([3.0, 2.0, 1.0]);
-    let input0 = LtiInput::<2,0>::new([1.0, 1.0]);
+    let input0 = LtiInput::<2, 0>::new([1.0, 1.0]);
 
     let rk4 = RK4::new(&model).unwrap();
     let zoh = ZOH::new(&model, dt).unwrap();

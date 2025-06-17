@@ -47,7 +47,10 @@ fn generate_fn_from_slab_scalar(
     let slab = &instruction_slab.1;
     code += format!("   {:?}\n", slab.cs).as_str();
     code += format!("\n\n\n     {:?}*/\n\n", slab).as_str();
-    code.push_str(&format!("fn {}(params: &[f64]) -> f64 {{\n", function_name));
+    code.push_str(&format!(
+        "pub fn {}(params: &[f64]) -> f64 {{\n",
+        function_name
+    ));
 
     if process_parsed_slab(slab, &r, &mut code, &mut idx) {
         code.push_str(&format!("    t{}\n", idx - 1));
@@ -231,7 +234,7 @@ fn generate_fn_from_slab_vec(
     let r = build_hash(params);
 
     code.push_str(&format!(
-        "fn {}(params: &[f64]) -> DVector<f64> {{\n",
+        "pub fn {}(params: &[f64]) -> DVector<f64> {{\n",
         function_name
     ));
     code.push_str(&format!(
@@ -272,6 +275,7 @@ fn generate_fn_from_slab_matrix(
     let mut idx = 0;
     let mut r_idx = 0;
     let mut c_idx = 0;
+    dbg!(&params);
     let r = build_hash(params);
 
     let mut code = format!("/*\n");
@@ -282,7 +286,7 @@ fn generate_fn_from_slab_matrix(
     }
     code += format!("\n\n\n     {:?}*/\n\n", instruction_slabs).as_str();
     code.push_str(&format!(
-        "fn {}(params: &[f64]) -> DMatrix<f64> {{\n",
+        "pub fn {}(params: &[f64]) -> DMatrix<f64> {{\n",
         function_name
     ));
     code.push_str(&format!(

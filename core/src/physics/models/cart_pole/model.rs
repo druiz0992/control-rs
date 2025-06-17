@@ -23,6 +23,7 @@ impl CartPole {
         friction_coeff: f64,
         air_resistance_coeff: f64,
         registry: Option<&Arc<ExprRegistry>>,
+        store_params: bool,
     ) -> Self {
         let model = CartPole {
             pole_mass,
@@ -32,8 +33,9 @@ impl CartPole {
             l,
         };
         if let Some(registry) = registry {
-            model.store_params(registry);
-
+            if store_params {
+                model.store_params(registry);
+            }
             registry.insert_scalar(c::GRAVITY_SYMBOLIC, c::GRAVITY);
             registry.insert_vector(c::STATE_SYMBOLIC, CartPoleState::labels());
             registry.insert_vector_expr(c::INPUT_SYMBOLIC, ExprVector::new(&["u1"]));
@@ -41,7 +43,7 @@ impl CartPole {
         }
         model
     }
-    fn store_params(&self, registry: &Arc<ExprRegistry>) {
+    pub fn store_params(&self, registry: &Arc<ExprRegistry>) {
         let labels = Self::labels();
         let params = self.vectorize(labels);
 
@@ -71,6 +73,7 @@ mod tests {
             friction_coeff,
             air_resistance_coeff,
             None,
+            true,
         );
 
         let params = cart_pole.extract(&[
@@ -109,6 +112,7 @@ mod tests {
             friction_coeff,
             air_resistance_coeff,
             Some(&registry),
+            true,
         );
 
         let params = cart_pole.extract(&[
@@ -143,7 +147,7 @@ mod tests {
 
     #[test]
     fn test_cart_pole_parameters() {
-        let cart_pole = CartPole::new(1.0, 2.0, 0.5, 0.0, 0.0, None);
+        let cart_pole = CartPole::new(1.0, 2.0, 0.5, 0.0, 0.0, None, true);
 
         let [
             pole_mass,

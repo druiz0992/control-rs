@@ -51,7 +51,7 @@ async fn build_sim(controller_type: ControllerType) {
     let state_ref = Quadrotor2DState::new(0.0, 1.0, 0.0, 0.0, 0.0, 0.0);
 
     let registry = Arc::new(ExprRegistry::new());
-    let model = Quadrotor2D::new(m, j, l, Some(&registry));
+    let model = Quadrotor2D::new(m, j, l, Some(&registry), true);
 
     registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
 

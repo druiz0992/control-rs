@@ -9,17 +9,19 @@ use std::sync::Arc;
 fn main() {
     let registry = Arc::new(ExprRegistry::new());
 
-    let pendulum = DoublePendulum::new(1.0, 1.0, 1.0, 1.0, 1.0, Some(&registry));
+    let pendulum = DoublePendulum::new(1.0, 1.0, 1.0, 1.0, 1.0, Some(&registry), false);
     let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
     let input_symbol = registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
     let dynamics_expr = pendulum.dynamics_symbolic(&state_symbol, &registry);
 
     let states = DoublePendulumState::labels();
     let actions = DoublePendulumInput::labels();
-    let mut params = Vec::with_capacity(states.len() + actions.len());
+    let params = DoublePendulum::labels();
+    let mut vals = Vec::with_capacity(states.len() + actions.len() + params.len());
 
-    params.extend_from_slice(states);
-    params.extend_from_slice(actions);
+    vals.extend_from_slice(states);
+    vals.extend_from_slice(actions);
+    vals.extend_from_slice(params);
 
     let slab_df_dx = dynamics_expr
         .jacobian(&state_symbol)
@@ -33,16 +35,15 @@ fn main() {
         .get_slab()
         .unwrap();
 
-    let mut code = slab_df_dx.generate_fn_from_slab("eval_dfdx", &params);
+    let mut code = slab_df_dx.generate_fn_from_slab("eval_dfdx", &vals);
     code += slab_df_du
-        .generate_fn_from_slab("eval_dfdu", &params)
+        .generate_fn_from_slab("eval_dfdu", &vals)
         .as_str();
 
     fs::write("./core/examples/rk4_numeric.rs", code).unwrap();
 }
 
 /*
-
 use std::f64::consts::PI;
 use std::sync::Arc;
 
@@ -50,8 +51,10 @@ use control_rs::numeric_services::symbolic::{
     ExprRegistry, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
 };
 use control_rs::physics::constants as c;
-use control_rs::physics::discretizer::rk4::RK4Numeric;
-use control_rs::physics::discretizer::{NumericDiscretizer, RK4Symbolic, SymbolicDiscretizer};
+use control_rs::physics::discretizer::rk4_numeric::RK4Numeric;
+use control_rs::physics::discretizer::{
+    NumericDiscretizer, NumericFunction, RK4Symbolic, SymbolicDiscretizer,
+};
 use control_rs::physics::models::{DoublePendulum, DoublePendulumState};
 use control_rs::physics::traits::{Dynamics, State, SymbolicDynamics};
 use control_rs::utils::evaluable::Evaluable;
@@ -74,44 +77,49 @@ fn main() {
 
     let registry = Arc::new(ExprRegistry::new());
 
-    let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry));
+    let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry), false);
     let state_0 = DoublePendulumState::new(theta1, omega1, theta2, omega2);
     let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
     let input_symbol = registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
     let jacobian_symbols = state_symbol.extend(&input_symbol);
     let symbolic_f = model.dynamics_symbolic(&state_symbol, &registry);
+    //model.store_params(&registry);
 
     let params_state = DVector::from_vec(vec![theta1, omega1, theta2, omega2]);
     let params_input = DVector::from_vec(vec![0.0, 0.0]);
+    let params_params = DVector::from_vec(vec![m1, m2, l1, l2, air_resistance_coeff]);
     let mut params = params_state.as_slice().to_vec();
     params.extend(params_input.as_slice());
+    params.extend(params_params.as_slice());
 
-    let symbolic_eval_f: DVector<f64> =
-        SymbolicFunction::new(symbolic_f.to_fn(&registry).unwrap(), &jacobian_symbols)
-            .eval(&params)
-            .try_into_eval_result()
-            .unwrap();
+    /*
+        let symbolic_eval_f: DVector<f64> =
+            SymbolicFunction::new(symbolic_f.to_fn(&registry).unwrap(), &jacobian_symbols)
+                .eval(&params)
+                .try_into_eval_result()
+                .unwrap();
 
-    let symbolic_f_dx = SymbolicFunction::new(
-        symbolic_f
-            .jacobian(&state_symbol)
-            .unwrap()
-            .to_fn(&registry)
-            .unwrap(),
-        &jacobian_symbols,
-    )
-    .evaluate(&params)
-    .unwrap();
-    let symbolic_f_du = SymbolicFunction::new(
-        symbolic_f
-            .jacobian(&input_symbol)
-            .unwrap()
-            .to_fn(&registry)
-            .unwrap(),
-        &jacobian_symbols,
-    )
-    .evaluate(&params)
-    .unwrap();
+        let symbolic_f_dx = SymbolicFunction::new(
+            symbolic_f
+                .jacobian(&state_symbol)
+                .unwrap()
+                .to_fn(&registry)
+                .unwrap(),
+            &jacobian_symbols,
+        )
+        .evaluate(&params)
+        .unwrap();
+        let symbolic_f_du = SymbolicFunction::new(
+            symbolic_f
+                .jacobian(&input_symbol)
+                .unwrap()
+                .to_fn(&registry)
+                .unwrap(),
+            &jacobian_symbols,
+        )
+        .evaluate(&params)
+        .unwrap();
+    */
 
     /////
     let discretizer = RK4Symbolic::new(&model, Arc::clone(&registry)).unwrap();
@@ -119,9 +127,12 @@ fn main() {
     let fa = discretizer.jacobian_x().unwrap();
     let fb = discretizer.jacobian_u().unwrap();
     let start = Instant::now();
+    /*
     let a = fa.evaluate(&params).unwrap();
     let b = fb.evaluate(&params).unwrap();
+    */
     let duration_symbolic = start.elapsed();
+    let original_params = params.clone();
 
     //let c = discretizer.step(&model, &state_0, None, dt).unwrap();
 
@@ -139,6 +150,7 @@ fn main() {
     let new_params_state = &params_state + dt / 2.0 * &k1;
     params = new_params_state.as_slice().to_vec();
     params.extend(params_input.as_slice());
+    params.extend(params_params.as_slice());
     let k2 = model
         .dynamics(
             &DoublePendulumState::from_slice(new_params_state.as_slice()),
@@ -155,6 +167,7 @@ fn main() {
     let new_params_state = &params_state + dt / 2.0 * &k2;
     params = new_params_state.as_slice().to_vec();
     params.extend(params_input.as_slice());
+    params.extend(params_params.as_slice());
     let k3 = model
         .dynamics(
             &DoublePendulumState::from_slice(new_params_state.as_slice()),
@@ -171,6 +184,7 @@ fn main() {
     let new_params_state = &params_state + dt * &k3;
     params = new_params_state.as_slice().to_vec();
     params.extend(params_input.as_slice());
+    params.extend(params_params.as_slice());
     //let k4 = DVector::from_vec(eval_f(&params));
     let a_k4 = eval_dfdx(&params);
     let b_k4 = eval_dfdu(&params);
@@ -184,17 +198,24 @@ fn main() {
     let dx_next_du = dt / 6.0 * (dk1_du + 2.0 * dk2_du + 2.0 * dk3_du + dk4_du);
     let duration_numeric = start.elapsed();
 
+    /*
     println!("{}, {:?}", symbolic_f_dx, df_dx);
     println!("{}, {:?}", symbolic_f_du, df_du);
     println!("{}, {:?}", symbolic_eval_f, f);
+    */
+    /*
     println!("{}, {}", dx_next_dx, a);
     println!("{}, {}", dx_next_du, b);
+    */
 
     println!("{:?}, {:?}", duration_symbolic, duration_numeric);
 
     //
-    let discretizer = RK4Numeric::new(&model, Box::new(eval_dfdx), Box::new(eval_dfdu)).unwrap();
-    let (j1, j2) = discretizer.jacobians(&model, &state_0, None, dt);
+    let dfdx = NumericFunction(Arc::new(move |vals: &[f64]| eval_dfdx(vals)));
+    let dfdu = NumericFunction(Arc::new(move |vals: &[f64]| eval_dfdu(vals)));
+    let discretizer = RK4Numeric::new(Arc::new(model.clone()), dfdx, dfdu, dt).unwrap();
+    let j1 = discretizer.jacobian_x(&original_params);
+    let j2 = discretizer.jacobian_u(&original_params);
     println!("{}, {}", j1, j2);
 }
 

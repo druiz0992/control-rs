@@ -1,7 +1,7 @@
 use super::input::DoublePendulumInput;
 use super::model::DoublePendulum;
 use super::state::DoublePendulumState;
-use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
+use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::ModelError;
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Dynamics, State};
@@ -87,7 +87,7 @@ impl Dynamics for DoublePendulum {
         let [m1, m2, l1, l2, air_resistance_coeff]: [f64; 5] = params
             .try_into()
             .map_err(|_| ModelError::ConfigError("Incorrect number of parameters.".into()))?;
-        *self = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, registry);
+        *self = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, registry, true);
         Ok(())
     }
 }
@@ -101,13 +101,13 @@ impl SymbolicDynamics for DoublePendulum {
         let omega2 = state.get(DoublePendulumState::index_of("omega2")).unwrap();
         let u = registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
 
-        let m1 = registry.get_scalar("m1").unwrap();
-        let m2 = registry.get_scalar("m2").unwrap();
-        let l1 = registry.get_scalar("l1").unwrap();
-        let l2 = registry.get_scalar("l2").unwrap();
+        let m1 = registry.get_scalar("m1").unwrap_or(ExprScalar::new("m1"));
+        let m2 = registry.get_scalar("m2").unwrap_or(ExprScalar::new("m2"));
+        let l1 = registry.get_scalar("l1").unwrap_or(ExprScalar::new("l1"));
+        let l2 = registry.get_scalar("l2").unwrap_or(ExprScalar::new("l2"));
         let air_resistance_coeff = registry
             .get_scalar(c::AIR_RESISTANCE_COEFF_SYMBOLIC)
-            .unwrap();
+            .unwrap_or(ExprScalar::new(c::AIR_RESISTANCE_COEFF_SYMBOLIC));
         let g = registry.get_scalar(c::GRAVITY_SYMBOLIC).unwrap();
 
         // Common terms
@@ -170,7 +170,7 @@ mod tests {
 
     #[test]
     fn test_dynamics() {
-        let pendulum = DoublePendulum::new(1.0, 2.0, 1.0, 1.0, 0.0, None);
+        let pendulum = DoublePendulum::new(1.0, 2.0, 1.0, 1.0, 0.0, None, true);
         let state = DoublePendulumState::new(0.0, 0.0, 0.0, 0.0);
 
         let new_state = pendulum.dynamics(&state, None);
@@ -185,7 +185,7 @@ mod tests {
     #[ignore]
     fn test_dynamics_symbolic() {
         let registry = Arc::new(ExprRegistry::new());
-        let double_pendulum = DoublePendulum::new(1.0, 2.0, 0.0, 0.0, 1.0, Some(&registry));
+        let double_pendulum = DoublePendulum::new(1.0, 2.0, 0.0, 0.0, 1.0, Some(&registry), true);
         let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
         let dynamics_func = double_pendulum.dynamics_symbolic(&state_symbol, &registry);
         dbg!(&dynamics_func);
@@ -210,7 +210,7 @@ mod tests {
             registry.insert_var("omega1", omega1);
             registry.insert_var("omega2", omega2);
 
-            let pendulum = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry));
+            let pendulum = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry), true);
 
             let state = DoublePendulumState::new(theta1, omega1, theta2, omega2);
             let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();

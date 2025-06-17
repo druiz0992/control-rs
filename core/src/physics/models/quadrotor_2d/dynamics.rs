@@ -1,10 +1,10 @@
 use super::input::Quadrotor2DInput;
 use super::model::Quadrotor2D;
 use super::state::Quadrotor2DState;
-use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
+use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
+use crate::physics::ModelError;
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Dynamics, State};
-use crate::physics::ModelError;
 use crate::physics::{constants as c, energy::Energy};
 use crate::utils::Labelizable;
 use std::sync::Arc;
@@ -58,7 +58,7 @@ impl Dynamics for Quadrotor2D {
         let [m, j, l]: [f64; 3] = params
             .try_into()
             .map_err(|_| ModelError::ConfigError("Incorrect number of parameters.".into()))?;
-        *self = Self::new(m, j, l, registry);
+        *self = Self::new(m, j, l, registry, true);
         Ok(())
     }
 }
@@ -73,9 +73,9 @@ impl SymbolicDynamics for Quadrotor2D {
 
         let u = registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
 
-        let m = registry.get_scalar("m").unwrap();
-        let j = registry.get_scalar("j").unwrap();
-        let l = registry.get_scalar("l").unwrap();
+        let m = registry.get_scalar("m").unwrap_or(ExprScalar::new("m"));
+        let j = registry.get_scalar("j").unwrap_or(ExprScalar::new("j"));
+        let l = registry.get_scalar("l").unwrap_or(ExprScalar::new("l"));
         let g = registry.get_scalar(c::GRAVITY_SYMBOLIC).unwrap();
 
         // Common terms
@@ -104,7 +104,7 @@ mod tests {
 
     #[test]
     fn test_dynamics() {
-        let quad = Quadrotor2D::new(1.0, 2.0, 1.0, None);
+        let quad = Quadrotor2D::new(1.0, 2.0, 1.0, None, true);
         let state = Quadrotor2DState::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
 
         let new_state = quad.dynamics(&state, None);
@@ -121,7 +121,7 @@ mod tests {
     #[ignore]
     fn test_dynamics_symbolic() {
         let registry = Arc::new(ExprRegistry::new());
-        let quad = Quadrotor2D::new(1.0, 2.0, 1.0, Some(&registry));
+        let quad = Quadrotor2D::new(1.0, 2.0, 1.0, Some(&registry), true);
         let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
         let dynamics_func = quad.dynamics_symbolic(&state_symbol, &registry);
         dbg!(&dynamics_func);
@@ -148,7 +148,7 @@ mod tests {
             registry.insert_var("v_y", v_y);
             registry.insert_var("omega", omega);
 
-            let quad = Quadrotor2D::new(m, j, l, Some(&registry));
+            let quad = Quadrotor2D::new(m, j, l, Some(&registry), true);
 
             let state = Quadrotor2DState::new(pos_x, pos_y, theta, v_x, v_y, omega);
             let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();

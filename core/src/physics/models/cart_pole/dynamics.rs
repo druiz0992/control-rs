@@ -1,7 +1,7 @@
 use super::input::CartPoleInput;
 use super::model::CartPole;
 use super::state::CartPoleState;
-use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
+use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::ModelError;
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Dynamics, State};
@@ -95,6 +95,7 @@ impl Dynamics for CartPole {
             air_resistance_coeff,
             l,
             registry,
+            true,
         );
         Ok(())
     }
@@ -108,13 +109,21 @@ impl SymbolicDynamics for CartPole {
         let omega = state.get(CartPoleState::index_of("omega")).unwrap();
         let u = registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
 
-        let m_p = registry.get_scalar(c::MASS_POLE_SYMBOLIC).unwrap();
-        let m_c = registry.get_scalar(c::MASS_CART_SYMBOLIC).unwrap();
-        let friction_coeff = registry.get_scalar(c::FRICTION_COEFF_SYMBOLIC).unwrap();
+        let m_p = registry
+            .get_scalar(c::MASS_POLE_SYMBOLIC)
+            .unwrap_or(ExprScalar::new(c::MASS_POLE_SYMBOLIC));
+        let m_c = registry
+            .get_scalar(c::MASS_CART_SYMBOLIC)
+            .unwrap_or(ExprScalar::new(c::MASS_CART_SYMBOLIC));
+        let friction_coeff = registry
+            .get_scalar(c::FRICTION_COEFF_SYMBOLIC)
+            .unwrap_or(ExprScalar::new(c::FRICTION_COEFF_SYMBOLIC));
         let air_resistance_coeff = registry
             .get_scalar(c::AIR_RESISTANCE_COEFF_SYMBOLIC)
-            .unwrap();
-        let l = registry.get_scalar(c::LENGTH_SYMBOLIC).unwrap();
+            .unwrap_or(ExprScalar::new(c::AIR_RESISTANCE_COEFF_SYMBOLIC));
+        let l = registry
+            .get_scalar(c::LENGTH_SYMBOLIC)
+            .unwrap_or(ExprScalar::new(c::LENGTH_SYMBOLIC));
         let g = registry.get_scalar(c::GRAVITY_SYMBOLIC).unwrap();
         let omega_sq = omega.mul(&omega);
 
@@ -177,7 +186,7 @@ mod tests {
 
     #[test]
     fn test_dynamics() {
-        let cart_pole = CartPole::new(1.0, 2.0, 1.0, 0.0, 1.0, None);
+        let cart_pole = CartPole::new(1.0, 2.0, 1.0, 0.0, 1.0, None, true);
         let state = CartPoleState::new(0.0, 0.0, 0.0, 0.0);
 
         let new_state = cart_pole.dynamics(&state, None);
@@ -192,7 +201,7 @@ mod tests {
     #[ignore]
     fn test_dynamics_symbolic() {
         let registry = Arc::new(ExprRegistry::new());
-        let cart_pole = CartPole::new(1.0, 2.0, 0.0, 0.0, 1.0, Some(&registry));
+        let cart_pole = CartPole::new(1.0, 2.0, 0.0, 0.0, 1.0, Some(&registry), true);
         let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
         let dynamics_func = cart_pole.dynamics_symbolic(&state_symbol, &registry);
         dbg!(&dynamics_func);
@@ -217,7 +226,7 @@ mod tests {
             registry.insert_var("theta", theta);
             registry.insert_var("omega", omega);
 
-            let cart_pole = CartPole::new(pole_mass, cart_mass, friction_coeff, air_resistance_coeff, l, Some(&registry));
+            let cart_pole = CartPole::new(pole_mass, cart_mass, friction_coeff, air_resistance_coeff, l, Some(&registry), true);
 
             let state = CartPoleState::new(pos_x, v_x, theta, omega);
             let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();

@@ -1,12 +1,9 @@
 use crate::numeric_services::symbolic::{
     ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
 };
-use crate::physics::discretizer::NumericFunction;
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Discretizer, Dynamics, State};
 use crate::physics::{ModelError, constants as c};
-use crate::utils::evaluable::Evaluable;
-use nalgebra::{DMatrix, DVector};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -146,118 +143,6 @@ impl<D: SymbolicDynamics> SymbolicDiscretizer<D> for RK4Symbolic<D> {
     }
 }
 
-pub struct RK4Numeric<'a, D: Dynamics> {
-    discretizer: RK4<D>,
-    df_dx: NumericFunction,
-    df_du: NumericFunction,
-    model: &'a D,
-    dt: f64,
-}
-
-impl<'a, D: Dynamics> RK4Numeric<'a, D> {
-    pub fn new(
-        model: &'a D,
-        df_dx: NumericFunction,
-        df_du: NumericFunction,
-        dt: f64,
-    ) -> Result<Self, ModelError> {
-        let rk4 = RK4::new(model)?;
-        Ok(RK4Numeric {
-            discretizer: rk4,
-            df_dx,
-            df_du,
-            model,
-            dt,
-        })
-    }
-
-    pub fn jacobians(&self, vals: &[f64]) -> (DMatrix<f64>, DMatrix<f64>) {
-        let dt = self.dt;
-        let state_dims = D::State::dim_q() + D::State::dim_v();
-        let mut params = vals.to_owned();
-        let params_state = DVector::from_column_slice(&vals[0..state_dims]);
-        let params_input = vals[state_dims..].to_owned();
-        //let params_input = input.map_or(D::Input::default().to_vec(), |i| i.to_vec());
-
-        let df_dx = (self.df_dx)(&params);
-        let df_du = (self.df_du)(&params);
-        let f = self
-            .model
-            .dynamics(&D::State::from_slice(&params_state.as_slice()), None)
-            .to_vec();
-
-        let k1 = DVector::from_vec(f.clone());
-        let dk1_dx = &df_dx;
-        let dk1_du = &df_du;
-
-        let new_params_state = &params_state + dt / 2.0 * &k1;
-        params = new_params_state.as_slice().to_vec();
-        params.extend(params_input.as_slice());
-        let k2 = self
-            .model
-            .dynamics(&D::State::from_slice(new_params_state.as_slice()), None)
-            .to_vector();
-        let a_k2 = (self.df_dx)(&params);
-        let b_k2 = (self.df_du)(&params);
-
-        let tmp_dx = &a_k2 * dk1_dx * dt / 2.0;
-        let dk2_dx = &tmp_dx + &a_k2;
-        let tmp_du = &a_k2 * dk1_du * dt / 2.0;
-        let dk2_du = &tmp_du + b_k2;
-
-        let new_params_state = &params_state + dt / 2.0 * &k2;
-        params = new_params_state.as_slice().to_vec();
-        params.extend(params_input.as_slice());
-        let k3 = self
-            .model
-            .dynamics(&D::State::from_slice(new_params_state.as_slice()), None)
-            .to_vector();
-        let a_k3 = (self.df_dx)(&params);
-        let b_k3 = (self.df_du)(&params);
-        let tmp_dx = &a_k3 * &dk2_dx * dt / 2.0;
-        let dk3_dx = &tmp_dx + &a_k3;
-        let tmp_du = &a_k3 * &dk2_du * dt / 2.0;
-        let dk3_du = &tmp_du + b_k3;
-
-        let new_params_state = &params_state + dt * &k3;
-        params = new_params_state.as_slice().to_vec();
-        params.extend(params_input.as_slice());
-        //let k4 = DVector::from_vec(eval_f(&params));
-        let a_k4 = (self.df_dx)(&params);
-        let b_k4 = (self.df_du)(&params);
-        let tmp_dx = &a_k4 * &dk3_dx * dt;
-        let dk4_dx = &tmp_dx + &a_k4;
-        let tmp_du = &a_k4 * &dk3_du * dt;
-        let dk4_du = &tmp_du + b_k4;
-
-        let dx_next_dx = dt / 6.0 * (dk1_dx + 2.0 * dk2_dx + 2.0 * dk3_dx + dk4_dx)
-            + DMatrix::identity(params_state.len(), params_state.len());
-        let dx_next_du = dt / 6.0 * (dk1_du + 2.0 * dk2_du + 2.0 * dk3_du + dk4_du);
-
-        (dx_next_dx, dx_next_du)
-    }
-}
-
-impl<'a, D: Dynamics> Discretizer<D> for RK4Numeric<'a, D> {
-    fn step(
-        &self,
-        model: &D,
-        state: &D::State,
-        input: Option<&D::Input>,
-        dt: f64,
-    ) -> Result<D::State, ModelError> {
-        self.discretizer.step(model, state, input, dt)
-    }
-}
-
-impl<'a, D: Dynamics> Evaluable for RK4Numeric<'a, D> {
-    type Output = (DMatrix<f64>, DMatrix<f64>);
-
-    fn evaluate(&self, vals: &[f64]) -> Result<Self::Output, ModelError> {
-        Ok(self.jacobians(vals))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -268,7 +153,7 @@ mod tests {
 
     #[test]
     fn test_rk4_step() {
-        let dynamics = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, 0.0, None);
+        let dynamics = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, 0.0, None, true);
         let rk4 = RK4::new(&dynamics).unwrap();
         let initial_state = DoublePendulumState::new(0.0, 0.0, 0.0, 0.0);
         let dt = 0.1;
@@ -281,7 +166,7 @@ mod tests {
     #[test]
     fn test_rk4_symbolic_step() {
         let registry = Arc::new(ExprRegistry::new());
-        let dynamics = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, 0.0, Some(&registry));
+        let dynamics = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, 0.0, Some(&registry), true);
 
         let theta1 = 0.0;
         let omega1 = 0.0;
@@ -311,7 +196,7 @@ mod tests {
             air_resistance_coeff in 0.0f64..5.0
         ) {
             let registry = Arc::new(ExprRegistry::new());
-            let dynamics = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry));
+            let dynamics = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry), true);
             let state = DoublePendulumState::new(theta1, omega1, theta2, omega2);
             let rk4_symbolic = RK4Symbolic::new(&dynamics, Arc::clone(&registry)).unwrap();
             let rk4 = RK4::new(&dynamics).unwrap();

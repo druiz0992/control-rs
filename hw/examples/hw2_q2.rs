@@ -364,7 +364,7 @@ fn deg2rad(degrees: f64) -> f64 {
 #[macroquad::main("Ricatti Cart Pole")]
 async fn main() {
     let registry = Arc::new(ExprRegistry::new());
-    let model = CartPole::new(0.2, 1.0, 0.5, 0.0, 0.0, Some(&registry));
+    let model = CartPole::new(0.2, 1.0, 0.5, 0.0, 0.0, Some(&registry), true);
     let estimated_parameters = vec![0.16, 1.2, 0.55, 0.0, 0.0];
 
     let x_ref = CartPoleState::new(0.0, 0.0, 0.0, 0.0);
@@ -451,7 +451,7 @@ async fn main() {
 
     // Part D - TVLQR for trajectory tracking
     let x_ic = CartPoleState::new(0.0, 0.0, PI, 0.0);
-    let model = CartPole::new(0.2, 1.0, 0.5, 0.0, 0.0, Some(&registry));
+    let model = CartPole::new(0.2, 1.0, 0.5, 0.0, 0.0, Some(&registry), true);
 
     let dt = 0.05;
     let (x_traj, u_traj) = generate_reference_traj(&model, &x_ic, dt, Arc::clone(&registry)).await;

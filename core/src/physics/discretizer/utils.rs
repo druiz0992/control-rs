@@ -158,7 +158,7 @@ mod tests {
     fn test_objective_symbolic() {
         let registry = Arc::new(ExprRegistry::new());
         let dt_expr = ExprScalar::new(c::TIME_DELTA_SYMBOLIC);
-        let bouncing_ball = BouncingBall::new(1.0, 2.0, Some(&registry));
+        let bouncing_ball = BouncingBall::new(1.0, 2.0, Some(&registry), true);
         let mass_matrix = registry.get_matrix(c::MASS_MATRIX_SYMBOLIC).unwrap();
         let linear_term = bouncing_ball.cost_linear_term(&dt_expr, &registry).unwrap();
         let (_, next_v_state) = get_v_states(&registry).unwrap();
@@ -178,7 +178,7 @@ mod tests {
             let dt = 0.01;
             let registry = Arc::new(ExprRegistry::new());
             let dt_expr = ExprScalar::new(c::TIME_DELTA_SYMBOLIC);
-            let model = BouncingBall::new(m, 0.0, Some(&registry));
+            let model = BouncingBall::new(m, 0.0, Some(&registry), true);
 
             registry.insert_var("v_x", v_x);
             registry.insert_var("v_y", v_y);

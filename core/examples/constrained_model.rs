@@ -38,7 +38,7 @@ async fn build_sim(integrator: IntegratorType) {
     let registry = Arc::new(ExprRegistry::new());
     let state0 = BouncingBallState::new(pos_x, pos_y, v_x, v_y);
 
-    let model = BouncingBall::new(m, friction_coeff, Some(&registry));
+    let model = BouncingBall::new(m, friction_coeff, Some(&registry), true);
 
     let states = match integrator {
         IntegratorType::BackwardEuler => {
