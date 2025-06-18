@@ -50,9 +50,10 @@ mod tests {
     use crate::{
         cost::GenericCost,
         physics::{
-            discretizer::{rk4_numeric::RK4Numeric, NumericFunction},
+            discretizer::{NumericFunction, rk4_numeric::RK4Numeric},
             models::{
-                double_pendulum::numeric_dynamics::{eval_dfdu, eval_dfdx}, DoublePendulum, DoublePendulumState
+                DoublePendulum, DoublePendulumState,
+                double_pendulum::numeric_dynamics::{eval_dfdu, eval_dfdx},
             },
             simulator::BasicSim,
         },

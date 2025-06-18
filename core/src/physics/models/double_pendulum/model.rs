@@ -14,6 +14,7 @@ pub struct DoublePendulum {
     l2: f64,
     air_resistance_coeff: f64,
 }
+
 impl DoublePendulum {
     pub fn new(
         m1: f64,
@@ -31,7 +32,6 @@ impl DoublePendulum {
             l2,
             air_resistance_coeff,
         };
-
         if let Some(registry) = registry {
             if store_params {
                 model.store_params(registry);
@@ -42,11 +42,10 @@ impl DoublePendulum {
             registry.insert_var("u1", 0.0);
             registry.insert_var("u2", 0.0);
         }
-
         model
     }
 
-    pub fn store_params(&self, registry: &Arc<ExprRegistry>) {
+    fn store_params(&self, registry: &Arc<ExprRegistry>) {
         let labels = Self::labels();
         let params = self.vectorize(labels);
 

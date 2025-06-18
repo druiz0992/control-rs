@@ -1,16 +1,7 @@
-use std::collections::{BTreeMap, HashMap};
-
 use fasteval::{
-    Evaler, Expression, ExpressionI, Instruction, InstructionI, Slab, ValueI, compiler::IC,
-    slab::CompileSlab,
+    Evaler, ExpressionI, Instruction, InstructionI, Slab, compiler::IC, slab::CompileSlab,
 };
-use nalgebra::DMatrix;
-use regex::Regex;
-
-use crate::{
-    numeric_services::symbolic::{SymbolicError, SymbolicFunction, TryIntoEvalResult},
-    utils::evaluable::Evaluable,
-};
+use std::collections::{BTreeMap, HashMap};
 
 #[derive(Debug)]
 pub enum InstructionSlab {

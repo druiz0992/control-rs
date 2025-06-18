@@ -31,65 +31,82 @@ impl<D: Dynamics> RK4Numeric<D> {
     }
     fn rk4_jacobian(&self, vals: &[f64], select: JacobianSelector) -> DMatrix<f64> {
         let dt = self.dt;
-        let state_dims = D::State::dim_q() + D::State::dim_v();
-        let input_dims = D::Input::dim_q();
+        let n = D::State::dim_q() + D::State::dim_v(); // state size
+        let m = D::Input::dim_q(); // input size
 
-        let params = vals.to_owned();
-        let params_state = DVector::from_column_slice(&vals[0..state_dims]);
-        let params_input = vals[state_dims..input_dims + state_dims].to_owned();
-        let params_params = vals[input_dims + state_dims..].to_owned();
+        let state = DVector::from_column_slice(&vals[0..n]);
+        let input = DVector::from_column_slice(&vals[n..n + m]);
+        let params = &vals[n + m..];
 
-        let df_dx = (self.df_dx.0)(&params);
-        let df_du = (self.df_du.0)(&params);
-
-        let f = self
-            .model
-            .dynamics(&D::State::from_slice(&params_state.as_slice()), None)
-            .to_vector();
-
-        let d1 = match select {
-            JacobianSelector::X => df_dx.clone(),
-            JacobianSelector::U => df_du.clone(),
+        // Helper to combine [state, input, params]
+        let build_param_vec = |s: &DVector<f64>| {
+            let mut full = s.as_slice().to_vec();
+            full.extend(input.as_slice());
+            full.extend_from_slice(params);
+            full
         };
 
-        let compute_dk = |k_prev: &DVector<f64>, d_prev: &DMatrix<f64>, step_dt: f64| {
-            let new_params_state = &params_state + step_dt * k_prev;
-            let mut new_params = new_params_state.as_slice().to_vec();
-            new_params.extend(&params_input);
-            new_params.extend(&params_params);
-
-            let a = (self.df_dx.0)(&new_params);
-            let b = (self.df_du.0)(&new_params);
-            match select {
-                JacobianSelector::X => &a * d_prev * step_dt + &a,
-                JacobianSelector::U => &a * d_prev * step_dt + b,
-            }
+        // Stage 1
+        let f1 = self
+            .model
+            .dynamics(
+                &D::State::from_slice(&state.as_slice()),
+                Some(&D::Input::from_slice(&input.as_slice())),
+            )
+            .to_vector();
+        let df1 = match select {
+            JacobianSelector::X => (self.df_dx.0)(&build_param_vec(&state)),
+            JacobianSelector::U => (self.df_du.0)(&build_param_vec(&state)),
         };
 
-        let dk2 = compute_dk(&f, &d1, dt / 2.0);
-        let k2 = self
+        // Stage 2
+        let s2 = &state + (dt / 2.0) * &f1;
+        let f2 = self
             .model
             .dynamics(
-                &D::State::from_slice(&(&params_state + dt / 2.0 * &f).as_slice()),
-                None,
+                &D::State::from_slice(&s2.as_slice()),
+                Some(&D::Input::from_slice(&input.as_slice())),
             )
             .to_vector();
+        let df2 = match select {
+            JacobianSelector::X => (self.df_dx.0)(&build_param_vec(&s2)),
+            JacobianSelector::U => (self.df_du.0)(&build_param_vec(&s2)),
+        };
 
-        let dk3 = compute_dk(&k2, &dk2, dt / 2.0);
-        let k3 = self
+        // Stage 3
+        let s3 = &state + (dt / 2.0) * &f2;
+        let f3 = self
             .model
             .dynamics(
-                &D::State::from_slice(&(&params_state + dt / 2.0 * &k2).as_slice()),
-                None,
+                &D::State::from_slice(&s3.as_slice()),
+                Some(&D::Input::from_slice(&input.as_slice())),
             )
             .to_vector();
+        let df3 = match select {
+            JacobianSelector::X => (self.df_dx.0)(&build_param_vec(&s3)),
+            JacobianSelector::U => (self.df_du.0)(&build_param_vec(&s3)),
+        };
 
-        let dk4 = compute_dk(&k3, &dk3, dt);
+        // Stage 4
+        let s4 = &state + dt * &f3;
+        let _f4 = self
+            .model
+            .dynamics(
+                &D::State::from_slice(&s4.as_slice()),
+                Some(&D::Input::from_slice(&input.as_slice())),
+            )
+            .to_vector();
+        let df4 = match select {
+            JacobianSelector::X => (self.df_dx.0)(&build_param_vec(&s4)),
+            JacobianSelector::U => (self.df_du.0)(&build_param_vec(&s4)),
+        };
 
-        let jac = dt / 6.0 * (&d1 + 2.0 * dk2 + 2.0 * dk3 + dk4);
+        // RK4 Jacobian formula
+        let jac = dt / 6.0 * (&df1 + 2.0 * &df2 + 2.0 * &df3 + &df4);
+        //let jac = dt / 6.0 * (&df2);
 
         match select {
-            JacobianSelector::X => jac + DMatrix::identity(params_state.len(), params_state.len()),
+            JacobianSelector::X => jac + DMatrix::identity(n, n),
             JacobianSelector::U => jac,
         }
     }

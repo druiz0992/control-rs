@@ -977,7 +977,7 @@ fn main() {
 
     let registry = Arc::new(ExprRegistry::new());
 
-    let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry), true);
+    let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry), false);
     let state_0 = DoublePendulumState::new(theta1, omega1, theta2, omega2);
     let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
     let input_symbol = registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
@@ -992,32 +992,34 @@ fn main() {
     params.extend(params_input.as_slice());
     params.extend(params_params.as_slice());
 
-    let symbolic_eval_f: DVector<f64> =
-        SymbolicFunction::new(symbolic_f.to_fn(&registry).unwrap(), &jacobian_symbols)
-            .eval(&params)
-            .try_into_eval_result()
-            .unwrap();
+    /*
+        let symbolic_eval_f: DVector<f64> =
+            SymbolicFunction::new(symbolic_f.to_fn(&registry).unwrap(), &jacobian_symbols)
+                .eval(&params)
+                .try_into_eval_result()
+                .unwrap();
 
-    let symbolic_f_dx = SymbolicFunction::new(
-        symbolic_f
-            .jacobian(&state_symbol)
-            .unwrap()
-            .to_fn(&registry)
-            .unwrap(),
-        &jacobian_symbols,
-    )
-    .evaluate(&params)
-    .unwrap();
-    let symbolic_f_du = SymbolicFunction::new(
-        symbolic_f
-            .jacobian(&input_symbol)
-            .unwrap()
-            .to_fn(&registry)
-            .unwrap(),
-        &jacobian_symbols,
-    )
-    .evaluate(&params)
-    .unwrap();
+        let symbolic_f_dx = SymbolicFunction::new(
+            symbolic_f
+                .jacobian(&state_symbol)
+                .unwrap()
+                .to_fn(&registry)
+                .unwrap(),
+            &jacobian_symbols,
+        )
+        .evaluate(&params)
+        .unwrap();
+        let symbolic_f_du = SymbolicFunction::new(
+            symbolic_f
+                .jacobian(&input_symbol)
+                .unwrap()
+                .to_fn(&registry)
+                .unwrap(),
+            &jacobian_symbols,
+        )
+        .evaluate(&params)
+        .unwrap();
+    */
 
     /////
     let discretizer = RK4Symbolic::new(&model, Arc::clone(&registry)).unwrap();
@@ -1025,8 +1027,10 @@ fn main() {
     let fa = discretizer.jacobian_x().unwrap();
     let fb = discretizer.jacobian_u().unwrap();
     let start = Instant::now();
+    /*
     let a = fa.evaluate(&params).unwrap();
     let b = fb.evaluate(&params).unwrap();
+    */
     let duration_symbolic = start.elapsed();
     let original_params = params.clone();
 
@@ -1094,11 +1098,13 @@ fn main() {
     let dx_next_du = dt / 6.0 * (dk1_du + 2.0 * dk2_du + 2.0 * dk3_du + dk4_du);
     let duration_numeric = start.elapsed();
 
+    /*
     println!("{}, {:?}", symbolic_f_dx, df_dx);
     println!("{}, {:?}", symbolic_f_du, df_du);
     println!("{}, {:?}", symbolic_eval_f, f);
     println!("{}, {}", dx_next_dx, a);
     println!("{}, {}", dx_next_du, b);
+    */
 
     println!("{:?}, {:?}", duration_symbolic, duration_numeric);
 

@@ -1,3 +1,5 @@
+use nalgebra::DMatrix;
+
 pub fn unzip3<A, B, C>(v: Vec<(A, B, C)>) -> (Vec<A>, Vec<B>, Vec<C>) {
     let mut a = Vec::with_capacity(v.len());
     let mut b = Vec::with_capacity(v.len());
@@ -18,6 +20,11 @@ pub fn within_tolerance(param1: f64, param2: f64, tol: f64) -> bool {
 
     diff <= tol * scale.max(1.0)
 }
+pub fn within_tolerance_matrix(mat1: &DMatrix<f64>, mat2: &DMatrix<f64>, tol: f64) -> bool {
+    mat1.iter()
+        .zip(mat2.iter())
+        .all(|(&el1, &el2)| within_tolerance(el1, el2, tol))
+}
 
 pub fn get_or_first<T>(vec: &[T], index: usize) -> &T {
     if index < vec.len() {
@@ -26,8 +33,6 @@ pub fn get_or_first<T>(vec: &[T], index: usize) -> &T {
         &vec[0]
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
