@@ -14,11 +14,10 @@ pub struct BouncingBall {
 }
 
 impl BouncingBall {
-    pub fn new(m: f64, friction_coeff: f64, registry: Option<&Arc<ExprRegistry>>) -> Self {
+    pub fn new(m: f64, friction_coeff: f64, registry: Option<&Arc<ExprRegistry>>, store_params: bool) -> Self {
         let model = BouncingBall { m, friction_coeff };
         if let Some(registry) = registry {
-            model.store_params(registry);
-
+            if store_params { model.store_params(registry);}
             registry.insert_scalar(c::GRAVITY_SYMBOLIC, c::GRAVITY);
             let labels = BouncingBallState::labels();
             registry.insert_vector(c::STATE_SYMBOLIC, labels);
@@ -30,7 +29,7 @@ impl BouncingBall {
         model
     }
 
-    fn store_params(&self, registry: &Arc<ExprRegistry>) {
+    pub fn store_params(&self, registry: &Arc<ExprRegistry>) {
         let labels = BouncingBall::labels();
         let params = self.vectorize(labels);
 

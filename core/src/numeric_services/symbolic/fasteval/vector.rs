@@ -1,5 +1,5 @@
 use super::derivatives::compute_derivatives;
-use super::slab::ExprSlab;
+use super::slab::InstructionSlab;
 use super::{ExprMatrix, ExprScalar};
 use crate::numeric_services::differentiation::dtos::{DerivativeResponse, DerivativeType};
 use crate::numeric_services::symbolic::dtos::{ExprRecord, SymbolicEvalResult, SymbolicFn};
@@ -175,16 +175,14 @@ impl ExprVector {
             .ok_or(SymbolicError::Other("Error in dot product".to_string()))
     }
 
-    pub fn get_slab(&self) -> Result<ExprSlab, SymbolicError> {
+    pub fn get_slab(&self) -> Result<InstructionSlab, SymbolicError> {
         let compiled_expr: Vec<(Instruction, Slab)> = self
             .vector
             .iter()
             .map(|e| e.compile_with_retry())
             .collect::<Result<_, _>>()?;
 
-        let slab: Vec<_> = compiled_expr.into_iter().map(|e| e.1).collect();
-
-        Ok(ExprSlab::Vector(slab))
+        Ok(InstructionSlab::Vector(compiled_expr))
     }
 
     pub fn hadamard_product(&self, other: &Self) -> Self {

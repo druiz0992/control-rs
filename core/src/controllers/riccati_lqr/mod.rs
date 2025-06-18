@@ -1,5 +1,6 @@
 pub(super) mod common;
 pub mod lqr;
+pub mod numeric;
 pub mod options;
 pub mod recursion;
 pub mod symbolic;

@@ -16,6 +16,8 @@ A modular and extensible Rust library for **optimal control**, supporting discre
   - Double Integrator
   - Cart-Pole
   - Double Pendulum
+  - Quadrotor
+  - Bouncing Ball
   - (More to come...)
 
 - 🧮 **Optimization Engine**
@@ -27,6 +29,17 @@ A modular and extensible Rust library for **optimal control**, supporting discre
   - Compute Jacobians and Hessians
   - Symbolic and/or numerical differentiation
   - Works with custom user-defined dynamics and cost functions
+
+- 🎮 **Implemented Controllers**
+  - Linear Quadratic Regulator (LQR)
+  - Model Predictive Control (MPC)
+  - Quadratic Programming (QP)-based controllers
+  - Iterative Linear Quadratic Regulator (iLQR)
+  - (More controllers coming soon...)
+
+- 🎞️ **Visualization & Animation**
+  - Generate plots and animations of trajectories and system states
+  - Export results as images or GIFs
 
 ## 🚀 Getting Started
 
@@ -83,6 +96,12 @@ fn main() {
 }
 
 ```
+
+## Examples
+
+
+## Notes
+This library is based on CMU-16-745 online course. More information [here](https://github.com/Optimal-Control-16-745).
 
 ## License
 This project is licensed under the [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/).

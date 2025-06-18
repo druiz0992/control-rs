@@ -90,6 +90,17 @@ pub fn dmat_to_vec(mat: &DMatrix<f64>) -> Vec<Vec<f64>> {
         .collect()
 }
 
+pub fn vec_to_dmat(vec: &Vec<Vec<f64>>) -> DMatrix<f64> {
+    let rows = vec.len();
+    let cols = if rows > 0 { vec[0].len() } else { 0 };
+    let mut mat = DMatrix::<f64>::zeros(rows, cols);
+    for (i, row) in vec.iter().enumerate() {
+        for (j, val) in row.iter().enumerate() {
+            mat[(i, j)] = *val;
+        }
+    }
+    mat
+}
 /// Vertically stacks two matrices, where the second matrix is optional.
 ///
 /// - **Parameters**:

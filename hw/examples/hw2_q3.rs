@@ -189,9 +189,11 @@ fn solve<T: Controller<Sim>>(
         let times: Vec<_> = (0..u_traj.len()).map(|i| i as f64 * dt).collect();
         plotter::plot_states(&times, &x_traj, "/tmp/plot1.png").unwrap();
         plotter::plot_states(&times, &u_traj, "/tmp/plot2.png").unwrap();
+        plotter::plot_states(&times, &traj_options.x_goal, "/tmp/plot3.png").unwrap();
 
         plotter::display("/tmp/plot1.png").unwrap();
         plotter::display("/tmp/plot2.png").unwrap();
+        plotter::display("/tmp/plot3.png").unwrap();
 
         next("Controller");
     }
@@ -266,6 +268,7 @@ fn main() {
 
     let constraints = ConstraintTransform::new_uniform_bounds_input::<Sim>(u_limits);
     let traj_options = TrajOptions::new()
+        .set_plot_flag(true)
         .set_tf(tf)
         .set_dt(dt)
         .set_u_limits(constraints)
@@ -284,10 +287,7 @@ fn main() {
     check_state_trajectory_error(&x_traj, &x_ref, 1e-2);
 
     // Part D: MPC
-    let traj_options = traj_options
-        .set_plot_flag(true)
-        .set_noise(vec![0.01; N])
-        .set_mpc_horizon(20.0);
+    let traj_options = traj_options.set_noise(vec![0.01; N]).set_mpc_horizon(20.0);
     let mut mpc = convex_mpc(&model, &x_ic, &traj_options);
     let (x_traj, _) = solve(&mut mpc, &x_ic, &traj_options);
     check_state_trajectory_error(&x_traj, &x_ref, 1e-2);

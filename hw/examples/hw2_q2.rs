@@ -1,5 +1,7 @@
 use control_rs::animation::Animation;
 use control_rs::animation::macroquad::Macroquad;
+use control_rs::controllers::qp_lqr::{QPLQRSymbolic, QPOptions};
+use control_rs::controllers::qp_mpc::{ConvexMpcOptions, ConvexMpcSymbolic};
 use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursionSymbolic};
 use control_rs::controllers::utils::clamp_input_vector;
 use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions};
@@ -14,6 +16,7 @@ use control_rs::plotter;
 use control_rs::utils::Labelizable;
 use hw::TrajOptions;
 use nalgebra::{DMatrix, DVector};
+use osqp::Settings;
 use std::f64::consts::PI;
 use std::io::{self, Write};
 use std::sync::Arc;
@@ -59,7 +62,7 @@ async fn generate_reference_traj(
         .set_x_goal(vec![x_ref.clone()])
         .set_u_op(vec![u_ref.clone()])
         .set_x_op(vec![x_ref.clone()]);
-    let mut controller = fhlqr(model, &traj_options, Arc::clone(&registry)).await;
+    let mut controller = fhlqr(model, &traj_options, Arc::clone(&registry));
     let (x_traj2, u_traj2) = solve(
         &mut controller,
         model,
@@ -133,8 +136,91 @@ fn energy_shaping_control(
     }
     (x_traj, u_traj)
 }
+fn convex_trajopt(
+    model: &CartPole,
+    x_ic: &CartPoleState,
+    registry: Arc<ExprRegistry>,
+    traj_options: &TrajOptions<CartPoleState, CartPoleInput>,
+) -> QPLQRSymbolic<Sim> {
+    let tf = traj_options.tf;
+    let qf = traj_options.qf.clone();
+    let q = traj_options.q.clone();
+    let r = traj_options.r.clone();
+    let dt = traj_options.dt;
 
-async fn fhlqr(
+    // sim
+    let integrator = RK4Symbolic::new(model, Arc::clone(&registry)).unwrap();
+    let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
+    registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
+
+    // cost
+    let cost = GenericCost::<_, CartPoleInput>::new(q, qf, r, None).unwrap();
+
+    // setup QP controller
+    let mut general_options = ControllerOptions::<Sim>::default()
+        .set_dt(dt)
+        .unwrap()
+        .set_time_horizon(tf)
+        .unwrap()
+        .set_x_ref(&traj_options.x_goal.clone());
+    if let Some(noise) = &traj_options.noise_std {
+        general_options = general_options.set_noise(noise.clone());
+    }
+    let osqp_settings = Settings::default()
+        .verbose(false)
+        .eps_abs(1e-8)
+        .eps_rel(1e-8);
+    let qp_options = QPOptions::default()
+        .set_general(general_options)
+        .set_osqp_settings(osqp_settings);
+    let (controller, _) = QPLQRSymbolic::new(sim, Box::new(cost), x_ic, Some(qp_options)).unwrap();
+
+    controller
+}
+
+fn convex_mpc(
+    model: &CartPole,
+    x_ic: &CartPoleState,
+    registry: Arc<ExprRegistry>,
+    traj_options: &TrajOptions<CartPoleState, CartPoleInput>,
+) -> ConvexMpcSymbolic<Sim, QPLQRSymbolic<Sim>> {
+    let tf = traj_options.tf;
+    let qf = traj_options.qf.clone();
+    let q = traj_options.q.clone();
+    let r = traj_options.r.clone();
+    let dt = traj_options.dt;
+    let mpc_horizon = traj_options.mpc_horizon;
+
+    // sim
+    let integrator = RK4Symbolic::new(model, Arc::clone(&registry)).unwrap();
+    let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
+    registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
+
+    // cost
+    let cost = GenericCost::<_, CartPoleInput>::new(q, qf, r, None).unwrap();
+
+    // setup QP controller
+    let mut general_options = ControllerOptions::<Sim>::default()
+        .set_dt(dt)
+        .unwrap()
+        .set_time_horizon(tf)
+        .unwrap()
+        .set_x_ref(&traj_options.x_goal.clone());
+    if let Some(noise) = &traj_options.noise_std {
+        general_options = general_options.set_noise(noise.clone());
+    }
+    let osqp_settings = Settings::default()
+        .verbose(false)
+        .eps_abs(1e-8)
+        .eps_rel(1e-8);
+    let mpc_options = ConvexMpcOptions::default()
+        .set_general(general_options)
+        .set_osqp_settings(osqp_settings)
+        .set_mpc_horizon(mpc_horizon);
+    ConvexMpcSymbolic::new(sim, Box::new(cost.clone()), x_ic, Some(mpc_options)).unwrap()
+}
+
+fn fhlqr(
     model: &CartPole,
     traj_options: &TrajOptions<CartPoleState, CartPoleInput>,
     registry: Arc<ExprRegistry>,
@@ -189,8 +275,8 @@ async fn fhlqr(
     RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), Some(options)).unwrap()
 }
 
-async fn solve(
-    controller: &mut RiccatiRecursionSymbolic<Sim>,
+async fn solve<T: Controller<Sim>>(
+    controller: &mut T,
     model: &CartPole,
     x_ic: &CartPoleState,
     traj_options: &TrajOptions<CartPoleState, CartPoleInput>,
@@ -209,9 +295,11 @@ async fn solve(
         let times: Vec<_> = (0..u_traj.len()).map(|i| i as f64 * dt).collect();
         plotter::plot_states(&times, &x_traj, "/tmp/plot1.png").unwrap();
         plotter::plot_states(&times, &u_traj, "/tmp/plot2.png").unwrap();
+        plotter::plot_states(&times, &traj_options.x_goal, "/tmp/plot3.png").unwrap();
 
         plotter::display("/tmp/plot1.png").unwrap();
         plotter::display("/tmp/plot2.png").unwrap();
+        plotter::display("/tmp/plot3.png").unwrap();
 
         next("Ricatti Recursion");
     }
@@ -276,7 +364,7 @@ fn deg2rad(degrees: f64) -> f64 {
 #[macroquad::main("Ricatti Cart Pole")]
 async fn main() {
     let registry = Arc::new(ExprRegistry::new());
-    let model = CartPole::new(0.2, 1.0, 0.5, 0.0, 0.0, Some(&registry));
+    let model = CartPole::new(0.2, 1.0, 0.5, 0.0, 0.0, Some(&registry), true);
     let estimated_parameters = vec![0.16, 1.2, 0.55, 0.0, 0.0];
 
     let x_ref = CartPoleState::new(0.0, 0.0, 0.0, 0.0);
@@ -303,13 +391,14 @@ async fn main() {
         .set_r(r)
         .set_estimated_parameters(estimated_parameters.clone());
 
-    let mut controller = fhlqr(&model, &traj_options, Arc::clone(&registry)).await;
+    let mut controller = fhlqr(&model, &traj_options, Arc::clone(&registry));
     let (x_traj, u_traj) = solve(&mut controller, &model, &x_ic, &traj_options).await;
     check_input_trajectory_error(&[u_traj.last().unwrap().to_owned()], &[u_ref.clone()], 1e-1);
     check_state_trajectory_error(&[x_traj.last().unwrap().to_owned()], &[x_ref.clone()], 1e-1);
 
     // Part B - try a range of initial conditions to check which conditions are good enough for the linearization to work
     //  and drive the cart pole to the equilibrium position
+    /*
     let thetas: Vec<f64> = (-10..=10).map(|x| x as f64 * 6.0).collect();
     let p_xs: Vec<f64> = (-10..=10).map(|x| x as f64 * 6.0).collect();
 
@@ -330,6 +419,7 @@ async fn main() {
         assert!(*theta >= -48.0 && *theta <= 48.0);
         assert!(*x >= -6.0 && *x <= 6.0);
     });
+    */
 
     // Part C - infinite horizon cost tuning.
     let x_perturbation = CartPoleState::new(0.5, 0.3, deg2rad(-10.0), 0.0);
@@ -354,14 +444,14 @@ async fn main() {
         .set_estimated_parameters(estimated_parameters.clone())
         .set_u_limits(constraints);
 
-    let mut controller = fhlqr(&model, &traj_options, Arc::clone(&registry)).await;
+    let mut controller = fhlqr(&model, &traj_options, Arc::clone(&registry));
     let (x_traj, u_traj) = solve(&mut controller, &model, &x_ic, &traj_options).await;
     check_state_trajectory_error(&[x_traj.last().unwrap().to_owned()], &[x_ref.clone()], 1e-1);
     check_input_bounds(&u_traj, u_limits, 1e-1);
 
     // Part D - TVLQR for trajectory tracking
     let x_ic = CartPoleState::new(0.0, 0.0, PI, 0.0);
-    let model = CartPole::new(0.2, 1.0, 0.5, 0.0, 0.0, Some(&registry));
+    let model = CartPole::new(0.2, 1.0, 0.5, 0.0, 0.0, Some(&registry), true);
 
     let dt = 0.05;
     let (x_traj, u_traj) = generate_reference_traj(&model, &x_ic, dt, Arc::clone(&registry)).await;
@@ -376,7 +466,7 @@ async fn main() {
         .set_u_op(u_traj.clone())
         .set_x_op(x_traj.clone())
         .set_estimated_parameters(estimated_parameters.clone());
-    let mut controller = fhlqr(&model, &traj_options, Arc::clone(&registry)).await;
+    let mut controller = fhlqr(&model, &traj_options, Arc::clone(&registry));
     let (x_traj_final, _) = solve(
         &mut controller,
         &model,
@@ -389,4 +479,16 @@ async fn main() {
         &[x_ref.clone()],
         1e-1,
     );
+
+    // Part D: QP
+    let traj_options = traj_options.set_plot_flag(true);
+    let mut qplqr = convex_trajopt(&model, &x_ic, Arc::clone(&registry), &traj_options);
+    let (x_traj_qplr, _) = solve(&mut qplqr, &model, &x_ic, &traj_options).await;
+    //check_state_trajectory_error(&x_traj_qplr, &x_traj, 1e-2);
+
+    // Part E: MPC
+    let traj_options = traj_options.set_noise(vec![0.01; 4]).set_mpc_horizon(1.0);
+    let mut mpc = convex_mpc(&model, &x_ic, Arc::clone(&registry), &traj_options);
+    let (x_traj_mpc, _) = solve(&mut mpc, &model, &x_ic, &traj_options).await;
+    //check_state_trajectory_error(&x_traj_mpc, &x_traj, 1e-2);
 }

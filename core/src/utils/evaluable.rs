@@ -1,6 +1,7 @@
 use crate::{
     numeric_services::symbolic::{SymbolicFunction, TryIntoEvalResult},
-    physics::ModelError,
+    physics::{ModelError
+    },
 };
 use nalgebra::DMatrix;
 

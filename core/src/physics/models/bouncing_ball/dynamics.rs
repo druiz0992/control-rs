@@ -59,7 +59,7 @@ impl Dynamics for BouncingBall {
 
         Some(Energy::new(kinetic, potential))
     }
-    
+
     fn update(
         &mut self,
         params: &[f64],
@@ -68,7 +68,7 @@ impl Dynamics for BouncingBall {
         let [m, friction_coeff]: [f64; 2] = params
             .try_into()
             .map_err(|_| ModelError::ConfigError("Incorrect number of parameters.".into()))?;
-        *self = BouncingBall::new(m, friction_coeff, registry);
+        *self = BouncingBall::new(m, friction_coeff, registry, true);
         Ok(())
     }
 }
@@ -79,8 +79,12 @@ impl SymbolicDynamics for BouncingBall {
         let v_x = state.get(BouncingBallState::index_of("v_x")).unwrap();
         let v_y = state.get(BouncingBallState::index_of("v_y")).unwrap();
 
-        let friction_coeff = registry.get_scalar(c::FRICTION_COEFF_SYMBOLIC).unwrap();
-        let m = registry.get_scalar(c::MASS_SYMBOLIC).unwrap();
+        let friction_coeff = registry
+            .get_scalar(c::FRICTION_COEFF_SYMBOLIC)
+            .unwrap_or(ExprScalar::new(c::FRICTION_COEFF_SYMBOLIC));
+        let m = registry
+            .get_scalar(c::MASS_SYMBOLIC)
+            .unwrap_or(ExprScalar::new(c::MASS_SYMBOLIC));
         let g = registry.get_scalar(c::GRAVITY_SYMBOLIC).unwrap();
         let zero = ExprScalar::zero();
         let normal_force = m.mul(&g).scalef(1.0);
@@ -132,7 +136,7 @@ mod tests {
 
     #[test]
     fn test_dynamics() {
-        let bouncing_ball = BouncingBall::new(1.0, 0.0, None);
+        let bouncing_ball = BouncingBall::new(1.0, 0.0, None, true);
         let state = BouncingBallState::new(0.0, 0.0, 0.0, 0.0);
 
         let new_state = bouncing_ball.dynamics(&state, None);
@@ -147,7 +151,7 @@ mod tests {
     #[ignore]
     fn test_dynamics_symbolic() {
         let registry = Arc::new(ExprRegistry::new());
-        let bouncing_ball = BouncingBall::new(1.0, 2.0, Some(&registry));
+        let bouncing_ball = BouncingBall::new(1.0, 2.0, Some(&registry), true);
         let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
         let dynamics_func = bouncing_ball.dynamics_symbolic(&state_symbol, &registry);
         dbg!(&dynamics_func);
@@ -169,7 +173,7 @@ mod tests {
             registry.insert_var("v_x", v_x);
             registry.insert_var("v_y", v_y);
 
-            let bouncing_ball = BouncingBall::new(m, friction_coeff, Some(&registry));
+            let bouncing_ball = BouncingBall::new(m, friction_coeff, Some(&registry), true);
             let state = BouncingBallState::new(pos_x, pos_y, v_x, v_y);
 
             let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();

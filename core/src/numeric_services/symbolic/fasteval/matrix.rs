@@ -1,9 +1,10 @@
 use super::ExprVector;
 use super::scalar::ExprScalar;
-use super::slab::ExprSlab;
+use super::slab::InstructionSlab;
 use crate::numeric_services::symbolic::dtos::{ExprRecord, SymbolicEvalResult, SymbolicFn};
 use crate::numeric_services::symbolic::error::SymbolicError;
 use crate::numeric_services::symbolic::ports::{SymbolicExpr, SymbolicRegistry};
+use crate::numeric_services::symbolic::{ExprRegistry, SymbolicFunction};
 use fasteval::{Instruction, Slab};
 use nalgebra::DMatrix;
 use std::collections::HashMap;
@@ -358,7 +359,7 @@ impl ExprMatrix {
         }
     }
 
-    pub fn get_slab(&self) -> Result<ExprSlab, SymbolicError> {
+    pub fn get_slab(&self) -> Result<InstructionSlab, SymbolicError> {
         let compiled_expr: Result<Vec<Vec<(Instruction, Slab)>>, SymbolicError> = self
             .matrix
             .iter()
@@ -370,12 +371,18 @@ impl ExprMatrix {
             .collect(); // 
 
         let compiled_expr = compiled_expr?;
-        let slabs: Vec<Vec<Slab>> = compiled_expr
-            .into_iter()
-            .map(|row| row.into_iter().map(|(_, slab)| slab).collect())
-            .collect();
 
-        Ok(ExprSlab::Matrix(slabs))
+        Ok(InstructionSlab::Matrix(compiled_expr))
+    }
+
+    pub fn get_slab_and_symbolic_fn(
+        &self,
+        symbols: &ExprVector,
+        registry: &Arc<ExprRegistry>,
+    ) -> Result<(InstructionSlab, SymbolicFunction), SymbolicError> {
+        let compiled_expr = self.get_slab()?;
+        let func = SymbolicFunction::new(self.to_fn(&registry)?, symbols);
+        Ok((compiled_expr, func))
     }
 }
 

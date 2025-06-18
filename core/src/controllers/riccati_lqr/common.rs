@@ -62,20 +62,27 @@ where
         let mut a_mat: Vec<DMatrix<f64>> = Vec::with_capacity(n_op);
         let mut b_mat: Vec<DMatrix<f64>> = Vec::with_capacity(n_op);
 
-        let mut real_params: Option<Vec<f64>> = None;
-        if let Some(estimated_params) = self.options.get_general().get_estimated_params() {
-            let labels = S::Model::labels();
-            real_params = Some(self.sim.model().vectorize(labels));
-            self.sim.update_model(estimated_params)?;
-        }
+        let mut real_params_opt: Option<Vec<f64>> = None;
+        let labels = S::Model::labels();
+        let real_params = self.sim.model().vectorize(labels);
+        let estimated_params =
+            if let Some(estimated_params) = self.options.get_general().get_estimated_params() {
+                real_params_opt = Some(real_params);
+                self.sim.update_model(estimated_params)?;
+                estimated_params
+            } else {
+                real_params.as_slice()
+            };
 
         for k in 0..self.options.general.get_u_operating().len() {
-            let vals = self.options.general.concatenate_operating_point(k)?;
+            let mut vals = self.options.general.concatenate_operating_point(k)?;
+            vals.extend_from_slice(estimated_params);
+            dbg!(&vals);
             a_mat.push(self.jacobian_x_fn.evaluate(&vals)?);
             b_mat.push(self.jacobian_u_fn.evaluate(&vals)?);
         }
 
-        if let Some(real_params) = real_params {
+        if let Some(real_params) = real_params_opt {
             self.sim.update_model(&real_params)?;
         }
 

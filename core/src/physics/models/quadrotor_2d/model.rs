@@ -14,11 +14,18 @@ pub struct Quadrotor2D {
 }
 
 impl Quadrotor2D {
-    pub fn new(m: f64, j: f64, l: f64, registry: Option<&Arc<ExprRegistry>>) -> Self {
-        let model = Quadrotor2D { m, l, j };
+    pub fn new(
+        m: f64,
+        j: f64,
+        l: f64,
+        registry: Option<&Arc<ExprRegistry>>,
+        store_params: bool,
+    ) -> Self {
+        let model = Self::base_new(m, j, l);
         if let Some(registry) = registry {
-            model.store_params(registry);
-
+            if store_params {
+                model.store_params(registry);
+            }
             registry.insert_scalar(c::GRAVITY_SYMBOLIC, c::GRAVITY);
             registry.insert_vector(c::STATE_SYMBOLIC, Quadrotor2DState::labels());
             registry.insert_vector_expr(c::INPUT_SYMBOLIC, ExprVector::new(&["u1", "u2"]));
@@ -26,6 +33,10 @@ impl Quadrotor2D {
             registry.insert_var("u2", 0.0);
         }
         model
+    }
+
+    fn base_new(m: f64, j: f64, l: f64) -> Self {
+        Quadrotor2D { m, l, j }
     }
 
     fn store_params(&self, registry: &Arc<ExprRegistry>) {
@@ -45,7 +56,7 @@ mod tests {
 
     #[test]
     fn test_quadrotor_2d_new() {
-        let quad = Quadrotor2D::new(1.0, 2.0, 1.5, None);
+        let quad = Quadrotor2D::new(1.0, 2.0, 1.5, None, true);
         let [m, j, l] = quad.extract(&["m", "j", "l"]);
 
         assert_eq!(m, 1.0);
@@ -55,7 +66,7 @@ mod tests {
 
     #[test]
     fn test_quadrotor_2d_parameters() {
-        let quad = Quadrotor2D::new(1.0, 2.0, 1.4, None);
+        let quad = Quadrotor2D::new(1.0, 2.0, 1.4, None, true);
 
         let params = quad.extract(&["m", "j", "l"]);
         assert_eq!(params, [1.0, 2.0, 1.4]);
