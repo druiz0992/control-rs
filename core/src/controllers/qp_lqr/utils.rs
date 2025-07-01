@@ -1,7 +1,6 @@
 use crate::controllers::{ControllerInput, ControllerState, CostFn};
 use crate::physics::traits::{PhysicsSim, State};
-use crate::utils::helpers::get_or_first;
-use crate::utils::matrix;
+use general::{helpers::get_or_first, matrix};
 use nalgebra::{DMatrix, DVector};
 use osqp::CscMatrix;
 

@@ -1,4 +1,3 @@
-use crate::physics::ModelError;
 use nalgebra::DVector;
 use rand_distr::{Distribution, Normal};
 
@@ -21,13 +20,10 @@ impl NoiseSource {
     /// - Returns:
     ///   - `Ok(Self)`: If the noise source is successfully created.
     ///   - `Err(ModelError)`: If the standard deviation is negative or the distribution fails to initialize.
-    pub fn new(std_dev: f64) -> Result<Self, ModelError> {
-        let distribution =
-            Normal::new(0.0, std_dev).map_err(|e| ModelError::Other(e.to_string()))?;
+    pub fn new(std_dev: f64) -> Result<Self, String> {
+        let distribution = Normal::new(0.0, std_dev).map_err(|e| e.to_string())?;
         if std_dev < 0.0 {
-            return Err(ModelError::ConfigError(
-                "Noise stdev cannot be negative".into(),
-            ));
+            return Err("Noise stdev cannot be negative".into());
         }
 
         Ok(Self {
@@ -70,11 +66,11 @@ impl NoiseSources {
     /// - Returns:
     ///   - `Ok(NoiseSources)`: If all noise sources are successfully created.
     ///   - `Err(ModelError)`: If any noise source fails to initialize.
-    pub fn from_stats(noise_statistics: Vec<f64>) -> Result<NoiseSources, ModelError> {
+    pub fn from_stats(noise_statistics: Vec<f64>) -> Result<NoiseSources, String> {
         let sources: Vec<NoiseSource> = noise_statistics
             .into_iter()
             .map(NoiseSource::new)
-            .collect::<Result<Vec<_>, ModelError>>()?;
+            .collect::<Result<Vec<_>, String>>()?;
         Ok(NoiseSources(sources))
     }
 
@@ -86,9 +82,9 @@ impl NoiseSources {
     /// - Returns:
     ///   - `Ok(DVector<f64>)`: The sample with noise added.
     ///   - `Err(ModelError)`: If the specified noise source index is out of bounds.
-    pub fn add_noise(&self, sample: DVector<f64>) -> Result<DVector<f64>, ModelError> {
+    pub fn add_noise(&self, sample: DVector<f64>) -> Result<DVector<f64>, String> {
         if sample.len() != self.0.len() {
-            return Err(ModelError::Other("Noise source size mismatch.".into()));
+            return Err("Noise source size mismatch.".into());
         }
         let mut noise_sample = Vec::new();
         for noise_source in &self.0 {

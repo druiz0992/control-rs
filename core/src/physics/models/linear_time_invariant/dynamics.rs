@@ -5,11 +5,11 @@ use nalgebra::{DMatrix, DVector};
 use super::input::LtiInput;
 use super::model::LtiModel;
 use super::state::LtiState;
-use crate::symbolic_services::symbolic::ExprRegistry;
 use crate::physics::ModelError;
 use crate::physics::models::dynamics::LinearDynamics;
 use crate::physics::traits::Dynamics;
 use crate::physics::traits::State;
+use symbolic_services::symbolic::ExprRegistry;
 
 impl<const N: usize, const C: usize, const I: usize> Dynamics for LtiModel<N, C, I> {
     type State = LtiState<N, C>;

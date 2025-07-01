@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 control-rs = { path = "../core"}
+symbolic_services = { path = "../symbolic_services"}
 
 nalgebra = {workspace = true}
 plotters = {workspace = true}

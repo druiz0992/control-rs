@@ -1,4 +1,4 @@
-use crate::symbolic_services::symbolic::{ExprRegistry, ExprVector};
+use symbolic_services::symbolic::{ExprRegistry, ExprVector};
 use crate::physics::constants as c;
 use crate::physics::models::DoublePendulumState;
 use crate::utils::{Identifiable, Labelizable};

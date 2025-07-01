@@ -1,9 +1,7 @@
-use crate::{
-    symbolic_services::symbolic::{SymbolicFunction, TryIntoEvalResult},
-    physics::ModelError,
-};
+use crate::physics::ModelError;
 use nalgebra::DMatrix;
 use std::sync::Arc;
+use symbolic_services::symbolic::{SymbolicFunction, TryIntoEvalResult};
 
 /// Trait for types that can be evaluated given a slice of `f64` values.
 ///

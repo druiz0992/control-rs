@@ -1,4 +1,4 @@
-use control_rs::symbolic_services::symbolic::ExprRegistry;
+use symbolic_services::symbolic::ExprRegistry;
 use control_rs::physics::discretizer::{
     BackwardEuler, ForwardEuler, HermiteSimpson, ImplicitMidpoint, MidPoint, RK4, RK4Symbolic, ZOH,
 };

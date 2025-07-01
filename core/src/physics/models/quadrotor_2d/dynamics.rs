@@ -1,13 +1,13 @@
 use super::input::Quadrotor2DInput;
 use super::model::Quadrotor2D;
 use super::state::Quadrotor2DState;
-use crate::symbolic_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::ModelError;
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Dynamics, State};
 use crate::physics::{constants as c, energy::Energy};
 use crate::utils::Labelizable;
 use std::sync::Arc;
+use symbolic_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
 
 impl Dynamics for Quadrotor2D {
     type State = Quadrotor2DState;
@@ -95,8 +95,10 @@ impl SymbolicDynamics for Quadrotor2D {
 
 #[cfg(test)]
 mod tests {
-    use crate::symbolic_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
-    use crate::utils::helpers::within_tolerance;
+    use general::helpers::within_tolerance;
+    use symbolic_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
+
+    use crate::physics::models::state::SymbolicResult;
 
     use super::*;
     use proptest::prelude::*;
@@ -158,7 +160,8 @@ mod tests {
                 .dynamics_symbolic(&state_symbol, &registry)
                 .to_fn(&registry)
                 .unwrap();
-            let new_state_symbol: Quadrotor2DState = dynamics_func(None).try_into_eval_result().unwrap();
+
+            let new_state_symbol: Quadrotor2DState = SymbolicResult::new(dynamics_func(None)).try_into_eval_result().unwrap();
 
             // Compare numeric and symbolic outputs approximately
             let tol = 1e-6; // tolerance for floating point comparison

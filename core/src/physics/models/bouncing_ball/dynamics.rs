@@ -1,6 +1,5 @@
 use super::model::BouncingBall;
 use super::state::BouncingBallState;
-use crate::symbolic_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::ModelError;
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::models::no_input::NoInput;
@@ -8,6 +7,7 @@ use crate::physics::traits::State;
 use crate::physics::{Energy, constants as c, traits::Dynamics};
 use crate::utils::Labelizable;
 use std::sync::Arc;
+use symbolic_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
 
 /// M * v_dot  + M * g = J' * u + f_friction, where M = mass * identity(2), g = [0, 9.81], J = [0,1]
 /// mu is normal force (scalar), v is velocity (2D vector), and q is position (2D vector),
@@ -128,8 +128,10 @@ impl SymbolicDynamics for BouncingBall {
 
 #[cfg(test)]
 mod tests {
-    use crate::symbolic_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
-    use crate::utils::helpers::within_tolerance;
+    use general::helpers::within_tolerance;
+    use symbolic_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
+
+    use crate::physics::models::state::SymbolicResult;
 
     use super::*;
     use proptest::prelude::*;
@@ -183,7 +185,7 @@ mod tests {
                 .dynamics_symbolic(&state_symbol, &registry)
                 .to_fn(&registry)
                 .unwrap();
-            let new_state_symbol: BouncingBallState = dynamics_func(None).try_into_eval_result().unwrap();
+            let new_state_symbol: BouncingBallState = SymbolicResult::new(dynamics_func(None)).try_into_eval_result().unwrap();
 
             // Compare numeric and symbolic outputs approximately
             let tol = 1e-3; // tolerance for floating point comparison

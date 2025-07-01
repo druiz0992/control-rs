@@ -1,8 +1,8 @@
 pub mod rk4_numeric;
 pub mod rk4_symbolic;
 
+use crate::physics::ModelError;
 use crate::physics::traits::{Discretizer, Dynamics};
-use crate::physics::{ModelError};
 use std::marker::PhantomData;
 
 #[derive(Default, Clone)]
@@ -42,13 +42,13 @@ impl<D: Dynamics> Discretizer<D> for RK4<D> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::symbolic_services::symbolic::ExprRegistry;
     use crate::physics::discretizer::rk4::rk4_symbolic::RK4Symbolic;
     use crate::physics::models::{DoublePendulum, DoublePendulumState};
-    use crate::utils::helpers::within_tolerance;
+    use general::helpers::within_tolerance;
     use proptest::prelude::*;
     use std::f64::consts::PI;
     use std::sync::Arc;
+    use symbolic_services::symbolic::ExprRegistry;
 
     #[test]
     fn test_rk4_step() {

@@ -1,4 +1,5 @@
-use crate::symbolic_services::symbolic::SymbolicError;
+use solvers::SolverError;
+use symbolic_services::symbolic::SymbolicError;
 
 #[derive(Debug)]
 pub enum ModelError {
@@ -23,6 +24,17 @@ impl From<SymbolicError> for ModelError {
             }
             SymbolicError::IoError(e) => ModelError::Other(e),
             SymbolicError::Other(e) => ModelError::Other(e),
+        }
+    }
+}
+
+impl From<SolverError> for ModelError {
+    fn from(value: SolverError) -> Self {
+        match value {
+            SolverError::EvaluationError => ModelError::EvaluationError,
+            SolverError::ConfigError(msg) => ModelError::ConfigError(msg),
+            SolverError::Other(msg) => ModelError::SolverError(msg),
+            SolverError::Unexpected(msg) => ModelError::Unexpected(msg),
         }
     }
 }

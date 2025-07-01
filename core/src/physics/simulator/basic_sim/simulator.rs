@@ -1,6 +1,5 @@
 use std::sync::Arc;
-
-use crate::symbolic_services::symbolic::ExprRegistry;
+use symbolic_services::symbolic::ExprRegistry;
 use crate::physics::ModelError;
 use crate::physics::traits::{Discretizer, Dynamics, PhysicsSim};
 

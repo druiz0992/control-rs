@@ -8,7 +8,7 @@ use control_rs::physics::discretizer::RK4Numeric;
 use control_rs::physics::models::quadrotor_2d::{Quadrotor2D, Quadrotor2DInput, Quadrotor2DState};
 use control_rs::physics::simulator::BasicSim;
 use control_rs::physics::traits::State;
-use control_rs::symbolic_services::symbolic::ExprRegistry;
+use symbolic_services::symbolic::ExprRegistry;
 use control_rs::utils::Labelizable;
 use nalgebra::{DMatrix, dvector};
 use osqp::Settings;

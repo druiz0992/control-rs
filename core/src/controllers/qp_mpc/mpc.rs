@@ -9,12 +9,12 @@ use crate::physics::ModelError;
 use crate::physics::discretizer::{LinearDiscretizer, NumericDiscretizer, SymbolicDiscretizer};
 use crate::physics::models::Dynamics;
 use crate::physics::traits::{Discretizer, LinearDynamics, PhysicsSim, State, SymbolicDynamics};
-use crate::solvers::OSQPBuilder;
-use crate::solvers::osqp::builder::QPParams;
 use crate::utils::Labelizable;
 use crate::utils::evaluable::EvaluableMatrixFn;
 use crate::utils::noise::NoiseSources;
 use nalgebra::{DMatrix, DVector};
+use solvers::OSQPBuilder;
+use solvers::osqp::builder::QPParams;
 
 use super::options::ConvexMpcOptions;
 
@@ -311,10 +311,12 @@ where
         let dt = self.options.get_general().get_dt();
 
         let noise_sources =
-            NoiseSources::from_stats(self.options.general.get_noise().unwrap_or_default())?;
+            NoiseSources::from_stats(self.options.general.get_noise().unwrap_or_default())
+                .map_err(ModelError::Other)?;
         let mut current_state = state_from_slice::<S>(
             noise_sources
-                .add_noise(x_traj[0].to_vector())?
+                .add_noise(x_traj[0].to_vector())
+                .map_err( ModelError::Other)?
                 .as_mut_slice(),
         );
         x_traj[0] = current_state.clone();

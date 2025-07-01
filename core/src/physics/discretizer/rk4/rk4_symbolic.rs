@@ -1,14 +1,15 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use crate::symbolic_services::symbolic::{
-    ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
-};
 use crate::physics::discretizer::{CodeGenerator, SymbolicDiscretizer};
+use crate::physics::models::state::SymbolicResult;
 use crate::physics::traits::{Discretizer, State};
 use crate::physics::{ModelError, constants as c, traits::SymbolicDynamics};
 use crate::utils::evaluable::EvaluableMatrixFn;
 use crate::utils::{Identifiable, Labelizable};
+use symbolic_services::symbolic::{
+    ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
+};
 
 pub struct RK4Symbolic<D: SymbolicDynamics> {
     step_func: SymbolicFunction,
@@ -80,7 +81,7 @@ impl<D: SymbolicDynamics> Discretizer<D> for RK4Symbolic<D> {
             vals.extend_from_slice(&u.to_vec());
         }
 
-        Ok(self.step_func.eval(&vals).try_into_eval_result()?)
+        Ok(SymbolicResult::new(self.step_func.eval(&vals)).try_into_eval_result()?)
     }
 }
 

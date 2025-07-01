@@ -6,7 +6,7 @@ use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursion};
 use control_rs::controllers::utils::clamp_input_vector;
 use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions};
 use control_rs::cost::GenericCost;
-use control_rs::symbolic_services::symbolic::ExprRegistry;
+use symbolic_services::symbolic::ExprRegistry;
 use control_rs::physics::discretizer::RK4Symbolic;
 use control_rs::physics::models::{CartPole, CartPoleInput, CartPoleState};
 use control_rs::physics::simulator::BasicSim;

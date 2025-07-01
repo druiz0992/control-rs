@@ -1,11 +1,11 @@
 use crate::physics::constants as c;
 use crate::physics::error::ModelError;
 use crate::physics::traits::State;
-use crate::solvers::NewtonSolverSymbolic;
-use crate::solvers::RootFinder;
-use crate::solvers::dtos::{KktConditionsStatus, OptimizerConfig, SolverResult};
-use crate::symbolic_services::symbolic::{ExprMatrix, ExprRegistry, ExprScalar, ExprVector};
+use solvers::NewtonSolverSymbolic;
+use solvers::RootFinder;
+use solvers::dtos::{KktConditionsStatus, OptimizerConfig, SolverResult};
 use std::sync::Arc;
+use symbolic_services::symbolic::{ExprMatrix, ExprRegistry, ExprScalar, ExprVector};
 
 pub fn get_states(registry: &Arc<ExprRegistry>) -> Result<(ExprVector, ExprVector), ModelError> {
     let current_state = registry.get_vector(c::STATE_SYMBOLIC)?;
@@ -42,7 +42,7 @@ pub fn step_intrinsic<S: State, RF: RootFinder>(
 
     let start_dims = if S::dim_v() == 0 { 0 } else { S::dim_q() };
 
-    solver.find_roots(&state.to_vec()[start_dims..])
+    Ok(solver.find_roots(&state.to_vec()[start_dims..])?)
 }
 
 /// 1/2 * next_v_state * M * next_v_state + linear term * next_v_state
@@ -121,14 +121,14 @@ pub fn init_constrained_dynamics(
             .wrap(),
     ]);
 
-    NewtonSolverSymbolic::new_minimization(
+    Ok(NewtonSolverSymbolic::new_minimization(
         &objective_expr,
         None,
         Some(&ineq_constraints_expr),
         &next_v_state,
         registry,
         solver_options,
-    )
+    )?)
 }
 
 #[cfg(test)]
@@ -136,8 +136,8 @@ mod tests {
     use crate::physics::constants as c;
     use crate::physics::models::BouncingBall;
     use crate::physics::models::dynamics::SymbolicDynamics;
-    use crate::symbolic_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
-    use crate::utils::helpers::within_tolerance;
+    use general::helpers::within_tolerance;
+    use symbolic_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
 
     use super::*;
     use nalgebra::{DMatrix, DVector};

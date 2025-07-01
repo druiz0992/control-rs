@@ -1,7 +1,7 @@
 use super::{ControllerInput, ControllerState};
 use crate::physics::traits::State;
 use crate::physics::{ModelError, traits::PhysicsSim};
-use crate::utils::{matrix, vector};
+use general::{matrix, vector};
 use nalgebra::{DMatrix, DVector};
 
 pub type ConstraintBound = (f64, f64);
@@ -122,7 +122,8 @@ impl ConstraintTransform {
         let expanded_transform = matrix::hstack(
             self.transform.clone(),
             DMatrix::zeros(self.transform.nrows(), state_dim),
-        )?;
+        )
+        .map_err(ModelError::ConfigError)?;
         let constraint_mat =
             matrix::kron(&DMatrix::identity(n_steps, n_steps), &expanded_transform);
         let (lb, ub) = self.expand_bounds(n_steps);
@@ -137,7 +138,8 @@ impl ConstraintTransform {
         let expanded_transform = matrix::hstack(
             DMatrix::zeros(self.transform.nrows(), input_dim),
             self.transform.clone(),
-        )?;
+        )
+        .map_err(ModelError::ConfigError)?;
         let constraint_mat =
             matrix::kron(&DMatrix::identity(n_steps, n_steps), &expanded_transform);
         let (lb, ub) = self.expand_bounds(n_steps);

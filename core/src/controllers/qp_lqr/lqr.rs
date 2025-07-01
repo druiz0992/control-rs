@@ -12,13 +12,12 @@ use crate::physics::ModelError;
 use crate::physics::discretizer::{LinearDiscretizer, NumericDiscretizer, SymbolicDiscretizer};
 use crate::physics::models::Dynamics;
 use crate::physics::traits::{Discretizer, LinearDynamics, PhysicsSim, State, SymbolicDynamics};
-use crate::solvers::osqp::builder::QPParams;
-use crate::solvers::osqp::solver::OSQPSolverHandle;
-use crate::solvers::{Minimizer, OSQPBuilder};
 use crate::utils::Labelizable;
 use crate::utils::evaluable::EvaluableMatrixFn;
-use crate::utils::helpers::get_or_first;
-use crate::utils::{matrix, vector};
+use general::{helpers::get_or_first, matrix, vector};
+use solvers::osqp::builder::QPParams;
+use solvers::osqp::solver::OSQPSolverHandle;
+use solvers::{Minimizer, OSQPBuilder};
 
 type LinearDynamicsEvaluation = (Vec<DMatrix<f64>>, Vec<DMatrix<f64>>);
 

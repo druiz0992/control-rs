@@ -1,4 +1,4 @@
-use control_rs::symbolic_services::symbolic::ExprRegistry;
+use symbolic_services::symbolic::ExprRegistry;
 use control_rs::physics::discretizer::{CodeGenerator, RK4Symbolic};
 use control_rs::physics::models::{CartPole, DoublePendulum, Quadrotor2D};
 use std::env;

@@ -71,6 +71,8 @@ fn try_into_noisy_state<S: PhysicsSim>(
     vector: DVector<f64>,
     noise_sources: &NoiseSources,
 ) -> Result<ControllerState<S>, ModelError> {
-    let current_state = noise_sources.add_noise(vector)?;
+    let current_state = noise_sources
+        .add_noise(vector)
+        .map_err(ModelError::ConfigError)?;
     Ok(state_from_slice::<S>(current_state.as_slice()))
 }

@@ -11,8 +11,8 @@ use crate::physics::models::Dynamics;
 use crate::physics::traits::{Discretizer, LinearDynamics, PhysicsSim, State, SymbolicDynamics};
 use crate::utils::Labelizable;
 use crate::utils::evaluable::EvaluableMatrixFn;
-use crate::utils::helpers::get_or_first;
 use crate::utils::noise::NoiseSources;
+use general::helpers::get_or_first;
 use nalgebra::{DMatrix, DVector};
 
 pub struct RiccatiRecursion<S: PhysicsSim> {
@@ -193,8 +193,11 @@ where
 
         // enable noise if configured
         let noise_sources =
-            NoiseSources::from_stats(self.options.general.get_noise().unwrap_or_default())?;
-        let mut current_state = noise_sources.add_noise(x_traj[0].to_vector())?;
+            NoiseSources::from_stats(self.options.general.get_noise().unwrap_or_default())
+                .map_err( ModelError::Other)?;
+        let mut current_state = noise_sources
+            .add_noise(x_traj[0].to_vector())
+            .map_err(ModelError::Other)?;
         x_traj[0] = ControllerState::<S>::from_slice(current_state.as_slice());
 
         let u_limits = self.options.general.get_u_limits();

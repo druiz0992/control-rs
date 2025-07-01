@@ -1,8 +1,6 @@
 #![allow(unused_imports)]
 use control_rs::animation::Animation;
 use control_rs::animation::macroquad::Macroquad;
-use control_rs::solvers::dtos::OptimizerConfig;
-use control_rs::symbolic_services::symbolic::fasteval::ExprRegistry;
 use control_rs::physics::discretizer::{
     BackwardEuler, Discretizer, ForwardEuler, HermiteSimpson, ImplicitMidpoint, MidPoint, RK4,
     RK4Symbolic,
@@ -12,7 +10,10 @@ use control_rs::physics::models::{
 };
 use control_rs::physics::simulator::{BasicSim, PhysicsSim};
 use control_rs::physics::traits::Dynamics;
-use control_rs::{plotter, utils::helpers};
+use control_rs::plotter;
+use solvers::dtos::OptimizerConfig;
+use symbolic_services::symbolic::fasteval::ExprRegistry;
+use general::helpers;
 use std::f64::consts::PI;
 use std::io::{self, Write};
 use std::sync::Arc;

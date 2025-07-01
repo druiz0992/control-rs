@@ -6,24 +6,25 @@ edition = "2024"
 [dependencies]
 macros = { path = "../macros"}
 ffi_codegen = {path = "../ffi_codegen"}
+solvers = {path = "../solvers"}
+symbolic_services = {path = "../symbolic_services"}
+general = {path = "../general"}
 
 nalgebra = {workspace = true}
 plotters = {workspace = true}
 macroquad = {workspace = true}
-osqp = {workspace = true}
 serde = {workspace = true }
 serde_derive = { workspace = true}
 serde_json = { workspace = true}
-rayon = { workspace = true}
+rand = { workspace = true}
+log = { workspace = true}
+osqp = {workspace = true}
 
+rand_distr = "0.4"
 async-trait = "0.1"
 toml = "0.8"
-fasteval = "0.2.4"
-log = "0.4"
 env_logger = "0.11" 
-rand = "0.8"
 once_cell = "1.18"
-rand_distr = "0.4"
 
 
 [dev-dependencies]

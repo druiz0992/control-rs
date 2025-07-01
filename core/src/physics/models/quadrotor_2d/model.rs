@@ -1,5 +1,5 @@
 use super::state::Quadrotor2DState;
-use crate::symbolic_services::symbolic::{ExprRegistry, ExprVector};
+use symbolic_services::symbolic::{ExprRegistry, ExprVector};
 use crate::physics::constants as c;
 use crate::utils::{Identifiable, Labelizable};
 use macros::LabelOps;

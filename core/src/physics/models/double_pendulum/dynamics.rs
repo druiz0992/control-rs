@@ -1,7 +1,6 @@
 use super::input::DoublePendulumInput;
 use super::model::DoublePendulum;
 use super::state::DoublePendulumState;
-use crate::symbolic_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::ModelError;
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Dynamics, State};
@@ -9,6 +8,7 @@ use crate::physics::{constants as c, energy::Energy};
 use crate::utils::Labelizable;
 use nalgebra::Vector3;
 use std::sync::Arc;
+use symbolic_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
 
 impl Dynamics for DoublePendulum {
     type State = DoublePendulumState;
@@ -161,8 +161,10 @@ impl SymbolicDynamics for DoublePendulum {
 
 #[cfg(test)]
 mod tests {
-    use crate::symbolic_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
-    use crate::utils::helpers::within_tolerance;
+    use general::helpers::within_tolerance;
+    use symbolic_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
+
+    use crate::physics::models::state::SymbolicResult;
 
     use super::*;
     use proptest::prelude::*;
@@ -220,7 +222,7 @@ mod tests {
                 .dynamics_symbolic(&state_symbol, &registry)
                 .to_fn(&registry)
                 .unwrap();
-            let new_state_symbol: DoublePendulumState = dynamics_func(None).try_into_eval_result().unwrap();
+            let new_state_symbol: DoublePendulumState = SymbolicResult::new(dynamics_func(None)).try_into_eval_result().unwrap();
 
             // Compare numeric and symbolic outputs approximately
             let tol = 1e-6; // tolerance for floating point comparison
