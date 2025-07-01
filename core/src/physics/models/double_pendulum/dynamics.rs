@@ -87,7 +87,7 @@ impl Dynamics for DoublePendulum {
         let [m1, m2, l1, l2, air_resistance_coeff]: [f64; 5] = params
             .try_into()
             .map_err(|_| ModelError::ConfigError("Incorrect number of parameters.".into()))?;
-        *self = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, registry, true);
+        *self = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, registry);
         Ok(())
     }
 }
@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn test_dynamics() {
-        let pendulum = DoublePendulum::new(1.0, 2.0, 1.0, 1.0, 0.0, None, true);
+        let pendulum = DoublePendulum::new(1.0, 2.0, 1.0, 1.0, 0.0, None);
         let state = DoublePendulumState::new(0.0, 0.0, 0.0, 0.0);
 
         let new_state = pendulum.dynamics(&state, None);
@@ -187,7 +187,7 @@ mod tests {
     #[ignore]
     fn test_dynamics_symbolic() {
         let registry = Arc::new(ExprRegistry::new());
-        let double_pendulum = DoublePendulum::new(1.0, 2.0, 0.0, 0.0, 1.0, Some(&registry), true);
+        let double_pendulum = DoublePendulum::new(1.0, 2.0, 0.0, 0.0, 1.0, Some(&registry));
         let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
         let dynamics_func = double_pendulum.dynamics_symbolic(&state_symbol, &registry);
         dbg!(&dynamics_func);
@@ -204,20 +204,30 @@ mod tests {
             m2 in 0.1f64..10.0,
             l1 in 0.1f64..5.0,
             l2 in 0.1f64..5.0,
-            air_resistance_coeff in 0.0f64..5.0
+            air_resistance_coeff in 0.0f64..5.0,
+            u1 in -5.0..5.0,
+            u2 in -5.0..5.0,
         ) {
             let registry = Arc::new(ExprRegistry::new());
             registry.insert_var("theta1", theta1);
             registry.insert_var("theta2", theta2);
             registry.insert_var("omega1", omega1);
             registry.insert_var("omega2", omega2);
+            registry.insert_var("m1",m1);
+            registry.insert_var("m2",m2);
+            registry.insert_var("l1",l1);
+            registry.insert_var("l2",l2);
+            registry.insert_var("air_resistance_coeff",air_resistance_coeff);
+            registry.insert_var("u1",u1);
+            registry.insert_var("u2",u2);
 
-            let pendulum = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry), true);
+            let pendulum = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry));
 
             let state = DoublePendulumState::new(theta1, omega1, theta2, omega2);
+            let input = DoublePendulumInput::new(u1,u2);
             let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
 
-            let new_state = pendulum.dynamics(&state, None);
+            let new_state = pendulum.dynamics(&state, Some(&input));
             let dynamics_func = pendulum
                 .dynamics_symbolic(&state_symbol, &registry)
                 .to_fn(&registry)

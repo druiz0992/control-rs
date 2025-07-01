@@ -194,7 +194,7 @@ where
         // enable noise if configured
         let noise_sources =
             NoiseSources::from_stats(self.options.general.get_noise().unwrap_or_default())
-                .map_err( ModelError::Other)?;
+                .map_err(ModelError::Other)?;
         let mut current_state = noise_sources
             .add_noise(x_traj[0].to_vector())
             .map_err(ModelError::Other)?;

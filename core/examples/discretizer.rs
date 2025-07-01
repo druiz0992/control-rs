@@ -47,7 +47,7 @@ async fn build_sim(integrator: IntegratorType) {
     let dt = 0.01;
     let steps = 500;
 
-    let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry), true);
+    let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry));
     let solver_options = OptimizerConfig::default().set_verbose(true);
 
     let states = match integrator {

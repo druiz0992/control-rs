@@ -2,7 +2,6 @@ use control_rs::physics::constants as c;
 use control_rs::physics::discretizer::{RK4Symbolic, SymbolicDiscretizer};
 use control_rs::physics::models::{CartPole, DoublePendulum, Quadrotor2D};
 use control_rs::physics::traits::{Dynamics, SymbolicDynamics};
-use symbolic_services::symbolic::ExprRegistry;
 use control_rs::utils::Labelizable;
 use control_rs::utils::evaluable::EvaluableMatrixFn;
 use nalgebra::DMatrix;
@@ -13,6 +12,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
+use symbolic_services::symbolic::ExprRegistry;
 
 #[derive(Default)]
 struct TimingStats {
@@ -26,13 +26,13 @@ static DOUBLE_PENDULUM_REGISTRY: Lazy<Arc<ExprRegistry>> =
     Lazy::new(|| Arc::new(ExprRegistry::new()));
 static DOUBLE_PENDULUM_DF_DX_FN: Lazy<EvaluableMatrixFn> = Lazy::new(|| {
     let registry = &DOUBLE_PENDULUM_REGISTRY;
-    let model = DoublePendulum::new(1.0, 1.0, 1.0, 1.0, 0.1, Some(registry), false);
+    let model = DoublePendulum::new(1.0, 1.0, 1.0, 1.0, 0.1, Some(registry));
     let integrator = RK4Symbolic::new(&model, Arc::clone(registry)).unwrap();
     integrator.jacobian_x().unwrap()
 });
 static DOUBLE_PENDULUM_DF_DU_FN: Lazy<EvaluableMatrixFn> = Lazy::new(|| {
     let registry = &DOUBLE_PENDULUM_REGISTRY;
-    let model = DoublePendulum::new(1.0, 1.0, 1.0, 1.0, 0.1, Some(registry), false);
+    let model = DoublePendulum::new(1.0, 1.0, 1.0, 1.0, 0.1, Some(registry));
     let integrator = RK4Symbolic::new(&model, Arc::clone(registry)).unwrap();
     integrator.jacobian_u().unwrap()
 });
@@ -43,13 +43,13 @@ static DOUBLE_PENDULUM_TIMINGS: Lazy<Mutex<TimingStats>> =
 static CARTPOLE_REGISTRY: Lazy<Arc<ExprRegistry>> = Lazy::new(|| Arc::new(ExprRegistry::new()));
 static CARTPOLE_DF_DX_FN: Lazy<EvaluableMatrixFn> = Lazy::new(|| {
     let registry = &CARTPOLE_REGISTRY;
-    let model = CartPole::new(1.0, 1.0, 1.0, 0.1, 0.1, Some(registry), false);
+    let model = CartPole::new(1.0, 1.0, 1.0, 0.1, 0.1, Some(registry));
     let integrator = RK4Symbolic::new(&model, Arc::clone(registry)).unwrap();
     integrator.jacobian_x().unwrap()
 });
 static CARTPOLE_DF_DU_FN: Lazy<EvaluableMatrixFn> = Lazy::new(|| {
     let registry = &CARTPOLE_REGISTRY;
-    let model = CartPole::new(1.0, 1.0, 1.0, 0.1, 0.1, Some(registry), false);
+    let model = CartPole::new(1.0, 1.0, 1.0, 0.1, 0.1, Some(registry));
     let integrator = RK4Symbolic::new(&model, Arc::clone(registry)).unwrap();
     integrator.jacobian_u().unwrap()
 });
@@ -60,13 +60,13 @@ static CARTPOLE_TIMINGS: Lazy<Mutex<TimingStats>> =
 static QUADROTOR_2D_REGISTRY: Lazy<Arc<ExprRegistry>> = Lazy::new(|| Arc::new(ExprRegistry::new()));
 static QUADROTOR_2D_DF_DX_FN: Lazy<EvaluableMatrixFn> = Lazy::new(|| {
     let registry = &QUADROTOR_2D_REGISTRY;
-    let model = Quadrotor2D::new(1.0, 1.0, 1.0, Some(registry), false);
+    let model = Quadrotor2D::new(1.0, 1.0, 1.0, Some(registry));
     let integrator = RK4Symbolic::new(&model, Arc::clone(registry)).unwrap();
     integrator.jacobian_x().unwrap()
 });
 static QUADROTOR_2D_DF_DU_FN: Lazy<EvaluableMatrixFn> = Lazy::new(|| {
     let registry = &QUADROTOR_2D_REGISTRY;
-    let model = Quadrotor2D::new(1.0, 1.0, 1.0, Some(registry), false);
+    let model = Quadrotor2D::new(1.0, 1.0, 1.0, Some(registry));
     let integrator = RK4Symbolic::new(&model, Arc::clone(registry)).unwrap();
     integrator.jacobian_u().unwrap()
 });
@@ -189,7 +189,7 @@ fn test_double_pendulum_random() {
         let df_dx = Box::new(ffi_codegen::rk4::double_pendulum::rk4_double_pendulum_jacobian_x);
         let df_du = Box::new(ffi_codegen::rk4::double_pendulum::rk4_double_pendulum_jacobian_u);
 
-        let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(registry), false);
+        let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(registry));
         compare_symbolic_numeric(model, &model_vals, &state_vals, &input_vals, dt, df_dx_fn, df_du_fn, df_dx, df_du, timings, registry);
     });
     let timings = &DOUBLE_PENDULUM_TIMINGS;
@@ -222,7 +222,7 @@ fn test_cartpole_random() {
         let df_dx = Box::new(ffi_codegen::rk4::cartpole::rk4_cartpole_jacobian_x);
         let df_du = Box::new(ffi_codegen::rk4::cartpole::rk4_cartpole_jacobian_u);
 
-        let model = CartPole::new(pole_mass, cart_mass,l,friction_coeff, air_resistance_coeff, Some(registry), false);
+        let model = CartPole::new(pole_mass, cart_mass,l,friction_coeff, air_resistance_coeff, Some(registry));
         compare_symbolic_numeric(model, &model_vals, &state_vals, &input_vals, dt, df_dx_fn, df_du_fn, df_dx, df_du, timings, registry);
     });
     let timings = &CARTPOLE_TIMINGS;
@@ -256,7 +256,7 @@ fn test_quadrotor_2d_random() {
         let df_dx = Box::new(ffi_codegen::rk4::quadrotor_2d::rk4_quadrotor_2d_jacobian_x);
         let df_du = Box::new(ffi_codegen::rk4::quadrotor_2d::rk4_quadrotor_2d_jacobian_u);
 
-        let model = Quadrotor2D::new(m,j,l,Some(registry), false);
+        let model = Quadrotor2D::new(m,j,l,Some(registry));
         compare_symbolic_numeric(model, &model_vals, &state_vals, &input_vals, dt, df_dx_fn, df_du_fn, df_dx, df_du, timings, registry);
     });
     let timings = &QUADROTOR_2D_TIMINGS;

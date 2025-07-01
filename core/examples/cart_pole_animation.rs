@@ -24,15 +24,7 @@ async fn main() {
     let omega = 0.0;
 
     // Initialize model and initial state
-    let model = CartPole::new(
-        m,
-        cart_mass,
-        l,
-        friction_coeff,
-        air_resistance_coeff,
-        None,
-        true,
-    );
+    let model = CartPole::new(m, cart_mass, l, friction_coeff, air_resistance_coeff, None);
     let state0 = CartPoleState::new(pos_x, v_x, theta, omega);
 
     // Initialize RK4 discretizer

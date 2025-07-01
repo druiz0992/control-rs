@@ -58,7 +58,7 @@ impl Dynamics for Quadrotor2D {
         let [m, j, l]: [f64; 3] = params
             .try_into()
             .map_err(|_| ModelError::ConfigError("Incorrect number of parameters.".into()))?;
-        *self = Self::new(m, j, l, registry, true);
+        *self = Self::new(m, j, l, registry);
         Ok(())
     }
 }
@@ -106,7 +106,7 @@ mod tests {
 
     #[test]
     fn test_dynamics() {
-        let quad = Quadrotor2D::new(1.0, 2.0, 1.0, None, true);
+        let quad = Quadrotor2D::new(1.0, 2.0, 1.0, None);
         let state = Quadrotor2DState::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
 
         let new_state = quad.dynamics(&state, None);
@@ -123,7 +123,7 @@ mod tests {
     #[ignore]
     fn test_dynamics_symbolic() {
         let registry = Arc::new(ExprRegistry::new());
-        let quad = Quadrotor2D::new(1.0, 2.0, 1.0, Some(&registry), true);
+        let quad = Quadrotor2D::new(1.0, 2.0, 1.0, Some(&registry));
         let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
         let dynamics_func = quad.dynamics_symbolic(&state_symbol, &registry);
         dbg!(&dynamics_func);
@@ -141,6 +141,8 @@ mod tests {
             m in 0.1f64..10.0,
             j in 0.1f64..10.0,
             l in 0.1f64..5.0,
+            u1 in -5.0..5.0,
+            u2 in -5.0..5.0,
         ) {
             let registry = Arc::new(ExprRegistry::new());
             registry.insert_var("pos_x", pos_x);
@@ -149,13 +151,19 @@ mod tests {
             registry.insert_var("v_x", v_x);
             registry.insert_var("v_y", v_y);
             registry.insert_var("omega", omega);
+            registry.insert_var("m",m);
+            registry.insert_var("j",j);
+            registry.insert_var("l",l);
+            registry.insert_var("u1",u1);
+            registry.insert_var("u2",u2);
 
-            let quad = Quadrotor2D::new(m, j, l, Some(&registry), true);
+            let quad = Quadrotor2D::new(m, j, l, Some(&registry));
 
             let state = Quadrotor2DState::new(pos_x, pos_y, theta, v_x, v_y, omega);
+            let input = Quadrotor2DInput::new(u1, u2);
             let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
 
-            let new_state = quad.dynamics(&state, None);
+            let new_state = quad.dynamics(&state, Some(&input));
             let dynamics_func =quad
                 .dynamics_symbolic(&state_symbol, &registry)
                 .to_fn(&registry)

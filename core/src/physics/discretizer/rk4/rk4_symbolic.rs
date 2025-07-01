@@ -50,11 +50,14 @@ impl<D: SymbolicDynamics> RK4Symbolic<D> {
         dynamics = dynamics.add(&state).wrap();
         let step_func = dynamics.to_fn(&registry)?;
 
-        // if model allows inputs, redefine vars to include inputs
+        // vars
         let mut vars = state.to_vec();
-        if let Ok(input) = registry.get_vector(c::INPUT_SYMBOLIC) {
-            vars.extend_from_slice(&input.to_vec());
-        }
+        let input = registry.get_vector(c::INPUT_SYMBOLIC)?;
+        vars.extend_from_slice(&input.to_vec());
+        let model_params = registry.get_vector(c::MODEL_SYMBOLIC)?;
+        vars.extend_from_slice(&model_params.to_vec());
+        vars.extend_from_slice(&[dt]);
+
         let step_func = SymbolicFunction::new(step_func, &vars);
 
         Ok(Self {
@@ -66,30 +69,33 @@ impl<D: SymbolicDynamics> RK4Symbolic<D> {
     }
 }
 
-impl<D: SymbolicDynamics> Discretizer<D> for RK4Symbolic<D> {
+impl<D: SymbolicDynamics + Labelizable> Discretizer<D> for RK4Symbolic<D> {
     fn step(
         &self,
-        _model: &D,
+        model: &D,
         state: &D::State,
         input: Option<&D::Input>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
-        self.registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
-
         let mut vals = state.to_vec();
         if let Some(u) = input {
             vals.extend_from_slice(&u.to_vec());
+        } else {
+            vals.extend_from_slice(&D::Input::default().to_vec())
         }
+        vals.extend_from_slice(&model.vectorize(D::labels()));
+        vals.extend_from_slice(&[dt]);
 
         Ok(SymbolicResult::new(self.step_func.eval(&vals)).try_into_eval_result()?)
     }
 }
 
-impl<D: SymbolicDynamics> SymbolicDiscretizer<D> for RK4Symbolic<D> {
+impl<D: SymbolicDynamics + Labelizable> SymbolicDiscretizer<D> for RK4Symbolic<D> {
     fn jacobian_x(&self) -> Result<EvaluableMatrixFn, ModelError> {
         let state_symbol = self.registry.get_vector(c::STATE_SYMBOLIC).unwrap();
         let input_symbol = self.registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
-        let jacobian_symbols = state_symbol.extend(&input_symbol);
+        let params_symbol = self.registry.get_vector(c::MODEL_SYMBOLIC).unwrap();
+        let jacobian_symbols = state_symbol.extend(&input_symbol).extend(&params_symbol);
 
         let jacobian_x = self
             .dynamics
@@ -104,7 +110,8 @@ impl<D: SymbolicDynamics> SymbolicDiscretizer<D> for RK4Symbolic<D> {
     fn jacobian_u(&self) -> Result<EvaluableMatrixFn, ModelError> {
         let state_symbol = self.registry.get_vector(c::STATE_SYMBOLIC).unwrap();
         let input_symbol = self.registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
-        let jacobian_symbols = state_symbol.extend(&input_symbol);
+        let params_symbol = self.registry.get_vector(c::MODEL_SYMBOLIC).unwrap();
+        let jacobian_symbols = state_symbol.extend(&input_symbol).extend(&params_symbol);
 
         let jacobian_u = self
             .dynamics
@@ -161,7 +168,7 @@ mod tests {
     #[test]
     fn test_rk4_symbolic_step() {
         let registry = Arc::new(ExprRegistry::new());
-        let dynamics = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, 0.0, Some(&registry), true);
+        let dynamics = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, 0.0, Some(&registry));
 
         let theta1 = 0.0;
         let omega1 = 0.0;

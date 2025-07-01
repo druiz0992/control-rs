@@ -6,7 +6,6 @@ use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursion};
 use control_rs::controllers::utils::clamp_input_vector;
 use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions};
 use control_rs::cost::GenericCost;
-use symbolic_services::symbolic::ExprRegistry;
 use control_rs::physics::discretizer::RK4Symbolic;
 use control_rs::physics::models::{CartPole, CartPoleInput, CartPoleState};
 use control_rs::physics::simulator::BasicSim;
@@ -20,6 +19,7 @@ use osqp::Settings;
 use std::f64::consts::PI;
 use std::io::{self, Write};
 use std::sync::Arc;
+use symbolic_services::symbolic::ExprRegistry;
 
 type Sim = BasicSim<CartPole, RK4Symbolic<CartPole>>;
 
@@ -364,7 +364,7 @@ fn deg2rad(degrees: f64) -> f64 {
 #[macroquad::main("Ricatti Cart Pole")]
 async fn main() {
     let registry = Arc::new(ExprRegistry::new());
-    let model = CartPole::new(0.2, 1.0, 0.5, 0.0, 0.0, Some(&registry), true);
+    let model = CartPole::new(0.2, 1.0, 0.5, 0.0, 0.0, Some(&registry));
     let estimated_parameters = vec![0.16, 1.2, 0.55, 0.0, 0.0];
 
     let x_ref = CartPoleState::new(0.0, 0.0, 0.0, 0.0);
@@ -451,7 +451,7 @@ async fn main() {
 
     // Part D - TVLQR for trajectory tracking
     let x_ic = CartPoleState::new(0.0, 0.0, PI, 0.0);
-    let model = CartPole::new(0.2, 1.0, 0.5, 0.0, 0.0, Some(&registry), true);
+    let model = CartPole::new(0.2, 1.0, 0.5, 0.0, 0.0, Some(&registry));
 
     let dt = 0.05;
     let (x_traj, u_traj) = generate_reference_traj(&model, &x_ic, dt, Arc::clone(&registry)).await;

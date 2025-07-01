@@ -1,9 +1,6 @@
-use std::cmp::min;
-
-use nalgebra::{DMatrix, DVector};
-
 use super::options::QPOptions;
 use super::utils;
+use crate::controllers::utils::linearize;
 use crate::controllers::{
     Controller, ControllerInput, ControllerOptions, ControllerState, CostFn, SteppableController,
     TrajectoryHistory, UpdatableController,
@@ -15,54 +12,10 @@ use crate::physics::traits::{Discretizer, LinearDynamics, PhysicsSim, State, Sym
 use crate::utils::Labelizable;
 use crate::utils::evaluable::EvaluableMatrixFn;
 use general::{helpers::get_or_first, matrix, vector};
+use nalgebra::{DMatrix, DVector};
 use solvers::osqp::builder::QPParams;
 use solvers::osqp::solver::OSQPSolverHandle;
 use solvers::{Minimizer, OSQPBuilder};
-
-type LinearDynamicsEvaluation = (Vec<DMatrix<f64>>, Vec<DMatrix<f64>>);
-
-fn linearize<S>(
-    sim: &mut S,
-    jacobian_x_fn: &EvaluableMatrixFn,
-    jacobian_u_fn: &EvaluableMatrixFn,
-    n_steps: usize,
-    general_options: &ControllerOptions<S>,
-) -> Result<LinearDynamicsEvaluation, ModelError>
-where
-    S: PhysicsSim,
-    S::Model: Dynamics + Labelizable,
-    S::Discretizer: Discretizer<S::Model>,
-{
-    let n_op = min(general_options.get_u_operating().len(), n_steps - 1);
-    let mut a_mat: Vec<DMatrix<f64>> = Vec::with_capacity(n_op);
-    let mut b_mat: Vec<DMatrix<f64>> = Vec::with_capacity(n_op);
-    let dt = general_options.get_dt();
-
-    let mut real_params_opt: Option<Vec<f64>> = None;
-    let labels = S::Model::labels();
-    let real_params = sim.model().vectorize(labels);
-    let estimated_params = if let Some(estimated_params) = general_options.get_estimated_params() {
-        real_params_opt = Some(real_params);
-        sim.update_model(estimated_params)?;
-        estimated_params
-    } else {
-        real_params.as_slice()
-    };
-
-    for k in 0..n_op {
-        let mut vals = general_options.concatenate_operating_point(k)?;
-        vals.extend_from_slice(estimated_params);
-        vals.extend_from_slice(&[dt]);
-        a_mat.push(jacobian_x_fn.evaluate(&vals)?);
-        b_mat.push(jacobian_u_fn.evaluate(&vals)?);
-    }
-
-    if let Some(real_params) = real_params_opt {
-        sim.update_model(&real_params)?;
-    }
-
-    Ok((a_mat, b_mat))
-}
 
 pub struct QPLQR<S: PhysicsSim> {
     #[allow(dead_code)]

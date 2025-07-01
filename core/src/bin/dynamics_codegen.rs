@@ -1,9 +1,9 @@
-use symbolic_services::symbolic::ExprRegistry;
 use control_rs::physics::discretizer::{CodeGenerator, RK4Symbolic};
 use control_rs::physics::models::{CartPole, DoublePendulum, Quadrotor2D};
 use std::env;
 use std::process::Command;
 use std::sync::Arc;
+use symbolic_services::symbolic::ExprRegistry;
 
 /// # Run all (no args)
 /// cargo run -p control-rs --bin dynamics_codegen
@@ -18,7 +18,7 @@ fn build_rk4_double_pendulum() {
     let registry = Arc::new(ExprRegistry::new());
     let (m1, m2, l1, l2, air_resistance_coeff) = (1.0, 1.0, 1.0, 1.0, 0.1);
 
-    let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry), false);
+    let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry));
     let integrator = RK4Symbolic::new(&model, Arc::clone(&registry)).unwrap();
 
     integrator.to_numeric_jacobian_x().unwrap();
@@ -37,7 +37,6 @@ fn build_rk4_cart_pole() {
         friction_coeff,
         air_resistance_coeff,
         Some(&registry),
-        false,
     );
     let integrator = RK4Symbolic::new(&model, Arc::clone(&registry)).unwrap();
 
@@ -50,7 +49,7 @@ fn build_rk4_quadrotor_2d() {
     let registry = Arc::new(ExprRegistry::new());
     let (m, j, l) = (1.0, 1.0, 1.0);
 
-    let model = Quadrotor2D::new(m, j, l, Some(&registry), false);
+    let model = Quadrotor2D::new(m, j, l, Some(&registry));
     let integrator = RK4Symbolic::new(&model, Arc::clone(&registry)).unwrap();
 
     integrator.to_numeric_jacobian_x().unwrap();

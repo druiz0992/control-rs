@@ -17,9 +17,9 @@ impl Dynamics for CartPole {
         let [m_p, m_c, friction_coeff, air_resistance_coeff, l] = self.extract(&[
             "pole_mass",
             "cart_mass",
+            "l",
             "friction_coeff",
             "air_resistance_coeff",
-            "l",
         ]);
         let [v_x, theta, omega] = state.extract(&["v_x", "theta", "omega"]);
         let input = input.unwrap_or(&Self::Input::default()).clone();
@@ -95,7 +95,6 @@ impl Dynamics for CartPole {
             air_resistance_coeff,
             l,
             registry,
-            true,
         );
         Ok(())
     }
@@ -188,7 +187,7 @@ mod tests {
 
     #[test]
     fn test_dynamics() {
-        let cart_pole = CartPole::new(1.0, 2.0, 1.0, 0.0, 1.0, None, true);
+        let cart_pole = CartPole::new(1.0, 2.0, 1.0, 0.0, 1.0, None);
         let state = CartPoleState::new(0.0, 0.0, 0.0, 0.0);
 
         let new_state = cart_pole.dynamics(&state, None);
@@ -203,7 +202,7 @@ mod tests {
     #[ignore]
     fn test_dynamics_symbolic() {
         let registry = Arc::new(ExprRegistry::new());
-        let cart_pole = CartPole::new(1.0, 2.0, 0.0, 0.0, 1.0, Some(&registry), true);
+        let cart_pole = CartPole::new(1.0, 2.0, 0.0, 0.0, 1.0, Some(&registry));
         let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
         let dynamics_func = cart_pole.dynamics_symbolic(&state_symbol, &registry);
         dbg!(&dynamics_func);
@@ -221,19 +220,27 @@ mod tests {
             l in 0.1f64..5.0,
             friction_coeff in 0.0f64..5.0,
             air_resistance_coeff in 0.0f64..5.0,
+            u1 in -5.0..5.0,
         ) {
             let registry = Arc::new(ExprRegistry::new());
             registry.insert_var("pos_x", pos_x);
             registry.insert_var("v_x", v_x);
             registry.insert_var("theta", theta);
             registry.insert_var("omega", omega);
+            registry.insert_var("pole_mass", pole_mass);
+            registry.insert_var("cart_mass", cart_mass);
+            registry.insert_var("l",l);
+            registry.insert_var("friction_coeff", friction_coeff);
+            registry.insert_var("air_resistance_coeff", air_resistance_coeff);
+            registry.insert_var("u1", u1);
 
-            let cart_pole = CartPole::new(pole_mass, cart_mass, friction_coeff, air_resistance_coeff, l, Some(&registry), true);
+            let cart_pole = CartPole::new(pole_mass, cart_mass, friction_coeff, air_resistance_coeff, l, Some(&registry));
 
             let state = CartPoleState::new(pos_x, v_x, theta, omega);
+            let input = CartPoleInput::new(u1);
             let state_symbol = registry.get_vector(c::STATE_SYMBOLIC).unwrap();
 
-            let new_state = cart_pole.dynamics(&state, None);
+            let new_state = cart_pole.dynamics(&state, Some(&input));
             let dynamics_func = cart_pole
                 .dynamics_symbolic(&state_symbol, &registry)
                 .to_fn(&registry)
