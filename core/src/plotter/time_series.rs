@@ -1,5 +1,5 @@
 use crate::utils::Labelizable;
-use crate::numeric_services::symbolic::{
+use crate::symbolic_services::symbolic::{
     ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
 };
 use crate::physics::traits::State;

@@ -1,14 +1,15 @@
 use nalgebra::{DMatrix, DVector};
 
 use super::utils;
-use crate::utils::Labelizable;
-use crate::numeric_services::solver::{NewtonSolverSymbolic, OptimizerConfig};
-use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Discretizer, LinearDynamics, State};
 use crate::physics::{ModelError, constants as c};
-use crate::solver::linear_solver::LinearResidual;
-use crate::solver::{LinearSolver, RootFinder};
+use crate::solvers::NewtonSolverSymbolic;
+use crate::solvers::dtos::OptimizerConfig;
+use crate::solvers::linear_solver::LinearResidual;
+use crate::solvers::{LinearSolver, RootFinder};
+use crate::symbolic_services::symbolic::{ExprRegistry, ExprScalar};
+use crate::utils::Labelizable;
 use std::marker::PhantomData;
 use std::sync::Arc;
 

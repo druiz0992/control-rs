@@ -1,5 +1,5 @@
 use super::state::BouncingBallState;
-use crate::numeric_services::symbolic::{ExprMatrix, ExprRegistry, ExprScalar, ExprVector};
+use crate::symbolic_services::symbolic::{ExprMatrix, ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::constants as c;
 use crate::physics::traits::State;
 use crate::utils::{Identifiable, Labelizable};

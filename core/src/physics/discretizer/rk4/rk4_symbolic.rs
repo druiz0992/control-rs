@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use crate::numeric_services::symbolic::{
+use crate::symbolic_services::symbolic::{
     ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
 };
 use crate::physics::discretizer::{CodeGenerator, SymbolicDiscretizer};

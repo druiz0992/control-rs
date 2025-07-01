@@ -1,4 +1,4 @@
-use crate::numeric_services::symbolic::{SymbolicError, SymbolicEvalResult, TryIntoEvalResult};
+use crate::symbolic_services::symbolic::{SymbolicError, SymbolicEvalResult, TryIntoEvalResult};
 use crate::utils::Labelizable;
 use nalgebra::DVector;
 use std::ops::{Add, Div, Mul, Sub};

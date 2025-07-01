@@ -42,7 +42,7 @@ impl<D: Dynamics> Discretizer<D> for RK4<D> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::numeric_services::symbolic::ExprRegistry;
+    use crate::symbolic_services::symbolic::ExprRegistry;
     use crate::physics::discretizer::rk4::rk4_symbolic::RK4Symbolic;
     use crate::physics::models::{DoublePendulum, DoublePendulumState};
     use crate::utils::helpers::within_tolerance;

@@ -4,7 +4,7 @@ use control_rs::controllers::qp_mpc::{ConvexMpc, ConvexMpcOptions};
 use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursion};
 use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions};
 use control_rs::cost::generic::GenericCost;
-use control_rs::numeric_services::symbolic::ExprRegistry;
+use control_rs::symbolic_services::symbolic::ExprRegistry;
 use control_rs::physics::constants as c;
 use control_rs::physics::discretizer::RK4Symbolic;
 use control_rs::physics::models::{Quadrotor2D, Quadrotor2DInput, Quadrotor2DState};

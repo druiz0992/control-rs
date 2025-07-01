@@ -1,5 +1,6 @@
-use crate::numeric_services::solver::{NewtonSolverSymbolic, OptimizerConfig};
-use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
+use crate::symbolic_services::symbolic::{ExprRegistry, ExprScalar};
+use crate::solvers::NewtonSolverSymbolic;
+use crate::solvers::dtos::OptimizerConfig;
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::models::state::State;
 use crate::physics::traits::{Discretizer, Dynamics};

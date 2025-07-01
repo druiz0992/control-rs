@@ -1,14 +1,15 @@
-use control_rs::numeric_services::solver::{
-    LineSeachConfig, NewtonSolverSymbolic, OptimizerConfig,
+use control_rs::solvers::dtos::{
+    LineSeachConfig, OptimizerConfig,
 };
-use control_rs::numeric_services::symbolic::fasteval::ExprRegistry;
-use control_rs::numeric_services::symbolic::fasteval::utils::*;
-use control_rs::numeric_services::symbolic::{
+use control_rs::solvers::NewtonSolverSymbolic;
+use control_rs::symbolic_services::symbolic::fasteval::ExprRegistry;
+use control_rs::symbolic_services::symbolic::fasteval::utils::*;
+use control_rs::symbolic_services::symbolic::{
     ExprScalar, ExprVector, SymbolicEvalResult, SymbolicExpr, SymbolicFunction,
 };
-use control_rs::solver::Minimizer;
-use control_rs::solver::osqp::builder::OSQPBuilder;
-use control_rs::solver::qp::QPBuilder;
+use control_rs::solvers::Minimizer;
+use control_rs::solvers::osqp::builder::OSQPBuilder;
+use control_rs::solvers::qp::QPBuilder;
 use control_rs::utils::{matrix, vector};
 use nalgebra::{DMatrix, DVector};
 use osqp::Settings;

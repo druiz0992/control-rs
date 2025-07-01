@@ -1,7 +1,7 @@
 use super::input::DoublePendulumInput;
 use super::model::DoublePendulum;
 use super::state::DoublePendulumState;
-use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
+use crate::symbolic_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::ModelError;
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Dynamics, State};
@@ -161,7 +161,7 @@ impl SymbolicDynamics for DoublePendulum {
 
 #[cfg(test)]
 mod tests {
-    use crate::numeric_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
+    use crate::symbolic_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
     use crate::utils::helpers::within_tolerance;
 
     use super::*;

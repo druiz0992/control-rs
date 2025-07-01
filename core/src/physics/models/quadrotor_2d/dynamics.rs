@@ -1,7 +1,7 @@
 use super::input::Quadrotor2DInput;
 use super::model::Quadrotor2D;
 use super::state::Quadrotor2DState;
-use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
+use crate::symbolic_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::ModelError;
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Dynamics, State};
@@ -95,7 +95,7 @@ impl SymbolicDynamics for Quadrotor2D {
 
 #[cfg(test)]
 mod tests {
-    use crate::numeric_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
+    use crate::symbolic_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
     use crate::utils::helpers::within_tolerance;
 
     use super::*;

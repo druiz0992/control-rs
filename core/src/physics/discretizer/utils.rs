@@ -1,10 +1,10 @@
-use crate::numeric_services::solver::dtos::SolverResult;
-use crate::numeric_services::solver::{KktConditionsStatus, NewtonSolverSymbolic, OptimizerConfig};
-use crate::numeric_services::symbolic::{ExprMatrix, ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::constants as c;
 use crate::physics::error::ModelError;
 use crate::physics::traits::State;
-use crate::solver::RootFinder;
+use crate::solvers::NewtonSolverSymbolic;
+use crate::solvers::RootFinder;
+use crate::solvers::dtos::{KktConditionsStatus, OptimizerConfig, SolverResult};
+use crate::symbolic_services::symbolic::{ExprMatrix, ExprRegistry, ExprScalar, ExprVector};
 use std::sync::Arc;
 
 pub fn get_states(registry: &Arc<ExprRegistry>) -> Result<(ExprVector, ExprVector), ModelError> {
@@ -133,10 +133,10 @@ pub fn init_constrained_dynamics(
 
 #[cfg(test)]
 mod tests {
-    use crate::numeric_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
     use crate::physics::constants as c;
     use crate::physics::models::BouncingBall;
     use crate::physics::models::dynamics::SymbolicDynamics;
+    use crate::symbolic_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
     use crate::utils::helpers::within_tolerance;
 
     use super::*;

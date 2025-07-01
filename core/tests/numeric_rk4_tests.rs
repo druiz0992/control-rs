@@ -1,8 +1,8 @@
-use control_rs::numeric_services::symbolic::ExprRegistry;
 use control_rs::physics::constants as c;
 use control_rs::physics::discretizer::{RK4Symbolic, SymbolicDiscretizer};
 use control_rs::physics::models::{CartPole, DoublePendulum, Quadrotor2D};
 use control_rs::physics::traits::{Dynamics, SymbolicDynamics};
+use control_rs::symbolic_services::symbolic::ExprRegistry;
 use control_rs::utils::Labelizable;
 use control_rs::utils::evaluable::EvaluableMatrixFn;
 use nalgebra::DMatrix;

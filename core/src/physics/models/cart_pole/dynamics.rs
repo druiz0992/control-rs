@@ -1,7 +1,7 @@
 use super::input::CartPoleInput;
 use super::model::CartPole;
 use super::state::CartPoleState;
-use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
+use crate::symbolic_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::ModelError;
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Dynamics, State};
@@ -177,7 +177,7 @@ impl SymbolicDynamics for CartPole {
 }
 #[cfg(test)]
 mod tests {
-    use crate::numeric_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
+    use crate::symbolic_services::symbolic::{SymbolicExpr, TryIntoEvalResult};
     use crate::utils::helpers::within_tolerance;
 
     use super::*;

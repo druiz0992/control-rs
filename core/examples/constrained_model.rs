@@ -1,8 +1,8 @@
 #![allow(unused_imports)]
 use control_rs::animation::Animation;
 use control_rs::animation::macroquad::Macroquad;
-use control_rs::numeric_services::solver::OptimizerConfig;
-use control_rs::numeric_services::symbolic::fasteval::ExprRegistry;
+use control_rs::solvers::dtos::OptimizerConfig;
+use control_rs::symbolic_services::symbolic::fasteval::ExprRegistry;
 use control_rs::physics::discretizer::{
     BackwardEuler, Discretizer, ForwardEuler, HermiteSimpson, ImplicitMidpoint, MidPoint, RK4,
     RK4Symbolic,

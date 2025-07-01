@@ -1,4 +1,4 @@
-use crate::numeric_services::symbolic::SymbolicError;
+use crate::symbolic_services::symbolic::SymbolicError;
 
 #[derive(Debug)]
 pub enum ModelError {

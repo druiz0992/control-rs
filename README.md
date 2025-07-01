@@ -55,7 +55,7 @@ optimal_control = "0.1"
 Here's a basic example of using `control-rs`:
 
 ```rust
-use control_rs::numeric_services::symbolic::fasteval::ExprRegistry;
+use control_rs::symbolic_services::symbolic::fasteval::ExprRegistry;
 use control_rs::physics::discretizer::BackwardEuler;
 use control_rs::physics::models::{DoublePendulum, DoublePendulumState};
 use control_rs::physics::simulator::{BasicSim, PhysicsSim};

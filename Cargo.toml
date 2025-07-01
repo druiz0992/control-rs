@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "macros", "hw", "ffi_codegen"]
+members = ["core", "macros", "exercises", "ffi_codegen"]
 resolver = "2"
 
 [profile.dev]

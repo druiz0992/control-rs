@@ -1,4 +1,4 @@
-use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
+use crate::symbolic_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::{Energy, ModelError};
 use nalgebra::{DMatrix, Vector2};
 use std::sync::Arc;

@@ -1,5 +1,5 @@
 use crate::{
-    numeric_services::symbolic::{SymbolicFunction, TryIntoEvalResult},
+    symbolic_services::symbolic::{SymbolicFunction, TryIntoEvalResult},
     physics::ModelError,
 };
 use nalgebra::DMatrix;

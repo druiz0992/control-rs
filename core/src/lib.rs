@@ -1,8 +1,8 @@
 pub mod animation;
 pub mod controllers;
 pub mod cost;
-pub mod numeric_services;
 pub mod physics;
 pub mod plotter;
-pub mod solver;
+pub mod solvers;
+pub mod symbolic_services;
 pub mod utils;

@@ -5,7 +5,7 @@ use nalgebra::{DMatrix, DVector};
 use super::input::LtiInput;
 use super::model::LtiModel;
 use super::state::LtiState;
-use crate::numeric_services::symbolic::ExprRegistry;
+use crate::symbolic_services::symbolic::ExprRegistry;
 use crate::physics::ModelError;
 use crate::physics::models::dynamics::LinearDynamics;
 use crate::physics::traits::Dynamics;

@@ -1,10 +1,11 @@
 use super::utils;
-use crate::numeric_services::solver::{NewtonSolverSymbolic, OptimizerConfig};
-use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::models::state::State;
 use crate::physics::traits::{Discretizer, Dynamics};
 use crate::physics::{ModelError, constants as c};
+use crate::solvers::NewtonSolverSymbolic;
+use crate::solvers::dtos::OptimizerConfig;
+use crate::symbolic_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::utils::Labelizable;
 use std::marker::PhantomData;
 use std::sync::Arc;
