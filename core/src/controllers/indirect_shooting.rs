@@ -1,10 +1,12 @@
 use crate::controllers::{
-    ControllerInput, ControllerOptions, ControllerState, CostFn, InputTrajectory, TrajectoryHistory,
+    Controller, ControllerInput, ControllerOptions, ControllerState, CostFn, InputTrajectory,
+    TrajectoryHistory,
 };
 use crate::physics::ModelError;
+use crate::physics::discretizer::{LinearDiscretizer, NumericDiscretizer, SymbolicDiscretizer};
 use crate::physics::models::Dynamics;
-use crate::physics::traits::{Discretizer, PhysicsSim, State};
-use crate::utils::evaluable::EvaluableDMatrix;
+use crate::physics::traits::{Discretizer, LinearDynamics, PhysicsSim, State, SymbolicDynamics};
+use crate::utils::evaluable::EvaluableMatrixFn;
 use nalgebra::DMatrix;
 
 /// Indirect Shooting controller follows Potryagin's Minimum Principle, which are the first
@@ -24,7 +26,7 @@ use nalgebra::DMatrix;
 ///   lambda_N = grad final_cost/x_N
 ///   u_n = argmin H(x_n, u_n, lambda_n+1)
 ///
-pub(super) struct IndirectShootingGeneric<S: PhysicsSim> {
+pub struct IndirectShooting<S: PhysicsSim> {
     sim: S,
     cost_fn: CostFn<S>,
 
@@ -34,24 +36,75 @@ pub(super) struct IndirectShootingGeneric<S: PhysicsSim> {
     dt: f64,
 
     // df/du, df/dx
-    jacobian_u_fn: EvaluableDMatrix,
-    jacobian_x_fn: EvaluableDMatrix,
+    jacobian_u_fn: EvaluableMatrixFn,
+    jacobian_x_fn: EvaluableMatrixFn,
 }
 
-impl<S> IndirectShootingGeneric<S>
+impl<S> IndirectShooting<S>
+where
+    S: PhysicsSim,
+    S::Model: LinearDynamics,
+    S::Discretizer: LinearDiscretizer<S::Model>,
+{
+    pub fn new_linear(
+        sim: S,
+        cost_fn: CostFn<S>,
+        options: Option<ControllerOptions<S>>,
+    ) -> Result<Self, ModelError> {
+        let jacobian_x_fn = sim.discretizer().jacobian_x();
+        let jacobian_u_fn = sim.discretizer().jacobian_u();
+        IndirectShooting::from_parts(sim, cost_fn, jacobian_x_fn, jacobian_u_fn, options)
+    }
+}
+
+impl<S> IndirectShooting<S>
+where
+    S: PhysicsSim,
+    S::Model: SymbolicDynamics,
+    S::Discretizer: SymbolicDiscretizer<S::Model>,
+{
+    pub fn new_symbolic(
+        sim: S,
+        cost_fn: CostFn<S>,
+        options: Option<ControllerOptions<S>>,
+    ) -> Result<Self, ModelError> {
+        let jacobian_x_fn = sim.discretizer().jacobian_x()?;
+        let jacobian_u_fn = sim.discretizer().jacobian_u()?;
+        IndirectShooting::from_parts(sim, cost_fn, jacobian_x_fn, jacobian_u_fn, options)
+    }
+}
+
+impl<S> IndirectShooting<S>
+where
+    S: PhysicsSim,
+    S::Model: Dynamics,
+    S::Discretizer: NumericDiscretizer<S::Model>,
+{
+    pub fn new_numeric(
+        sim: S,
+        cost_fn: CostFn<S>,
+        options: Option<ControllerOptions<S>>,
+    ) -> Result<Self, ModelError> {
+        let jacobian_x_fn = sim.discretizer().jacobian_x();
+        let jacobian_u_fn = sim.discretizer().jacobian_u();
+        IndirectShooting::from_parts(sim, cost_fn, jacobian_x_fn, jacobian_u_fn, options)
+    }
+}
+
+impl<S> IndirectShooting<S>
 where
     S: PhysicsSim,
     S::Model: Dynamics,
     S::Discretizer: Discretizer<S::Model>,
 {
-    pub(super) fn new(
+    fn from_parts(
         sim: S,
         cost_fn: CostFn<S>,
-        jacobian_x_fn: EvaluableDMatrix,
-        jacobian_u_fn: EvaluableDMatrix,
-        options: ControllerOptions<S>,
+        jacobian_x_fn: EvaluableMatrixFn,
+        jacobian_u_fn: EvaluableMatrixFn,
+        options: Option<ControllerOptions<S>>,
     ) -> Result<Self, ModelError> {
-
+        let options = options.unwrap_or_default();
         let n_steps = (options.get_time_horizon() / options.get_dt()) as usize + 1;
 
         let u = ControllerInput::<S>::default().to_vector();
@@ -71,7 +124,7 @@ where
         })
     }
 
-    pub(super) fn rollout(
+    pub fn rollout(
         &self,
         initial_state: &ControllerState<S>,
     ) -> Result<Vec<ControllerState<S>>, ModelError> {
@@ -145,8 +198,10 @@ where
 
         Ok((&self.u_traj, u_traj_delta.abs().max()))
     }
+}
 
-    pub(super) fn solve(
+impl<S: PhysicsSim> Controller<S> for IndirectShooting<S> {
+    fn solve(
         &mut self,
         initial_state: &ControllerState<S>,
     ) -> Result<TrajectoryHistory<S>, ModelError> {

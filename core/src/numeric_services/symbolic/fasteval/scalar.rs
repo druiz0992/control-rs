@@ -1,5 +1,4 @@
 use super::derivatives::compute_derivatives;
-use super::slab::InstructionSlab;
 use crate::numeric_services::differentiation::dtos::DerivativeType;
 use crate::numeric_services::symbolic::dtos::{ExprRecord, SymbolicEvalResult, SymbolicFn};
 use crate::numeric_services::symbolic::error::SymbolicError;
@@ -7,6 +6,7 @@ use crate::numeric_services::symbolic::fasteval::{ExprMatrix, ExprVector};
 use crate::numeric_services::symbolic::ports::{SymbolicExpr, SymbolicRegistry};
 use fasteval::parser::{DEFAULT_EXPR_DEPTH_LIMIT, DEFAULT_EXPR_LEN_LIMIT};
 use fasteval::{Compiler, Error, Evaler, Instruction, Parser, Slab};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -40,7 +40,8 @@ const SLAB_MAX_CAPACITY: usize = 8388608;
 /// evaluation of mathematical expressions. It also integrates with a symbolic
 /// registry to resolve variables and nested expressions.
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct ExprScalar(String);
 
 impl std::str::FromStr for ExprScalar {
@@ -283,11 +284,6 @@ impl ExprScalar {
                 }
             };
         }
-    }
-
-    pub fn get_slab(&self) -> Result<InstructionSlab, SymbolicError> {
-        let (instruction, slab) = self.compile_with_retry()?;
-        Ok(InstructionSlab::Scalar((instruction, slab)))
     }
 }
 

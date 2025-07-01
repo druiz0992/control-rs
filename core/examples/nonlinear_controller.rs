@@ -1,7 +1,7 @@
 use control_rs::animation::{Animation, macroquad::Macroquad};
-use control_rs::controllers::qp_lqr::{QPLQRSymbolic, QPOptions};
-use control_rs::controllers::qp_mpc::{ConvexMpcOptions, ConvexMpcSymbolic};
-use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursionSymbolic};
+use control_rs::controllers::qp_lqr::{QPLQR, QPOptions};
+use control_rs::controllers::qp_mpc::{ConvexMpc, ConvexMpcOptions};
+use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursion};
 use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions};
 use control_rs::cost::generic::GenericCost;
 use control_rs::numeric_services::symbolic::ExprRegistry;
@@ -90,7 +90,7 @@ async fn build_sim(controller_type: ControllerType) {
                 .set_general(general_options)
                 .set_osqp_settings(osqp_settings);
             let (controller, _) =
-                QPLQRSymbolic::new(sim, Box::new(cost.clone()), &state_0, Some(qp_options))
+                QPLQR::new_symbolic(sim, Box::new(cost.clone()), &state_0, Some(qp_options))
                     .unwrap();
             Box::new(controller)
         }
@@ -108,21 +108,21 @@ async fn build_sim(controller_type: ControllerType) {
                 .set_general(general_options)
                 .set_osqp_settings(osqp_settings);
             let (controller, _) =
-                QPLQRSymbolic::new(sim, Box::new(cost.clone()), &state_0, Some(qp_options))
+                QPLQR::new_symbolic(sim, Box::new(cost.clone()), &state_0, Some(qp_options))
                     .unwrap();
             Box::new(controller)
         }
         ControllerType::RiccatiRecursionLQRFinite => {
             let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
             Box::new(
-                RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), Some(options)).unwrap(),
+                RiccatiRecursion::new_symbolic(sim, Box::new(cost.clone()), Some(options)).unwrap(),
             )
         }
 
         ControllerType::RiccatiRecursionLQRInfinite => {
             let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
             Box::new(
-                RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), Some(options)).unwrap(),
+                RiccatiRecursion::new_symbolic(sim, Box::new(cost.clone()), Some(options)).unwrap(),
             )
         }
         ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(lower, upper, std) => {
@@ -131,7 +131,7 @@ async fn build_sim(controller_type: ControllerType) {
             let general_options = general_options.set_u_limits(constraints).set_noise(std);
             let options = RiccatiLQROptions::enable_finite_horizon().set_general(general_options);
             Box::new(
-                RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), Some(options)).unwrap(),
+                RiccatiRecursion::new_symbolic(sim, Box::new(cost.clone()), Some(options)).unwrap(),
             )
         }
         ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(lower, upper, std) => {
@@ -140,7 +140,7 @@ async fn build_sim(controller_type: ControllerType) {
             let general_options = general_options.set_u_limits(constraints).set_noise(std);
             let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
             Box::new(
-                RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), Some(options)).unwrap(),
+                RiccatiRecursion::new_symbolic(sim, Box::new(cost.clone()), Some(options)).unwrap(),
             )
         }
         ControllerType::Mpc => {
@@ -152,7 +152,7 @@ async fn build_sim(controller_type: ControllerType) {
                 .set_general(general_options)
                 .set_osqp_settings(osqp_settings);
             Box::new(
-                ConvexMpcSymbolic::new(sim, Box::new(cost.clone()), &state_0, Some(options))
+                ConvexMpc::new_symbolic(sim, Box::new(cost.clone()), &state_0, Some(options))
                     .unwrap(),
             )
         }
@@ -173,7 +173,7 @@ async fn build_sim(controller_type: ControllerType) {
                 .set_general(general_options)
                 .set_osqp_settings(osqp_settings);
             Box::new(
-                ConvexMpcSymbolic::new(sim, Box::new(cost.clone()), &state_0, Some(options))
+                ConvexMpc::new_symbolic(sim, Box::new(cost.clone()), &state_0, Some(options))
                     .unwrap(),
             )
         }
@@ -201,7 +201,7 @@ async fn build_sim(controller_type: ControllerType) {
                 .set_general(general_options)
                 .set_osqp_settings(osqp_settings);
             Box::new(
-                ConvexMpcSymbolic::new(sim, Box::new(cost.clone()), &state_0, Some(options))
+                ConvexMpc::new_symbolic(sim, Box::new(cost.clone()), &state_0, Some(options))
                     .unwrap(),
             )
         }

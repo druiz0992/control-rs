@@ -39,7 +39,6 @@ where
 {
     fn clone_box(&self) -> Box<dyn SymbolicExpr<R>>;
     fn to_fn(&self, registry: &Arc<R>) -> Result<SymbolicFn, SymbolicError>;
-    //fn to_closure(&self) -> Result<SymbolicClosure, SymbolicError>;
 }
 
 /// Implements the `Clone` trait for boxed `SymbolicExpr` objects.

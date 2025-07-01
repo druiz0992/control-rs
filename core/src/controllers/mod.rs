@@ -8,12 +8,10 @@ pub mod trajectory;
 pub mod utils;
 
 pub use constraints::ConstraintTransform;
-pub use indirect_shooting::lqr::IndirectShootingLQR;
-pub use indirect_shooting::symbolic::IndirectShootingSymbolic;
+pub use indirect_shooting::IndirectShooting;
 use nalgebra::{DMatrix, DVector};
 pub use options::ControllerOptions;
 pub use qp_lqr::lqr::QPLQR;
-pub use riccati_lqr::lqr::RiccatiRecursionLQR;
 pub use trajectory::InputTrajectory;
 
 use crate::cost::CostFunction;

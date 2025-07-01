@@ -1,47 +1,14 @@
-use crate::numeric_services::symbolic::{
-    ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
-};
-use crate::physics::models::dynamics::SymbolicDynamics;
-use crate::physics::traits::{Discretizer, Dynamics, State};
-use crate::physics::{ModelError, constants as c};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use super::SymbolicDiscretizer;
-
-#[derive(Default, Clone)]
-pub struct RK4<D: Dynamics> {
-    _phantom_data: PhantomData<D>,
-}
-
-impl<D: Dynamics> RK4<D> {
-    pub fn new(model: &D) -> Result<Self, ModelError> {
-        let (_, v_dims) = model.state_dims();
-        if v_dims > 0 {
-            return Err(ModelError::Unexpected("Insuported Discretizer".into()));
-        }
-        Ok(Self {
-            _phantom_data: PhantomData,
-        })
-    }
-}
-
-impl<D: Dynamics> Discretizer<D> for RK4<D> {
-    fn step(
-        &self,
-        model: &D,
-        state: &D::State,
-        input: Option<&D::Input>,
-        dt: f64,
-    ) -> Result<D::State, ModelError> {
-        let k1 = model.dynamics(state, input);
-        let k2 = model.dynamics(&(state.clone() + k1.clone() * (dt * 0.5)), input);
-        let k3 = model.dynamics(&(state.clone() + k2.clone() * (dt * 0.5)), input);
-        let k4 = model.dynamics(&(state.clone() + k3.clone() * dt), input);
-
-        Ok(state.clone() + (k1 + k2 * 2.0 + k3 * 2.0 + k4) * (dt / 6.0))
-    }
-}
+use crate::numeric_services::symbolic::{
+    ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
+};
+use crate::physics::discretizer::{CodeGenerator, SymbolicDiscretizer};
+use crate::physics::traits::{Discretizer, State};
+use crate::physics::{ModelError, constants as c, traits::SymbolicDynamics};
+use crate::utils::evaluable::EvaluableMatrixFn;
+use crate::utils::{Identifiable, Labelizable};
 
 pub struct RK4Symbolic<D: SymbolicDynamics> {
     step_func: SymbolicFunction,
@@ -118,7 +85,7 @@ impl<D: SymbolicDynamics> Discretizer<D> for RK4Symbolic<D> {
 }
 
 impl<D: SymbolicDynamics> SymbolicDiscretizer<D> for RK4Symbolic<D> {
-    fn jacobian_x(&self) -> Result<SymbolicFunction, ModelError> {
+    fn jacobian_x(&self) -> Result<EvaluableMatrixFn, ModelError> {
         let state_symbol = self.registry.get_vector(c::STATE_SYMBOLIC).unwrap();
         let input_symbol = self.registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
         let jacobian_symbols = state_symbol.extend(&input_symbol);
@@ -127,10 +94,13 @@ impl<D: SymbolicDynamics> SymbolicDiscretizer<D> for RK4Symbolic<D> {
             .dynamics
             .jacobian(&state_symbol)?
             .to_fn(&self.registry)?;
-        Ok(SymbolicFunction::new(jacobian_x, &jacobian_symbols))
+        Ok(Box::new(SymbolicFunction::new(
+            jacobian_x,
+            &jacobian_symbols,
+        )))
     }
 
-    fn jacobian_u(&self) -> Result<SymbolicFunction, ModelError> {
+    fn jacobian_u(&self) -> Result<EvaluableMatrixFn, ModelError> {
         let state_symbol = self.registry.get_vector(c::STATE_SYMBOLIC).unwrap();
         let input_symbol = self.registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
         let jacobian_symbols = state_symbol.extend(&input_symbol);
@@ -139,7 +109,46 @@ impl<D: SymbolicDynamics> SymbolicDiscretizer<D> for RK4Symbolic<D> {
             .dynamics
             .jacobian(&input_symbol)?
             .to_fn(&self.registry)?;
-        Ok(SymbolicFunction::new(jacobian_u, &jacobian_symbols))
+        Ok(Box::new(SymbolicFunction::new(
+            jacobian_u,
+            &jacobian_symbols,
+        )))
+    }
+}
+
+impl<D: SymbolicDynamics + Labelizable + Identifiable> CodeGenerator<D> for RK4Symbolic<D> {
+    fn to_numeric_jacobian_x(&self) -> Result<(), ModelError> {
+        let params = ExprVector::new(D::labels());
+        let state_symbol = self.registry.get_vector(c::STATE_SYMBOLIC).unwrap();
+        let input_symbol = self.registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
+        let jacobian_symbols = state_symbol
+            .extend(&input_symbol)
+            .extend(&params)
+            .extend(&ExprVector::new(&[c::TIME_DELTA_SYMBOLIC]));
+        let mod_name = &format!("rk4/{}", D::name());
+        let func_name = &format!("rk4_{}_jacobian_x", D::name());
+
+        let jacobian_x_expr = self.dynamics.jacobian(&state_symbol)?;
+        jacobian_x_expr.rustify(&jacobian_symbols, func_name, mod_name)?;
+
+        Ok(())
+    }
+
+    fn to_numeric_jacobian_u(&self) -> Result<(), ModelError> {
+        let params = ExprVector::new(D::labels());
+        let state_symbol = self.registry.get_vector(c::STATE_SYMBOLIC).unwrap();
+        let input_symbol = self.registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
+        let jacobian_symbols = state_symbol
+            .extend(&input_symbol)
+            .extend(&params)
+            .extend(&ExprVector::new(&[c::TIME_DELTA_SYMBOLIC]));
+        let mod_name = &format!("rk4/{}", D::name());
+        let func_name = &format!("rk4_{}_jacobian_u", D::name());
+
+        let jacobian_u_expr = self.dynamics.jacobian(&input_symbol)?;
+        jacobian_u_expr.rustify(&jacobian_symbols, func_name, mod_name)?;
+
+        Ok(())
     }
 }
 
@@ -147,21 +156,6 @@ impl<D: SymbolicDynamics> SymbolicDiscretizer<D> for RK4Symbolic<D> {
 mod tests {
     use super::*;
     use crate::physics::models::{DoublePendulum, DoublePendulumState};
-    use crate::utils::helpers::within_tolerance;
-    use proptest::prelude::*;
-    use std::f64::consts::PI;
-
-    #[test]
-    fn test_rk4_step() {
-        let dynamics = DoublePendulum::new(1.0, 2.0, 1.5, 2.5, 0.0, None, true);
-        let rk4 = RK4::new(&dynamics).unwrap();
-        let initial_state = DoublePendulumState::new(0.0, 0.0, 0.0, 0.0);
-        let dt = 0.1;
-
-        let next_state = rk4.step(&dynamics, &initial_state, None, dt).unwrap();
-
-        assert!((next_state.omega1 - 0.0).abs() < 1e-6);
-    }
 
     #[test]
     fn test_rk4_symbolic_step() {
@@ -180,39 +174,5 @@ mod tests {
         let next_state = rk4_symbolic.step(&dynamics, &state, None, dt).unwrap();
 
         assert!((next_state.omega1 - 0.0).abs() < 1e-6);
-    }
-
-    proptest! {
-        #[test]
-        fn test_symbolic_equivalence(
-            theta1 in 0.0..(2.0 * PI),
-            theta2 in 0.0..(2.0 * PI),
-            omega1 in -5.0..5.0,
-            omega2 in -5.0..5.0,
-            m1 in 0.1f64..10.0,
-            m2 in 0.1f64..10.0,
-            l1 in 0.1f64..5.0,
-            l2 in 0.1f64..5.0,
-            air_resistance_coeff in 0.0f64..5.0
-        ) {
-            let registry = Arc::new(ExprRegistry::new());
-            let dynamics = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry), true);
-            let state = DoublePendulumState::new(theta1, omega1, theta2, omega2);
-            let rk4_symbolic = RK4Symbolic::new(&dynamics, Arc::clone(&registry)).unwrap();
-            let rk4 = RK4::new(&dynamics).unwrap();
-            let dt = 0.1;
-
-
-            // Compare numeric and symbolic outputs approximately
-            let tol = 1e-6; // tolerance for floating point comparison
-
-            let next_state_symbolic = rk4_symbolic.step(&dynamics, &state, None, dt).unwrap();
-            let next_state = rk4.step(&dynamics, &state, None, dt).unwrap();
-
-            assert!(within_tolerance(next_state.theta1, next_state_symbolic.theta1, tol), "theta1 mismatch");
-            assert!(within_tolerance(next_state.omega1, next_state_symbolic.omega1, tol), "omega1 mismatch");
-            assert!(within_tolerance(next_state.theta2, next_state_symbolic.theta2, tol), "theta2 mismatch");
-            assert!(within_tolerance(next_state.omega2, next_state_symbolic.omega2, tol), "omega2 mismatch");
-        }
     }
 }

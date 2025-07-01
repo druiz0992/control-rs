@@ -1,8 +1,8 @@
 use control_rs::animation::Animation;
 use control_rs::animation::macroquad::Macroquad;
-use control_rs::controllers::qp_lqr::{QPLQRSymbolic, QPOptions};
-use control_rs::controllers::qp_mpc::{ConvexMpcOptions, ConvexMpcSymbolic};
-use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursionSymbolic};
+use control_rs::controllers::qp_lqr::{QPLQR, QPOptions};
+use control_rs::controllers::qp_mpc::{ConvexMpc, ConvexMpcOptions};
+use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursion};
 use control_rs::controllers::utils::clamp_input_vector;
 use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions};
 use control_rs::cost::GenericCost;
@@ -141,7 +141,7 @@ fn convex_trajopt(
     x_ic: &CartPoleState,
     registry: Arc<ExprRegistry>,
     traj_options: &TrajOptions<CartPoleState, CartPoleInput>,
-) -> QPLQRSymbolic<Sim> {
+) -> QPLQR<Sim> {
     let tf = traj_options.tf;
     let qf = traj_options.qf.clone();
     let q = traj_options.q.clone();
@@ -173,7 +173,7 @@ fn convex_trajopt(
     let qp_options = QPOptions::default()
         .set_general(general_options)
         .set_osqp_settings(osqp_settings);
-    let (controller, _) = QPLQRSymbolic::new(sim, Box::new(cost), x_ic, Some(qp_options)).unwrap();
+    let (controller, _) = QPLQR::new_symbolic(sim, Box::new(cost), x_ic, Some(qp_options)).unwrap();
 
     controller
 }
@@ -183,7 +183,7 @@ fn convex_mpc(
     x_ic: &CartPoleState,
     registry: Arc<ExprRegistry>,
     traj_options: &TrajOptions<CartPoleState, CartPoleInput>,
-) -> ConvexMpcSymbolic<Sim, QPLQRSymbolic<Sim>> {
+) -> ConvexMpc<Sim, QPLQR<Sim>> {
     let tf = traj_options.tf;
     let qf = traj_options.qf.clone();
     let q = traj_options.q.clone();
@@ -217,14 +217,14 @@ fn convex_mpc(
         .set_general(general_options)
         .set_osqp_settings(osqp_settings)
         .set_mpc_horizon(mpc_horizon);
-    ConvexMpcSymbolic::new(sim, Box::new(cost.clone()), x_ic, Some(mpc_options)).unwrap()
+    ConvexMpc::new_symbolic(sim, Box::new(cost.clone()), x_ic, Some(mpc_options)).unwrap()
 }
 
 fn fhlqr(
     model: &CartPole,
     traj_options: &TrajOptions<CartPoleState, CartPoleInput>,
     registry: Arc<ExprRegistry>,
-) -> RiccatiRecursionSymbolic<Sim> {
+) -> RiccatiRecursion<Sim> {
     let tf = traj_options.tf;
     let qf = traj_options.qf.clone();
     let q = traj_options.q.clone();
@@ -272,7 +272,7 @@ fn fhlqr(
     } else {
         RiccatiLQROptions::enable_infinite_horizon().set_general(general_options)
     };
-    RiccatiRecursionSymbolic::new(sim, Box::new(cost.clone()), Some(options)).unwrap()
+    RiccatiRecursion::new_symbolic(sim, Box::new(cost.clone()), Some(options)).unwrap()
 }
 
 async fn solve<T: Controller<Sim>>(
@@ -483,12 +483,12 @@ async fn main() {
     // Part D: QP
     let traj_options = traj_options.set_plot_flag(true);
     let mut qplqr = convex_trajopt(&model, &x_ic, Arc::clone(&registry), &traj_options);
-    let (x_traj_qplr, _) = solve(&mut qplqr, &model, &x_ic, &traj_options).await;
+    let (_x_traj_qplr, _) = solve(&mut qplqr, &model, &x_ic, &traj_options).await;
     //check_state_trajectory_error(&x_traj_qplr, &x_traj, 1e-2);
 
     // Part E: MPC
     let traj_options = traj_options.set_noise(vec![0.01; 4]).set_mpc_horizon(1.0);
     let mut mpc = convex_mpc(&model, &x_ic, Arc::clone(&registry), &traj_options);
-    let (x_traj_mpc, _) = solve(&mut mpc, &model, &x_ic, &traj_options).await;
+    let (_x_traj_mpc, _) = solve(&mut mpc, &model, &x_ic, &traj_options).await;
     //check_state_trajectory_error(&x_traj_mpc, &x_traj, 1e-2);
 }

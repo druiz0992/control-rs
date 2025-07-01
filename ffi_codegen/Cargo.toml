@@ -1,0 +1,15 @@
+[package]
+name = "ffi_codegen"
+version = "0.1.0"
+edition = "2024"
+build = "build.rs"
+
+[dependencies]
+rayon = { workspace = true}
+nalgebra = {workspace = true}
+
+toml = "0.8"
+
+[build-dependencies]
+cc = "1.0"
+toml = "0.8"

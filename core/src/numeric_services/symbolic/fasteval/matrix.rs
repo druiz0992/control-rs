@@ -1,14 +1,17 @@
 use super::ExprVector;
 use super::scalar::ExprScalar;
-use super::slab::InstructionSlab;
+use crate::numeric_services::codegen::dtos::CodegenRequest;
+use crate::numeric_services::codegen::engine::CodegenEngine;
+use crate::numeric_services::python::PythonClient;
 use crate::numeric_services::symbolic::dtos::{ExprRecord, SymbolicEvalResult, SymbolicFn};
 use crate::numeric_services::symbolic::error::SymbolicError;
 use crate::numeric_services::symbolic::ports::{SymbolicExpr, SymbolicRegistry};
-use crate::numeric_services::symbolic::{ExprRegistry, SymbolicFunction};
-use fasteval::{Instruction, Slab};
 use nalgebra::DMatrix;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+
+const CODEGEN_OUT_DIR: &str = "ffi_codegen";
 
 /// A struct representing a matrix of symbolic expressions (`ExprScalar`).
 ///
@@ -49,7 +52,8 @@ use std::sync::Arc;
 /// - The `matmul` method assumes that the dimensions of the matrices are
 ///   compatible for multiplication and will not check.
 
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct ExprMatrix {
     matrix: Vec<Vec<ExprScalar>>,
 }
@@ -359,30 +363,23 @@ impl ExprMatrix {
         }
     }
 
-    pub fn get_slab(&self) -> Result<InstructionSlab, SymbolicError> {
-        let compiled_expr: Result<Vec<Vec<(Instruction, Slab)>>, SymbolicError> = self
-            .matrix
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .map(|e| e.compile_with_retry())
-                    .collect::<Result<Vec<_>, _>>() // collect inner row
-            })
-            .collect(); // 
-
-        let compiled_expr = compiled_expr?;
-
-        Ok(InstructionSlab::Matrix(compiled_expr))
-    }
-
-    pub fn get_slab_and_symbolic_fn(
+    pub fn rustify(
         &self,
-        symbols: &ExprVector,
-        registry: &Arc<ExprRegistry>,
-    ) -> Result<(InstructionSlab, SymbolicFunction), SymbolicError> {
-        let compiled_expr = self.get_slab()?;
-        let func = SymbolicFunction::new(self.to_fn(&registry)?, symbols);
-        Ok((compiled_expr, func))
+        vars: &ExprVector,
+        func_name: &str,
+        mod_name: &str,
+    ) -> Result<(), SymbolicError> {
+        let req = CodegenRequest::new(
+            ExprRecord::Matrix(self.clone()),
+            vars.clone(),
+            func_name,
+            CODEGEN_OUT_DIR,
+            mod_name,
+        );
+
+        PythonClient::new()
+            .numerify(&req)
+            .map_err(|e| SymbolicError::IoError(e.to_string()))
     }
 }
 

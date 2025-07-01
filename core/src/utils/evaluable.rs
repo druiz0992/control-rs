@@ -1,10 +1,17 @@
 use crate::{
     numeric_services::symbolic::{SymbolicFunction, TryIntoEvalResult},
-    physics::{ModelError
-    },
+    physics::ModelError,
 };
 use nalgebra::DMatrix;
+use std::sync::Arc;
 
+/// Trait for types that can be evaluated given a slice of `f64` values.
+///
+/// # Associated Types
+/// - `Output`: The result type produced by the evaluation.
+///
+/// # Errors
+/// Returns a `ModelError` if the evaluation fails.
 pub trait Evaluable {
     type Output;
 
@@ -27,4 +34,13 @@ impl Evaluable for SymbolicFunction {
     }
 }
 
-pub type EvaluableDMatrix = Box<dyn Evaluable<Output = DMatrix<f64>>>;
+pub type NumericFunction = Arc<dyn Fn(&[f64]) -> DMatrix<f64> + Send + Sync>;
+impl Evaluable for NumericFunction {
+    type Output = DMatrix<f64>;
+
+    fn evaluate(&self, vals: &[f64]) -> Result<Self::Output, ModelError> {
+        Ok((self)(vals))
+    }
+}
+
+pub type EvaluableMatrixFn = Box<dyn Evaluable<Output = DMatrix<f64>> + Send + Sync>;

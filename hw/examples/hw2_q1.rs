@@ -1,8 +1,8 @@
 use std::io::{self, Write};
 
 use control_rs::controllers::qp_lqr::QPOptions;
-use control_rs::controllers::riccati_lqr::RiccatiLQROptions;
-use control_rs::controllers::{Controller, ControllerOptions, QPLQR, RiccatiRecursionLQR};
+use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursion};
+use control_rs::controllers::{Controller, ControllerOptions, QPLQR};
 use control_rs::cost::GenericCost;
 use control_rs::physics::discretizer::ZOH;
 use control_rs::physics::models::{LtiInput, LtiModel, LtiState};
@@ -79,7 +79,7 @@ fn convex_trajopt(
         .set_general(general_options)
         .set_osqp_settings(osqp_settings);
     let (mut controller, _) =
-        QPLQR::new(sim, Box::new(cost.clone()), x_ic, Some(qp_options)).unwrap();
+        QPLQR::new_linear(sim, Box::new(cost.clone()), x_ic, Some(qp_options)).unwrap();
 
     let (x_traj, u_traj) = controller.solve(x_ic).unwrap();
 
@@ -131,7 +131,7 @@ fn fhlqr(
 
     let options = RiccatiLQROptions::enable_finite_horizon().set_general(general_options);
     let mut controller =
-        RiccatiRecursionLQR::new(sim, Box::new(cost.clone()), Some(options)).unwrap();
+        RiccatiRecursion::new_linear(sim, Box::new(cost.clone()), Some(options)).unwrap();
 
     let (x_traj, u_traj) = controller.solve(x_ic).unwrap();
 

@@ -1,7 +1,7 @@
 use super::state::CartPoleState;
 use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
 use crate::physics::constants as c;
-use crate::utils::Labelizable;
+use crate::utils::{Identifiable, Labelizable};
 use macros::LabelOps;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -54,6 +54,11 @@ impl CartPole {
     }
 }
 
+impl Identifiable for CartPole {
+    fn name() -> &'static str {
+        "cartpole"
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

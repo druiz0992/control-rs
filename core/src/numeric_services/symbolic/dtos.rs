@@ -1,5 +1,6 @@
 use super::{ExprMatrix, ExprScalar, ExprVector, error::SymbolicError, ports::TryIntoEvalResult};
 use nalgebra::{DMatrix, DVector};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Evaluation Result
@@ -56,9 +57,6 @@ pub type SymbolicFn = Box<
         + Sync,
 >;
 
-pub type SymbolicClosure =
-    Box<dyn Fn(&[f64]) -> Result<SymbolicEvalResult, SymbolicError> + Send + Sync>;
-
 pub struct SymbolicFunction {
     func: SymbolicFn,
     param_names: Vec<String>,
@@ -89,7 +87,7 @@ impl SymbolicFunction {
 }
 
 // Registry symbolic expression representation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ExprRecord {
     Var(f64),
     Scalar(ExprScalar),

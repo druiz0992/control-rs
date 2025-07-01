@@ -21,6 +21,7 @@ impl From<SymbolicError> for ModelError {
             SymbolicError::UnexpectedResultType => {
                 ModelError::Unexpected("Unexpected result type".into())
             }
+            SymbolicError::IoError(e) => ModelError::Other(e),
             SymbolicError::Other(e) => ModelError::Other(e),
         }
     }

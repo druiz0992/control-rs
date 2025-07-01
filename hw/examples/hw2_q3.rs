@@ -3,10 +3,8 @@ use std::io::{self, BufReader, Write};
 
 use control_rs::controllers::qp_lqr::QPOptions;
 use control_rs::controllers::qp_mpc::{ConvexMpc, ConvexMpcOptions};
-use control_rs::controllers::riccati_lqr::RiccatiLQROptions;
-use control_rs::controllers::{
-    ConstraintTransform, Controller, ControllerOptions, QPLQR, RiccatiRecursionLQR,
-};
+use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursion};
+use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions, QPLQR};
 use control_rs::cost::GenericCost;
 use control_rs::physics::discretizer::{RK4, ZOH};
 use control_rs::physics::models::{LtiInput, LtiModel, LtiState};
@@ -77,7 +75,8 @@ fn convex_trajopt(
     let qp_options = QPOptions::default()
         .set_general(general_options)
         .set_osqp_settings(osqp_settings);
-    let (controller, _) = QPLQR::new(sim, Box::new(cost.clone()), x_ic, Some(qp_options)).unwrap();
+    let (controller, _) =
+        QPLQR::new_linear(sim, Box::new(cost.clone()), x_ic, Some(qp_options)).unwrap();
 
     controller
 }
@@ -119,13 +118,13 @@ fn convex_mpc(
         .set_general(general_options)
         .set_osqp_settings(osqp_settings)
         .set_mpc_horizon(mpc_horizon);
-    ConvexMpc::new(sim, Box::new(cost.clone()), x_ic, Some(mpc_options)).unwrap()
+    ConvexMpc::new_linear(sim, Box::new(cost.clone()), x_ic, Some(mpc_options)).unwrap()
 }
 
 fn fhlqr(
     model: &SpaceXDragon,
     traj_options: &TrajOptions<SpaceXDragonState, SpaceXDragonInput>,
-) -> RiccatiRecursionLQR<Sim> {
+) -> RiccatiRecursion<Sim> {
     let tf = traj_options.tf;
     let qf = traj_options.qf.clone();
     let q = traj_options.q.clone();
@@ -173,7 +172,7 @@ fn fhlqr(
     } else {
         RiccatiLQROptions::enable_infinite_horizon().set_general(general_options)
     };
-    RiccatiRecursionLQR::new(sim, Box::new(cost.clone()), Some(options)).unwrap()
+    RiccatiRecursion::new_linear(sim, Box::new(cost.clone()), Some(options)).unwrap()
 }
 
 fn solve<T: Controller<Sim>>(

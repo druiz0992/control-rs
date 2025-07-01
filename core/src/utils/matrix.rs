@@ -1,4 +1,4 @@
-use nalgebra::DMatrix;
+use nalgebra::{DMatrix, DVector};
 
 use crate::physics::ModelError;
 
@@ -90,7 +90,7 @@ pub fn dmat_to_vec(mat: &DMatrix<f64>) -> Vec<Vec<f64>> {
         .collect()
 }
 
-pub fn vec_to_dmat(vec: &Vec<Vec<f64>>) -> DMatrix<f64> {
+pub fn vec_to_dmat(vec: &[Vec<f64>]) -> DMatrix<f64> {
     let rows = vec.len();
     let cols = if rows > 0 { vec[0].len() } else { 0 };
     let mut mat = DMatrix::<f64>::zeros(rows, cols);
@@ -100,6 +100,17 @@ pub fn vec_to_dmat(vec: &Vec<Vec<f64>>) -> DMatrix<f64> {
         }
     }
     mat
+}
+
+pub fn vectorize(mat: DMatrix<f64>) -> DVector<f64> {
+    let (rows, cols) = mat.shape();
+    let mut data = Vec::with_capacity(rows * cols);
+    for j in 0..cols {
+        for i in 0..rows {
+            data.push(mat[(i, j)]);
+        }
+    }
+    DVector::from_vec(data)
 }
 /// Vertically stacks two matrices, where the second matrix is optional.
 ///

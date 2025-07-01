@@ -1,14 +1,14 @@
-use control_rs::controllers::qp_lqr::{QPLQR, QPOptions};
+use control_rs::controllers::qp_lqr::QPOptions;
 use control_rs::controllers::qp_mpc::{ConvexMpc, ConvexMpcOptions};
 use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursion};
-use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions};
+use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions, QPLQR};
 use control_rs::cost::generic::GenericCost;
 use control_rs::numeric_services::symbolic::ExprRegistry;
 use control_rs::physics::constants as c;
-use control_rs::physics::discretizer::RK4Symbolic;
+use control_rs::physics::discretizer::{RK4Numeric};
 use control_rs::physics::models::quadrotor_2d::{Quadrotor2D, Quadrotor2DInput, Quadrotor2DState};
 use control_rs::physics::simulator::BasicSim;
-use control_rs::physics::traits::State;
+use control_rs::physics::traits::{State};
 use control_rs::utils::Labelizable;
 use nalgebra::{DMatrix, dvector};
 use osqp::Settings;
@@ -26,10 +26,10 @@ enum ControllerType {
     MpcUXLimitsAndNoise(f64, f64, f64, f64, usize, Vec<f64>),
 }
 
-type Sim<M> = BasicSim<M, RK4Symbolic<M>>;
-type SymbolicController<M> = Box<dyn Controller<Sim<M>>>;
+type Sim<M> = BasicSim<M, RK4Numeric<M>>;
+type NumericController<M> = Box<dyn Controller<Sim<M>>>;
 
-fn symbolic_controller_setup(controller_type: ControllerType) {
+fn numeric_controller_setup(controller_type: ControllerType) {
     let m = 1.0;
     let l = 0.3;
     let j = 0.2 * m * l * l;
@@ -50,7 +50,10 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
 
     registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
 
-    let integrator = RK4Symbolic::new(&model, Arc::clone(&registry)).unwrap();
+    let df_du = Arc::new(ffi_codegen::rk4::quadrotor_2d::rk4_quadrotor_2d_jacobian_u);
+    let df_dx = Arc::new(ffi_codegen::rk4::quadrotor_2d::rk4_quadrotor_2d_jacobian_x);
+
+    let integrator = RK4Numeric::new(&model, df_dx, df_du).unwrap();
     let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
 
     let q_matrix = DMatrix::<f64>::identity(6, 6) * 1.0;
@@ -75,7 +78,7 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
         .set_time_horizon(sim_time)
         .unwrap();
 
-    let mut controller: SymbolicController<Quadrotor2D> = match &controller_type {
+    let mut controller: NumericController<Quadrotor2D> = match &controller_type {
         ControllerType::QpLqr => {
             let osqp_settings = Settings::default()
                 .verbose(false)
@@ -85,7 +88,7 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
                 .set_general(general_options)
                 .set_osqp_settings(osqp_settings);
             let (controller, _) =
-                QPLQR::new_symbolic(sim, Box::new(cost.clone()), &state_0, Some(qp_options))
+                QPLQR::new_numeric(sim, Box::new(cost.clone()), &state_0, Some(qp_options))
                     .unwrap();
             Box::new(controller)
         }
@@ -104,21 +107,21 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
                 .set_general(general_options)
                 .set_osqp_settings(osqp_settings);
             let (controller, _) =
-                QPLQR::new_symbolic(sim, Box::new(cost.clone()), &state_0, Some(qp_options))
+                QPLQR::new_numeric(sim, Box::new(cost.clone()), &state_0, Some(qp_options))
                     .unwrap();
             Box::new(controller)
         }
         ControllerType::RiccatiRecursionLQRFinite => {
             let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
             Box::new(
-                RiccatiRecursion::new_symbolic(sim, Box::new(cost.clone()), Some(options)).unwrap(),
+                RiccatiRecursion::new_numeric(sim, Box::new(cost.clone()), Some(options)).unwrap(),
             )
         }
 
         ControllerType::RiccatiRecursionLQRInfinite => {
             let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
             Box::new(
-                RiccatiRecursion::new_symbolic(sim, Box::new(cost.clone()), Some(options)).unwrap(),
+                RiccatiRecursion::new_numeric(sim, Box::new(cost.clone()), Some(options)).unwrap(),
             )
         }
         ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(lower, upper, std) => {
@@ -129,7 +132,7 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
                 .set_noise(std.clone());
             let options = RiccatiLQROptions::enable_finite_horizon().set_general(general_options);
             Box::new(
-                RiccatiRecursion::new_symbolic(sim, Box::new(cost.clone()), Some(options)).unwrap(),
+                RiccatiRecursion::new_numeric(sim, Box::new(cost.clone()), Some(options)).unwrap(),
             )
         }
         ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(lower, upper, std) => {
@@ -140,7 +143,7 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
                 .set_noise(std.clone());
             let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
             Box::new(
-                RiccatiRecursion::new_symbolic(sim, Box::new(cost.clone()), Some(options)).unwrap(),
+                RiccatiRecursion::new_numeric(sim, Box::new(cost.clone()), Some(options)).unwrap(),
             )
         }
         ControllerType::Mpc => {
@@ -153,7 +156,7 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
                 .set_osqp_settings(osqp_settings)
                 .set_apply_steady_state_cost(true);
             Box::new(
-                ConvexMpc::new_symbolic(sim, Box::new(cost.clone()), &state_0, Some(options))
+                ConvexMpc::new_numeric(sim, Box::new(cost.clone()), &state_0, Some(options))
                     .unwrap(),
             )
         }
@@ -175,7 +178,7 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
                 .set_osqp_settings(osqp_settings)
                 .set_apply_steady_state_cost(true);
             Box::new(
-                ConvexMpc::new_symbolic(sim, Box::new(cost.clone()), &state_0, Some(options))
+                ConvexMpc::new_numeric(sim, Box::new(cost.clone()), &state_0, Some(options))
                     .unwrap(),
             )
         }
@@ -204,7 +207,7 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
                 .set_osqp_settings(osqp_settings)
                 .set_apply_steady_state_cost(true);
             Box::new(
-                ConvexMpc::new_symbolic(sim, Box::new(cost.clone()), &state_0, Some(options))
+                ConvexMpc::new_numeric(sim, Box::new(cost.clone()), &state_0, Some(options))
                     .unwrap(),
             )
         }
@@ -227,8 +230,8 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
     );
 
     match controller_type {
-        ControllerType::QpLqrUlimits(lower, upper)
-        | ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(lower, upper, _)
+        ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(lower, upper, _)
+        | ControllerType::QpLqrUlimits(lower, upper)
         | ControllerType::MpcULimitsAndNoise(lower, upper, _)
         | ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(lower, upper, _) => {
             let exceed_limits: Vec<_> = u_traj
@@ -250,41 +253,32 @@ fn symbolic_controller_setup(controller_type: ControllerType) {
 
 #[test]
 #[should_panic]
-fn test_qp_lqr_symbolic() {
-    symbolic_controller_setup(ControllerType::QpLqr);
+fn test_qp_lqr_numeric() {
+    numeric_controller_setup(ControllerType::QpLqr);
 }
 
 #[test]
 #[should_panic]
-fn test_qp_lqr_limits_symbolic() {
-    symbolic_controller_setup(ControllerType::QpLqrUlimits(
+fn test_qp_lqr_limits_numeric() {
+    numeric_controller_setup(ControllerType::QpLqrUlimits(
         0.2 * c::GRAVITY,
         0.6 * c::GRAVITY,
     ));
 }
 
 #[test]
-fn test_ricatti_finite_symbolic() {
-    symbolic_controller_setup(ControllerType::RiccatiRecursionLQRFinite);
+fn test_ricatti_finite_numeric() {
+    numeric_controller_setup(ControllerType::RiccatiRecursionLQRFinite);
 }
 
 #[test]
-fn test_ricatti_infinite_symbolic() {
-    symbolic_controller_setup(ControllerType::RiccatiRecursionLQRInfinite);
+fn test_ricatti_infinite_numeric() {
+    numeric_controller_setup(ControllerType::RiccatiRecursionLQRInfinite);
 }
 
 #[test]
-fn test_ricatti_finite_limits_symbolic() {
-    symbolic_controller_setup(ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(
-        0.2 * c::GRAVITY,
-        0.6 * c::GRAVITY,
-        vec![0.0; 6],
-    ));
-}
-
-#[test]
-fn test_ricatti_infinite_limits_symbolic() {
-    symbolic_controller_setup(ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(
+fn test_ricatti_finite_limits_numeric() {
+    numeric_controller_setup(ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(
         0.2 * c::GRAVITY,
         0.6 * c::GRAVITY,
         vec![0.0; 6],
@@ -292,13 +286,8 @@ fn test_ricatti_infinite_limits_symbolic() {
 }
 
 #[test]
-fn test_mpc_symbolic() {
-    symbolic_controller_setup(ControllerType::Mpc);
-}
-
-#[test]
-fn test_mpc_limits_symbolic() {
-    symbolic_controller_setup(ControllerType::MpcULimitsAndNoise(
+fn test_ricatti_infinite_limits_numeric() {
+    numeric_controller_setup(ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(
         0.2 * c::GRAVITY,
         0.6 * c::GRAVITY,
         vec![0.0; 6],
@@ -306,8 +295,22 @@ fn test_mpc_limits_symbolic() {
 }
 
 #[test]
-fn test_mpc_uxlimits_symbolic() {
-    symbolic_controller_setup(ControllerType::MpcUXLimitsAndNoise(
+fn test_mpc_numeric() {
+    numeric_controller_setup(ControllerType::Mpc);
+}
+
+#[test]
+fn test_mpc_limits_numeric() {
+    numeric_controller_setup(ControllerType::MpcULimitsAndNoise(
+        0.2 * c::GRAVITY,
+        0.6 * c::GRAVITY,
+        vec![0.0; 6],
+    ));
+}
+
+#[test]
+fn test_mpc_uxlimits_numeric() {
+    numeric_controller_setup(ControllerType::MpcUXLimitsAndNoise(
         0.2 * c::GRAVITY,
         0.6 * c::GRAVITY,
         -0.2,

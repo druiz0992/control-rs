@@ -125,10 +125,6 @@ impl SymbolicDynamics for DoublePendulum {
             .scalef(-1.0)
             .mul(&omega2_sq)
             .mul(&omega2.smooth_sign(1e-10).wrap());
-        /*
-        let damping1 = ExprScalar::zero();
-        let damping2 = ExprScalar::zero();
-        */
 
         // Dynamics equations
         let dtheta1 = omega1.clone();

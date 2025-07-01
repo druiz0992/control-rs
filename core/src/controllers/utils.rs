@@ -1,6 +1,16 @@
+use std::cmp::min;
+
 use super::ConstraintTransform;
-use crate::physics::traits::State;
-use nalgebra::DVector;
+use crate::{
+    controllers::ControllerOptions,
+    physics::{
+        ModelError,
+        models::Dynamics,
+        traits::{Discretizer, PhysicsSim, State},
+    },
+    utils::{Labelizable, evaluable::EvaluableMatrixFn},
+};
+use nalgebra::{DMatrix, DVector};
 
 /// Clamps an input vector within given limits
 pub fn clamp_input_vector(
@@ -34,6 +44,50 @@ pub fn extend_vector<T: State>(vec: &[T], start: usize, end: usize) -> Vec<DVect
     vec_ref
 }
 
+type LinearDynamicsEvaluation = (Vec<DMatrix<f64>>, Vec<DMatrix<f64>>);
+
+pub(crate) fn linearize<S>(
+    sim: &mut S,
+    jacobian_x_fn: &EvaluableMatrixFn,
+    jacobian_u_fn: &EvaluableMatrixFn,
+    n_steps: usize,
+    general_options: &ControllerOptions<S>,
+) -> Result<LinearDynamicsEvaluation, ModelError>
+where
+    S: PhysicsSim,
+    S::Model: Dynamics + Labelizable,
+    S::Discretizer: Discretizer<S::Model>,
+{
+    let n_op = min(general_options.get_u_operating().len(), n_steps - 1);
+    let mut a_mat: Vec<DMatrix<f64>> = Vec::with_capacity(n_op);
+    let mut b_mat: Vec<DMatrix<f64>> = Vec::with_capacity(n_op);
+    let dt = general_options.get_dt();
+
+    let mut real_params_opt: Option<Vec<f64>> = None;
+    let labels = S::Model::labels();
+    let real_params = sim.model().vectorize(labels);
+    let estimated_params = if let Some(estimated_params) = general_options.get_estimated_params() {
+        real_params_opt = Some(real_params);
+        sim.update_model(estimated_params)?;
+        estimated_params
+    } else {
+        real_params.as_slice()
+    };
+
+    for k in 0..n_op {
+        let mut vals = general_options.concatenate_operating_point(k)?;
+        vals.extend_from_slice(estimated_params);
+        vals.extend_from_slice(&[dt]);
+        a_mat.push(jacobian_x_fn.evaluate(&vals)?);
+        b_mat.push(jacobian_u_fn.evaluate(&vals)?);
+    }
+
+    if let Some(real_params) = real_params_opt {
+        sim.update_model(&real_params)?;
+    }
+
+    Ok((a_mat, b_mat))
+}
 /*
 /// Adds gaussian noise to controller input and returns the updated input sample
 pub fn add_noise_to_inputs<S: PhysicsSim>(

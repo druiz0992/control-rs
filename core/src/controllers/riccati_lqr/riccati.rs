@@ -1,20 +1,21 @@
 use super::options::RiccatiLQROptions;
 use crate::controllers::riccati_lqr::recursion;
+use crate::controllers::utils::linearize;
 use crate::controllers::{
     Controller, ControllerInput, ControllerState, CostFn, TrajectoryHistory, into_clamped_input,
     try_into_noisy_state,
 };
 use crate::physics::ModelError;
+use crate::physics::discretizer::{LinearDiscretizer, NumericDiscretizer, SymbolicDiscretizer};
 use crate::physics::models::Dynamics;
-use crate::physics::traits::{Discretizer, PhysicsSim, State};
+use crate::physics::traits::{Discretizer, LinearDynamics, PhysicsSim, State, SymbolicDynamics};
 use crate::utils::Labelizable;
-use crate::utils::evaluable::EvaluableDMatrix;
+use crate::utils::evaluable::EvaluableMatrixFn;
 use crate::utils::helpers::get_or_first;
 use crate::utils::noise::NoiseSources;
 use nalgebra::{DMatrix, DVector};
 
-type LinearDynamicsEvaluation = (Vec<DMatrix<f64>>, Vec<DMatrix<f64>>);
-pub struct RiccatiRecursionGeneric<S: PhysicsSim> {
+pub struct RiccatiRecursion<S: PhysicsSim> {
     sim: S,
     cost_fn: CostFn<S>,
     k_ss: DMatrix<f64>,
@@ -22,30 +23,81 @@ pub struct RiccatiRecursionGeneric<S: PhysicsSim> {
 
     n_steps: usize,
 
-    jacobian_u_fn: EvaluableDMatrix,
-    jacobian_x_fn: EvaluableDMatrix,
+    jacobian_u_fn: EvaluableMatrixFn,
+    jacobian_x_fn: EvaluableMatrixFn,
 
     options: RiccatiLQROptions<S>,
 }
 
-impl<S> RiccatiRecursionGeneric<S>
+impl<S> RiccatiRecursion<S>
+where
+    S: PhysicsSim,
+    S::Model: SymbolicDynamics + Labelizable,
+    S::Discretizer: SymbolicDiscretizer<S::Model>,
+{
+    pub fn new_symbolic(
+        sim: S,
+        cost_fn: CostFn<S>,
+        options: Option<RiccatiLQROptions<S>>,
+    ) -> Result<Self, ModelError> {
+        let jacobian_u_fn = sim.discretizer().jacobian_u()?;
+        let jacobian_x_fn = sim.discretizer().jacobian_x()?;
+        RiccatiRecursion::from_parts(sim, cost_fn, jacobian_x_fn, jacobian_u_fn, options)
+    }
+}
+
+impl<S> RiccatiRecursion<S>
+where
+    S: PhysicsSim,
+    S::Model: Dynamics + Labelizable,
+    S::Discretizer: NumericDiscretizer<S::Model>,
+{
+    pub fn new_numeric(
+        sim: S,
+        cost_fn: CostFn<S>,
+        options: Option<RiccatiLQROptions<S>>,
+    ) -> Result<Self, ModelError> {
+        let jacobian_u_fn = sim.discretizer().jacobian_u();
+        let jacobian_x_fn = sim.discretizer().jacobian_x();
+        RiccatiRecursion::from_parts(sim, cost_fn, jacobian_x_fn, jacobian_u_fn, options)
+    }
+}
+impl<S> RiccatiRecursion<S>
+where
+    S: PhysicsSim,
+    S::Model: LinearDynamics + Labelizable,
+    S::Discretizer: LinearDiscretizer<S::Model>,
+{
+    pub fn new_linear(
+        sim: S,
+        cost_fn: CostFn<S>,
+        options: Option<RiccatiLQROptions<S>>,
+    ) -> Result<Self, ModelError> {
+        let jacobian_u_fn = sim.discretizer().jacobian_u();
+        let jacobian_x_fn = sim.discretizer().jacobian_x();
+        RiccatiRecursion::from_parts(sim, cost_fn, jacobian_x_fn, jacobian_u_fn, options)
+    }
+}
+
+impl<S> RiccatiRecursion<S>
 where
     S: PhysicsSim,
     S::Model: Dynamics + Labelizable,
     S::Discretizer: Discretizer<S::Model>,
 {
-    pub fn new(
+    fn from_parts(
         sim: S,
         cost_fn: CostFn<S>,
-        jacobian_x_fn: EvaluableDMatrix,
-        jacobian_u_fn: EvaluableDMatrix,
-        options: RiccatiLQROptions<S>,
+        jacobian_x_fn: EvaluableMatrixFn,
+        jacobian_u_fn: EvaluableMatrixFn,
+        options: Option<RiccatiLQROptions<S>>,
     ) -> Result<Self, ModelError> {
+        let options = options.unwrap_or_default();
         let n_steps = (options.get_general().get_time_horizon() / options.get_general().get_dt())
             as usize
             + 1;
 
-        Ok(RiccatiRecursionGeneric {
+        Ok(RiccatiRecursion {
             sim,
             cost_fn,
             options,
@@ -55,38 +107,6 @@ where
             jacobian_x_fn,
             jacobian_u_fn,
         })
-    }
-
-    fn linearize(&mut self) -> Result<LinearDynamicsEvaluation, ModelError> {
-        let n_op = self.options.general.get_u_operating().len();
-        let mut a_mat: Vec<DMatrix<f64>> = Vec::with_capacity(n_op);
-        let mut b_mat: Vec<DMatrix<f64>> = Vec::with_capacity(n_op);
-
-        let mut real_params_opt: Option<Vec<f64>> = None;
-        let labels = S::Model::labels();
-        let real_params = self.sim.model().vectorize(labels);
-        let estimated_params =
-            if let Some(estimated_params) = self.options.get_general().get_estimated_params() {
-                real_params_opt = Some(real_params);
-                self.sim.update_model(estimated_params)?;
-                estimated_params
-            } else {
-                real_params.as_slice()
-            };
-
-        for k in 0..self.options.general.get_u_operating().len() {
-            let mut vals = self.options.general.concatenate_operating_point(k)?;
-            vals.extend_from_slice(estimated_params);
-            dbg!(&vals);
-            a_mat.push(self.jacobian_x_fn.evaluate(&vals)?);
-            b_mat.push(self.jacobian_u_fn.evaluate(&vals)?);
-        }
-
-        if let Some(real_params) = real_params_opt {
-            self.sim.update_model(&real_params)?;
-        }
-
-        Ok((a_mat, b_mat))
     }
 
     fn compute_gain(
@@ -142,7 +162,7 @@ where
     }
 }
 
-impl<S> Controller<S> for RiccatiRecursionGeneric<S>
+impl<S> Controller<S> for RiccatiRecursion<S>
 where
     S: PhysicsSim,
     S::Model: Dynamics + Labelizable,
@@ -152,7 +172,16 @@ where
         &mut self,
         initial_state: &ControllerState<S>,
     ) -> Result<TrajectoryHistory<S>, ModelError> {
-        let (a_mat, b_mat) = self.linearize()?;
+        let n_steps = (self.options.get_general().get_time_horizon()
+            / self.options.get_general().get_dt()) as usize
+            + 1;
+        let (a_mat, b_mat) = linearize(
+            &mut self.sim,
+            &self.jacobian_x_fn,
+            &self.jacobian_u_fn,
+            n_steps,
+            self.options.get_general(),
+        )?;
         let k_seq = self.compute_gain(&a_mat, &b_mat)?;
 
         let x_ref = self.options.general.get_x_ref();

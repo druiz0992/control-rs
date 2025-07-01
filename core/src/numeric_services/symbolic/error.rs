@@ -7,6 +7,7 @@ pub enum SymbolicError {
     ExprNotFound(String),
     EvaluationError,
     UnexpectedResultType,
+    IoError(String),
     Other(String),
 }
 
@@ -17,6 +18,7 @@ impl fmt::Display for SymbolicError {
             SymbolicError::ExprNotFound(expr) => write!(f, "Expression {} not found", expr),
             SymbolicError::EvaluationError => write!(f, "Evaluation error occurred"),
             SymbolicError::UnexpectedResultType => write!(f, "Unexpected result type"),
+            SymbolicError::IoError(expr) => write!(f, "Io error occurred {}", expr),
             SymbolicError::Other(msg) => write!(f, "Other error: {}", msg),
         }
     }

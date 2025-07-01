@@ -1,5 +1,4 @@
 use crate::physics::ModelError;
-
 use nalgebra::DVector;
 use rand_distr::{Distribution, Normal};
 

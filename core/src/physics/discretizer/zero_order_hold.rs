@@ -4,6 +4,7 @@ use nalgebra::DMatrix;
 
 use crate::physics::ModelError;
 use crate::physics::traits::{Discretizer, LinearDynamics, State};
+use crate::utils::evaluable::EvaluableMatrixFn;
 
 use super::LinearDiscretizer;
 
@@ -124,10 +125,10 @@ fn matrix_exponential(mat: &DMatrix<f64>) -> DMatrix<f64> {
 }
 
 impl<D: LinearDynamics> LinearDiscretizer<D> for ZOH<D> {
-    fn jacobian_x(&self) -> &DMatrix<f64> {
-        &self.state_matrix_d
+    fn jacobian_x(&self) -> EvaluableMatrixFn {
+        Box::new(self.state_matrix_d.clone())
     }
-    fn jacobian_u(&self) -> &DMatrix<f64> {
-        &self.control_matrix_d
+    fn jacobian_u(&self) -> EvaluableMatrixFn {
+        Box::new(self.control_matrix_d.clone())
     }
 }

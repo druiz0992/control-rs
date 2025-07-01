@@ -2,16 +2,13 @@ use crate::numeric_services::differentiation::DerivativeType;
 use crate::numeric_services::differentiation::dtos::{DerivativeRequest, DerivativeResponse};
 use crate::numeric_services::differentiation::engine::DerivativeEngine;
 use crate::numeric_services::differentiation::error::DerivativeError;
+use crate::numeric_services::python::PythonClient;
 use rayon::prelude::*;
 use serde_json::json;
-use std::io::Write;
-use std::process::{Command, Stdio};
 
 /// # Constants
 /// - `PYTHON_SCRIPT_PATH`: Path to the Python script that performs the differentiation.
-/// - `PYTHON_INTERPRETER`: The Python interpreter to use (default is `python3`).
 const PYTHON_SCRIPT_PATH: &str = "src/numeric_services/differentiation/sympy_engine/backend.py";
-const PYTHON_INTERPRETER: &str = "python3";
 
 type GradientChunk = Vec<String>;
 type JacobianChunk = Vec<Vec<String>>;
@@ -20,20 +17,16 @@ type HessianChunk = Vec<Vec<String>>;
 /// The `Sympy` struct provides an implementation of the `DerivativeEngine` trait
 /// for computing derivatives using a Python backend powered by the SymPy library.
 #[derive(Debug, Default)]
-pub struct Sympy {
-    path: String,
-}
+pub struct Sympy(PythonClient);
 
 impl Sympy {
     pub fn new() -> Self {
-        Self {
-            path: PYTHON_INTERPRETER.to_string(),
-        }
+        Self(PythonClient::new())
     }
 
     /// Changes python executable path
     pub fn set_python_path(&mut self, path: &str) {
-        self.path = path.to_string();
+        self.0.set_python_path(path)
     }
 
     pub fn compute_derivative_chunk(
@@ -51,43 +44,19 @@ impl Sympy {
                 }
                 path.push(PYTHON_SCRIPT_PATH);
 
-                // Launch Python process
-                let mut child = Command::new(&self.path)
-                    .arg(path)
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .spawn()
-                    .map_err(|_| {
-                        DerivativeError::Other("Failed to start Python process".to_string())
-                    })?;
-
-                // Build JSON input
                 let input_data = json!({
                     "function": vec![function],
                     "variables": vec![variable],
                     "derivatives": req.derivatives,
                 });
 
-                // Send input to Python via stdin
-                if let Some(stdin) = child.stdin.as_mut() {
-                    stdin
-                        .write_all(input_data.to_string().as_bytes())
-                        .map_err(|_| {
-                            DerivativeError::Other(
-                                "Failed to send input data to Python".to_string(),
-                            )
-                        })?;
-                }
+                let response = self
+                    .0
+                    .run_python_json(path.to_str().unwrap(), &input_data)
+                    .map_err(DerivativeError::Other)?;
 
-                // Wait for output
-                let output = child.wait_with_output().map_err(|_| {
-                    DerivativeError::Other("Failed to read Python output".to_string())
-                })?;
-
-                // Deserialize response
                 let raw_response: DerivativeResponse =
-                    serde_json::from_str(&String::from_utf8_lossy(&output.stdout))
-                        .map_err(|_| DerivativeError::ParseError)?;
+                    serde_json::from_str(&response).map_err(|_| DerivativeError::ParseError)?;
 
                 let gradient = convert_python_expr_vec(&raw_response.gradient.unwrap_or_default());
                 let jacobian =

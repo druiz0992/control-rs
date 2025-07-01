@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "macros", "hw"]
+members = ["core", "macros", "hw", "ffi_codegen"]
 resolver = "2"
 
 [profile.dev]
@@ -14,3 +14,4 @@ osqp = "1.0.1"
 serde = {version ="1.0", features = ["derive"]}
 serde_derive = "1.0"
 serde_json = "1.0.140"
+rayon = "1.7"

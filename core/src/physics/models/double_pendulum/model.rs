@@ -1,7 +1,7 @@
 use crate::numeric_services::symbolic::{ExprRegistry, ExprVector};
 use crate::physics::constants as c;
 use crate::physics::models::DoublePendulumState;
-use crate::utils::Labelizable;
+use crate::utils::{Identifiable, Labelizable};
 use macros::LabelOps;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -56,6 +56,11 @@ impl DoublePendulum {
     }
 }
 
+impl Identifiable for DoublePendulum {
+    fn name() -> &'static str {
+        "double_pendulum"
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

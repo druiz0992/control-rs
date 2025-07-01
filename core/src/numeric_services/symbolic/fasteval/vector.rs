@@ -1,12 +1,11 @@
 use super::derivatives::compute_derivatives;
-use super::slab::InstructionSlab;
 use super::{ExprMatrix, ExprScalar};
 use crate::numeric_services::differentiation::dtos::{DerivativeResponse, DerivativeType};
 use crate::numeric_services::symbolic::dtos::{ExprRecord, SymbolicEvalResult, SymbolicFn};
 use crate::numeric_services::symbolic::error::SymbolicError;
 use crate::numeric_services::symbolic::ports::{SymbolicExpr, SymbolicRegistry};
-use fasteval::{Instruction, Slab};
 use nalgebra::DVector;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -46,7 +45,8 @@ use std::sync::Arc;
 /// - Implements `IntoIterator` for consuming, borrowing, and mutably borrowing the vector.
 /// - Implements `SymbolicExpr` for symbolic evaluation and conversion to a function.
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct ExprVector {
     vector: Vec<ExprScalar>,
 }
@@ -173,16 +173,6 @@ impl ExprVector {
             .into_iter()
             .reduce(|a, b| a.add(&b))
             .ok_or(SymbolicError::Other("Error in dot product".to_string()))
-    }
-
-    pub fn get_slab(&self) -> Result<InstructionSlab, SymbolicError> {
-        let compiled_expr: Vec<(Instruction, Slab)> = self
-            .vector
-            .iter()
-            .map(|e| e.compile_with_retry())
-            .collect::<Result<_, _>>()?;
-
-        Ok(InstructionSlab::Vector(compiled_expr))
     }
 
     pub fn hadamard_product(&self, other: &Self) -> Self {
