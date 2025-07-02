@@ -6,6 +6,7 @@ pub const STATE_SYMBOLIC: &str = "state";
 pub const STATE_Q_SYMBOLIC: &str = "state_q";
 pub const STATE_V_SYMBOLIC: &str = "state_v";
 pub const INPUT_SYMBOLIC: &str = "input";
+pub const MODEL_SYMBOLIC: &str = "model";
 pub const NEXT_STATE_SYMBOLIC: &str = "next_state";
 pub const NEXT_STATE_Q_SYMBOLIC: &str = "next_state_q";
 pub const NEXT_STATE_V_SYMBOLIC: &str = "next_state_v";

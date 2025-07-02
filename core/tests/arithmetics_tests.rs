@@ -1,7 +1,7 @@
-use control_rs::numeric_services::symbolic::fasteval::{
+use symbolic_services::symbolic::fasteval::{
     ExprMatrix, ExprRegistry, ExprScalar, ExprVector,
 };
-use control_rs::numeric_services::symbolic::{SymbolicEvalResult, SymbolicExpr};
+use symbolic_services::symbolic::{SymbolicEvalResult, SymbolicExpr};
 use nalgebra::{DMatrix, DVector};
 use proptest::prelude::*;
 use rand::Rng;

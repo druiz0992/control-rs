@@ -1,8 +1,6 @@
 #![allow(unused_imports)]
 use control_rs::animation::Animation;
 use control_rs::animation::macroquad::Macroquad;
-use control_rs::numeric_services::solver::OptimizerConfig;
-use control_rs::numeric_services::symbolic::fasteval::ExprRegistry;
 use control_rs::physics::discretizer::{
     BackwardEuler, Discretizer, ForwardEuler, HermiteSimpson, ImplicitMidpoint, MidPoint, RK4,
     RK4Symbolic,
@@ -12,7 +10,10 @@ use control_rs::physics::models::{
 };
 use control_rs::physics::simulator::{BasicSim, PhysicsSim};
 use control_rs::physics::traits::Dynamics;
-use control_rs::{plotter, utils::helpers};
+use control_rs::plotter;
+use solvers::dtos::OptimizerConfig;
+use symbolic_services::symbolic::fasteval::ExprRegistry;
+use general::helpers;
 use std::f64::consts::PI;
 use std::io::{self, Write};
 use std::sync::Arc;
@@ -43,7 +44,7 @@ async fn build_sim(integrator: IntegratorType) {
     let states = match integrator {
         IntegratorType::BackwardEuler => {
             let integrator = BackwardEuler::new(&model, Arc::clone(&registry), None).unwrap();
-            let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
+            let sim = BasicSim::new(model.clone(), integrator);
             sim.rollout(&state0, None, dt, steps).unwrap()
         }
         IntegratorType::ImplicitMidpoint => {
@@ -54,7 +55,7 @@ async fn build_sim(integrator: IntegratorType) {
                 .unwrap();
             let integrator =
                 ImplicitMidpoint::new(&model, Arc::clone(&registry), Some(solver_options)).unwrap();
-            let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
+            let sim = BasicSim::new(model.clone(), integrator);
             sim.rollout(&state0, None, dt, steps).unwrap()
         }
     };

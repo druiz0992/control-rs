@@ -1,8 +1,6 @@
 #![allow(unused_imports)]
 use control_rs::animation::Animation;
 use control_rs::animation::macroquad::Macroquad;
-use control_rs::numeric_services::solver::OptimizerConfig;
-use control_rs::numeric_services::symbolic::fasteval::ExprRegistry;
 use control_rs::physics::discretizer::{
     BackwardEuler, Discretizer, ForwardEuler, HermiteSimpson, ImplicitMidpoint, MidPoint, RK4,
     RK4Symbolic,
@@ -10,10 +8,13 @@ use control_rs::physics::discretizer::{
 use control_rs::physics::models::{DoublePendulum, DoublePendulumState};
 use control_rs::physics::simulator::{BasicSim, PhysicsSim};
 use control_rs::physics::traits::Dynamics;
-use control_rs::{plotter, utils::helpers};
+use control_rs::plotter;
+use general::helpers;
+use solvers::dtos::OptimizerConfig;
 use std::f64::consts::PI;
 use std::io::{self, Write};
 use std::sync::Arc;
+use symbolic_services::symbolic::fasteval::ExprRegistry;
 
 #[derive(Debug, Clone)]
 enum IntegratorType {
@@ -46,44 +47,44 @@ async fn build_sim(integrator: IntegratorType) {
     let dt = 0.01;
     let steps = 500;
 
-    let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry), true);
+    let model = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, Some(&registry));
     let solver_options = OptimizerConfig::default().set_verbose(true);
 
     let states = match integrator {
         IntegratorType::BackwardEuler => {
             let integrator = BackwardEuler::new(&model, Arc::clone(&registry), None).unwrap();
-            let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
+            let sim = BasicSim::new(model.clone(), integrator);
             sim.rollout(&state0, None, dt, steps).unwrap()
         }
         IntegratorType::HermiteSimpson => {
             let integrator = HermiteSimpson::new(&model, Arc::clone(&registry), None).unwrap();
-            let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
+            let sim = BasicSim::new(model.clone(), integrator);
             sim.rollout(&state0, None, dt, steps).unwrap()
         }
         IntegratorType::ImplicitMidpoint => {
             let integrator =
                 ImplicitMidpoint::new(&model, Arc::clone(&registry), Some(solver_options)).unwrap();
-            let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
+            let sim = BasicSim::new(model.clone(), integrator);
             sim.rollout(&state0, None, dt, steps).unwrap()
         }
         IntegratorType::RK4Symbolic => {
             let integrator = RK4Symbolic::new(&model, Arc::clone(&registry)).unwrap();
-            let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
+            let sim = BasicSim::new(model.clone(), integrator);
             sim.rollout(&state0, None, dt, steps).unwrap()
         }
         IntegratorType::RK4 => {
             let integrator = RK4::new(&model).unwrap();
-            let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
+            let sim = BasicSim::new(model.clone(), integrator);
             sim.rollout(&state0, None, dt, steps).unwrap()
         }
         IntegratorType::MidPoint => {
             let integrator = MidPoint::new(&model).unwrap();
-            let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
+            let sim = BasicSim::new(model.clone(), integrator);
             sim.rollout(&state0, None, dt, steps).unwrap()
         }
         IntegratorType::ForwardEuler => {
             let integrator = ForwardEuler::new(&model).unwrap();
-            let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
+            let sim = BasicSim::new(model.clone(), integrator);
             sim.rollout(&state0, None, dt, steps).unwrap()
         }
     };

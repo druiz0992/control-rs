@@ -1,0 +1,12 @@
+[package]
+name = "solvers"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+symbolic_services = {path = "../symbolic_services"}
+general = {path = "../general"}
+
+nalgebra = {workspace = true}
+log = { workspace = true}
+osqp = {workspace = true}

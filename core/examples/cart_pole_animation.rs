@@ -24,21 +24,13 @@ async fn main() {
     let omega = 0.0;
 
     // Initialize model and initial state
-    let model = CartPole::new(
-        m,
-        cart_mass,
-        l,
-        friction_coeff,
-        air_resistance_coeff,
-        None,
-        true,
-    );
+    let model = CartPole::new(m, cart_mass, l, friction_coeff, air_resistance_coeff, None);
     let state0 = CartPoleState::new(pos_x, v_x, theta, omega);
 
     // Initialize RK4 discretizer
     let integrator = RK4::<CartPole>::new(&model).unwrap();
     // Initialize Simulator
-    let sim = BasicSim::new(model.clone(), integrator, None);
+    let sim = BasicSim::new(model.clone(), integrator);
 
     // Starting from initial state, rollout simulation for 500 ticks @ 100 Hz
     let states = sim.rollout(&state0, None, 0.01, 500).unwrap();

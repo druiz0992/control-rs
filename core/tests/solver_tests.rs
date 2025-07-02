@@ -1,18 +1,17 @@
-use control_rs::numeric_services::solver::{
-    LineSeachConfig, NewtonSolverSymbolic, OptimizerConfig,
-};
-use control_rs::numeric_services::symbolic::fasteval::ExprRegistry;
-use control_rs::numeric_services::symbolic::fasteval::utils::*;
-use control_rs::numeric_services::symbolic::{
-    ExprScalar, ExprVector, SymbolicEvalResult, SymbolicExpr, SymbolicFunction,
-};
-use control_rs::solver::Minimizer;
-use control_rs::solver::osqp::builder::OSQPBuilder;
-use control_rs::solver::qp::QPBuilder;
-use control_rs::utils::{matrix, vector};
+use general::{matrix, vector};
 use nalgebra::{DMatrix, DVector};
 use osqp::Settings;
+use solvers::Minimizer;
+use solvers::NewtonSolverSymbolic;
+use solvers::dtos::{LineSeachConfig, OptimizerConfig};
+use solvers::osqp::builder::OSQPBuilder;
+use solvers::qp::QPBuilder;
 use std::sync::Arc;
+use symbolic_services::symbolic::fasteval::ExprRegistry;
+use symbolic_services::symbolic::fasteval::utils::*;
+use symbolic_services::symbolic::{
+    ExprScalar, ExprVector, SymbolicEvalResult, SymbolicExpr, SymbolicFunction,
+};
 
 const Q_LINEAR: [f64; 2] = [2.0, -3.0];
 const Q_QUADRATIC: [[f64; 2]; 2] = [[1.65539, 2.89376], [2.89376, 6.51521]];

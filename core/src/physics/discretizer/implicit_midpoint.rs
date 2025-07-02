@@ -1,13 +1,14 @@
 use super::utils;
-use crate::numeric_services::solver::{NewtonSolverSymbolic, OptimizerConfig};
-use crate::numeric_services::symbolic::{ExprRegistry, ExprScalar};
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::models::state::State;
 use crate::physics::traits::{Discretizer, Dynamics};
 use crate::physics::{ModelError, constants as c};
 use crate::utils::Labelizable;
+use solvers::NewtonSolverSymbolic;
+use solvers::dtos::OptimizerConfig;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use symbolic_services::symbolic::{ExprRegistry, ExprScalar};
 
 // residual(x_next) = x_next - x_k - dt * f((x_k + x_next) / 2)
 
@@ -70,17 +71,17 @@ impl<D: SymbolicDynamics> ImplicitMidpoint<D> {
     }
 }
 
-impl<D: Dynamics> Discretizer<D> for ImplicitMidpoint<D> {
+impl<D: SymbolicDynamics + Labelizable> Discretizer<D> for ImplicitMidpoint<D> {
     fn step(
         &self,
-        _model: &D,
+        model: &D,
         state: &D::State,
-        _input: Option<&D::Input>,
+        input: Option<&D::Input>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
         let v_dims = D::State::dim_v();
         let (next_v, status, _mus, _lambdas) =
-            utils::step_intrinsic(state, dt, &self.solver, &self.registry)?;
+            utils::step_intrinsic(model, state, input, dt, &self.solver, &self.registry)?;
         if v_dims == 0 {
             return Ok(D::State::from_vec(next_v));
         }

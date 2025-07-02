@@ -1,12 +1,7 @@
-use std::sync::Arc;
-
 use nalgebra::{DMatrix, DVector};
-
 use super::input::LtiInput;
 use super::model::LtiModel;
 use super::state::LtiState;
-use crate::numeric_services::symbolic::ExprRegistry;
-use crate::physics::ModelError;
 use crate::physics::models::dynamics::LinearDynamics;
 use crate::physics::traits::Dynamics;
 use crate::physics::traits::State;
@@ -24,13 +19,6 @@ impl<const N: usize, const C: usize, const I: usize> Dynamics for LtiModel<N, C,
 
     fn state_dims(&self) -> (usize, usize) {
         (LtiState::<N, C>::dim_q(), LtiState::<N, C>::dim_v())
-    }
-    fn update(
-        &mut self,
-        _params: &[f64],
-        _registry: Option<&Arc<ExprRegistry>>,
-    ) -> Result<(), ModelError> {
-        Ok(())
     }
 }
 

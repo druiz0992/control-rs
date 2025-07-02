@@ -1,6 +1,7 @@
-use control_rs::numeric_services::solver::{NewtonSolverSymbolic, OptimizerConfig};
-use control_rs::numeric_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
 use control_rs::plotter;
+use solvers::NewtonSolverSymbolic;
+use solvers::dtos::OptimizerConfig;
+use symbolic_services::symbolic::{ExprRegistry, ExprScalar, ExprVector};
 use std::io::{self, Read};
 use std::sync::Arc;
 

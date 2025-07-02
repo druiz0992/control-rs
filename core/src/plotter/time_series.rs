@@ -1,12 +1,12 @@
-use crate::utils::Labelizable;
-use crate::numeric_services::symbolic::{
-    ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
-};
 use crate::physics::traits::State;
 use crate::physics::{Energy, ModelError};
+use crate::utils::Labelizable;
 use nalgebra::DVector;
 use plotters::prelude::*;
 use std::sync::Arc;
+use symbolic_services::symbolic::{
+    ExprRegistry, ExprScalar, ExprVector, SymbolicExpr, SymbolicFunction, TryIntoEvalResult,
+};
 
 /// Generic plot for states over time
 pub fn plot_states<S: State>(

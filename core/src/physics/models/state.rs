@@ -1,7 +1,7 @@
-use crate::numeric_services::symbolic::{SymbolicError, SymbolicEvalResult, TryIntoEvalResult};
 use crate::utils::Labelizable;
 use nalgebra::DVector;
 use std::ops::{Add, Div, Mul, Sub};
+use symbolic_services::symbolic::{SymbolicError, SymbolicEvalResult, TryIntoEvalResult};
 
 /// A trait representing a state in a physical system, providing methods for
 /// converting the state to and from a vector representation, as well as
@@ -54,9 +54,17 @@ pub trait State:
     fn dim_v() -> usize;
 }
 
-impl<S: State> TryIntoEvalResult<S> for Result<SymbolicEvalResult, SymbolicError> {
+pub struct SymbolicResult(Result<SymbolicEvalResult, SymbolicError>);
+
+impl SymbolicResult {
+    pub fn new(inner: Result<SymbolicEvalResult, SymbolicError>) -> Self {
+        SymbolicResult(inner)
+    }
+}
+
+impl<S: State> TryIntoEvalResult<S> for SymbolicResult {
     fn try_into_eval_result(self) -> Result<S, SymbolicError> {
-        match self {
+        match self.0 {
             Ok(SymbolicEvalResult::Vector(expr)) => {
                 let vec: Vec<f64> = expr.iter().cloned().collect();
                 Ok(S::from_vec(vec))

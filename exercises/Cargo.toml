@@ -1,0 +1,20 @@
+[package]
+name = "exercises"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+control-rs = { path = "../core"}
+symbolic_services = { path = "../symbolic_services"}
+ffi_codegen = { path = "../ffi_codegen"}
+
+nalgebra = {workspace = true}
+plotters = {workspace = true}
+macroquad = {workspace = true}
+osqp = {workspace = true}
+serde = {workspace = true }
+serde_derive = { workspace = true}
+serde_json = { workspace = true}
+
+[lib]
+path = "src/lib.rs"

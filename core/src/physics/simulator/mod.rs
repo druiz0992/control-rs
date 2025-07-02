@@ -26,5 +26,4 @@ pub trait PhysicsSim {
     ) -> Result<<Self::Model as Dynamics>::State, ModelError>;
     fn model(&self) -> &Self::Model;
     fn discretizer(&self) -> &Self::Discretizer;
-    fn update_model(&mut self, params: &[f64]) -> Result<(), ModelError>;
 }

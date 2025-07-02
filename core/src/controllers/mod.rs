@@ -8,12 +8,10 @@ pub mod trajectory;
 pub mod utils;
 
 pub use constraints::ConstraintTransform;
-pub use indirect_shooting::lqr::IndirectShootingLQR;
-pub use indirect_shooting::symbolic::IndirectShootingSymbolic;
+pub use indirect_shooting::IndirectShooting;
 use nalgebra::{DMatrix, DVector};
 pub use options::ControllerOptions;
 pub use qp_lqr::lqr::QPLQR;
-pub use riccati_lqr::lqr::RiccatiRecursionLQR;
 pub use trajectory::InputTrajectory;
 
 use crate::cost::CostFunction;
@@ -73,6 +71,8 @@ fn try_into_noisy_state<S: PhysicsSim>(
     vector: DVector<f64>,
     noise_sources: &NoiseSources,
 ) -> Result<ControllerState<S>, ModelError> {
-    let current_state = noise_sources.add_noise(vector)?;
+    let current_state = noise_sources
+        .add_noise(vector)
+        .map_err(ModelError::ConfigError)?;
     Ok(state_from_slice::<S>(current_state.as_slice()))
 }

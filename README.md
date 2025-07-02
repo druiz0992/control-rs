@@ -55,7 +55,7 @@ optimal_control = "0.1"
 Here's a basic example of using `control-rs`:
 
 ```rust
-use control_rs::numeric_services::symbolic::fasteval::ExprRegistry;
+use control_rs::symbolic_services::symbolic::fasteval::ExprRegistry;
 use control_rs::physics::discretizer::BackwardEuler;
 use control_rs::physics::models::{DoublePendulum, DoublePendulumState};
 use control_rs::physics::simulator::{BasicSim, PhysicsSim};
@@ -97,11 +97,20 @@ fn main() {
 
 ```
 
+## Build
+As a preliminary step before using the library, it is requires to launch a script that generates and builds some evaluation functions that 
+translate some symbolic expressions into rust functions. To launch this script run
+```bash
+cargo run -p control-rs --bin dynamics_codegen
+```
+
+This scripts will generate and compile a number of C functions. These funtions will be placed in `ffi_codegen` crate.
+
 ## Examples
 
 
 ## Notes
-This library is based on CMU-16-745 online course. More information [here](https://github.com/Optimal-Control-16-745).
+- This library is based on CMU-16-745 online course. More information [here](https://github.com/Optimal-Control-16-745).
 
 ## License
 This project is licensed under the [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/).

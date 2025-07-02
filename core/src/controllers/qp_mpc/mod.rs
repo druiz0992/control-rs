@@ -1,8 +1,5 @@
-pub(super) mod common;
-pub mod linear;
+pub mod mpc;
 pub mod options;
-pub mod symbolic;
 
-pub use linear::ConvexMpc;
+pub use mpc::ConvexMpc;
 pub use options::ConvexMpcOptions;
-pub use symbolic::ConvexMpcSymbolic;
