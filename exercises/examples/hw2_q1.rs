@@ -54,7 +54,7 @@ fn convex_trajopt(
 
     // sim
     let integrator = ZOH::new(model, dt).unwrap();
-    let sim = BasicSim::new(model.clone(), integrator, None);
+    let sim = BasicSim::new(model.clone(), integrator);
 
     // cost
     let q_matrix = DMatrix::<f64>::identity(4, 4);
@@ -110,7 +110,7 @@ fn fhlqr(
 
     // sim
     let integrator = ZOH::new(model, dt).unwrap();
-    let sim = BasicSim::new(model.clone(), integrator, None);
+    let sim = BasicSim::new(model.clone(), integrator);
 
     // cost
     let q_matrix = DMatrix::<f64>::identity(4, 4);

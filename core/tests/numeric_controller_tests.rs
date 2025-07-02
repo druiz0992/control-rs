@@ -54,7 +54,7 @@ fn numeric_controller_setup(controller_type: ControllerType) {
     let df_dx = Arc::new(ffi_codegen::rk4::quadrotor_2d::rk4_quadrotor_2d_jacobian_x);
 
     let integrator = RK4Numeric::new(&model, df_dx, df_du).unwrap();
-    let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
+    let sim = BasicSim::new(model.clone(), integrator);
 
     let q_matrix = DMatrix::<f64>::identity(6, 6) * 1.0;
     let qn_matrix = DMatrix::<f64>::identity(6, 6) * 1.0;

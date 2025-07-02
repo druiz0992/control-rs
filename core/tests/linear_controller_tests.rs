@@ -39,7 +39,7 @@ fn linear_controller_setup(controller_type: LinearControllerType) {
 
     let integrator = ZOH::new(&model, dt).unwrap();
 
-    let sim = BasicSim::new(model.clone(), integrator, None);
+    let sim = BasicSim::new(model.clone(), integrator);
 
     let q_matrix = DMatrix::<f64>::identity(2, 2);
     let qn_matrix = DMatrix::<f64>::identity(2, 2);

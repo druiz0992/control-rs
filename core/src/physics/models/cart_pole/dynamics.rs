@@ -1,7 +1,6 @@
 use super::input::CartPoleInput;
 use super::model::CartPole;
 use super::state::CartPoleState;
-use crate::physics::ModelError;
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Dynamics, State};
 use crate::physics::{constants as c, energy::Energy};
@@ -14,7 +13,7 @@ impl Dynamics for CartPole {
     type Input = CartPoleInput;
 
     fn dynamics(&self, state: &Self::State, input: Option<&Self::Input>) -> Self::State {
-        let [m_p, m_c, friction_coeff, air_resistance_coeff, l] = self.extract(&[
+        let [m_p, m_c, l, friction_coeff, air_resistance_coeff] = self.extract(&[
             "pole_mass",
             "cart_mass",
             "l",
@@ -73,30 +72,6 @@ impl Dynamics for CartPole {
         let potential = 0.5 * m_p * c::GRAVITY * l * theta.cos();
 
         Some(Energy::new(kinetic, potential))
-    }
-    fn update(
-        &mut self,
-        params: &[f64],
-        registry: Option<&Arc<ExprRegistry>>,
-    ) -> Result<(), ModelError> {
-        let [
-            pole_mass,
-            cart_mass,
-            friction_coeff,
-            air_resistance_coeff,
-            l,
-        ]: [f64; 5] = params
-            .try_into()
-            .map_err(|_| ModelError::ConfigError("Incorrect number of parameters.".into()))?;
-        *self = Self::new(
-            pole_mass,
-            cart_mass,
-            friction_coeff,
-            air_resistance_coeff,
-            l,
-            registry,
-        );
-        Ok(())
     }
 }
 

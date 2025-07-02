@@ -1,6 +1,8 @@
 use crate::physics::constants as c;
 use crate::physics::error::ModelError;
 use crate::physics::traits::State;
+use crate::physics::traits::SymbolicDynamics;
+use crate::utils::Labelizable;
 use solvers::NewtonSolverSymbolic;
 use solvers::RootFinder;
 use solvers::dtos::{KktConditionsStatus, OptimizerConfig, SolverResult};
@@ -31,16 +33,28 @@ pub fn get_v_states(registry: &Arc<ExprRegistry>) -> Result<(ExprVector, ExprVec
     Ok((current_v_state, next_v_state))
 }
 
-pub fn step_intrinsic<S: State, RF: RootFinder>(
-    state: &S,
+pub fn step_intrinsic<D: SymbolicDynamics + Labelizable, RF: RootFinder>(
+    model: &D,
+    state: &D::State,
+    input: Option<&D::Input>,
     dt: f64,
     solver: &RF,
     registry: &Arc<ExprRegistry>,
 ) -> Result<SolverResult, ModelError> {
     registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
     registry.insert_vec_as_vars(c::STATE_SYMBOLIC, &state.to_vec())?;
+    registry.insert_vec_as_vars(c::MODEL_SYMBOLIC, &model.vectorize(D::labels()))?;
+    if let Some(input) = input {
+        registry.insert_vec_as_vars(c::INPUT_SYMBOLIC, &input.to_vec())?;
+    } else {
+        registry.insert_vec_as_vars(c::INPUT_SYMBOLIC, &D::Input::default().to_vec())?;
+    }
 
-    let start_dims = if S::dim_v() == 0 { 0 } else { S::dim_q() };
+    let start_dims = if D::State::dim_v() == 0 {
+        0
+    } else {
+        D::State::dim_q()
+    };
 
     Ok(solver.find_roots(&state.to_vec()[start_dims..])?)
 }
@@ -129,6 +143,40 @@ pub fn init_constrained_dynamics(
         registry,
         solver_options,
     )?)
+}
+
+pub(crate) fn extend_vars(registry: &Arc<ExprRegistry>) -> Result<Vec<ExprScalar>, ModelError> {
+    let state = registry.get_vector(c::STATE_SYMBOLIC)?;
+    let dt = ExprScalar::new(c::TIME_DELTA_SYMBOLIC);
+    let mut vars = state.to_vec();
+    let input = registry.get_vector(c::INPUT_SYMBOLIC)?;
+    vars.extend_from_slice(&input.to_vec());
+    let model_params = registry.get_vector(c::MODEL_SYMBOLIC)?;
+    vars.extend_from_slice(&model_params.to_vec());
+    vars.extend_from_slice(&[dt]);
+
+    Ok(vars)
+}
+
+pub(crate) fn extend_vals<D>(
+    model: &D,
+    state: &D::State,
+    input: Option<&D::Input>,
+    dt: f64,
+) -> Vec<f64>
+where
+    D: SymbolicDynamics + Labelizable,
+{
+    let mut vals = state.to_vec();
+    if let Some(u) = input {
+        vals.extend_from_slice(&u.to_vec());
+    } else {
+        vals.extend_from_slice(&D::Input::default().to_vec())
+    }
+    vals.extend_from_slice(&model.vectorize(D::labels()));
+    vals.extend_from_slice(&[dt]);
+
+    vals
 }
 
 #[cfg(test)]

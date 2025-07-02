@@ -53,7 +53,7 @@ fn convex_trajopt(
 
     // sim
     let integrator = ZOH::new(model, dt).unwrap();
-    let sim = BasicSim::new(model.clone(), integrator, None);
+    let sim = BasicSim::new(model.clone(), integrator);
 
     // cost
     let cost = GenericCost::<_, SpaceXDragonInput>::new(q, qf, r, None).unwrap();
@@ -95,7 +95,7 @@ fn convex_mpc(
 
     // sim
     let integrator = ZOH::new(model, dt).unwrap();
-    let sim = BasicSim::new(model.clone(), integrator, None);
+    let sim = BasicSim::new(model.clone(), integrator);
 
     // cost
     let cost = GenericCost::<_, SpaceXDragonInput>::new(q, qf, r, None).unwrap();
@@ -137,7 +137,7 @@ fn fhlqr(
 
     // sim
     let integrator = ZOH::new(model, dt).unwrap();
-    let sim = BasicSim::new(model.clone(), integrator, None);
+    let sim = BasicSim::new(model.clone(), integrator);
 
     // cost
     let q_matrix = q;
@@ -263,7 +263,8 @@ fn main() {
     let r = DMatrix::<f64>::identity(3, 3);
     let qf = DMatrix::<f64>::identity(6, 6) * 10.0;
 
-    let x_ref = load_traj::<SpaceXDragonState>("./hw/examples/data/spacex_x_traj1.dat").unwrap();
+    let x_ref =
+        load_traj::<SpaceXDragonState>("./exercises/examples/data/spacex_x_traj1.dat").unwrap();
 
     let constraints = ConstraintTransform::new_uniform_bounds_input::<Sim>(u_limits);
     let traj_options = TrajOptions::new()

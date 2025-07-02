@@ -4,7 +4,6 @@ use control_rs::controllers::qp_mpc::{ConvexMpc, ConvexMpcOptions};
 use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursion};
 use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions};
 use control_rs::cost::generic::GenericCost;
-use symbolic_services::symbolic::ExprRegistry;
 use control_rs::physics::constants as c;
 use control_rs::physics::discretizer::RK4Symbolic;
 use control_rs::physics::models::{Quadrotor2D, Quadrotor2DInput, Quadrotor2DState};
@@ -15,6 +14,7 @@ use nalgebra::DMatrix;
 use osqp::Settings;
 use std::io::{self, Write};
 use std::sync::Arc;
+use symbolic_services::symbolic::ExprRegistry;
 
 #[derive(Debug, Clone)]
 enum ControllerType {
@@ -56,7 +56,7 @@ async fn build_sim(controller_type: ControllerType) {
     registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
 
     let integrator = RK4Symbolic::new(&model, Arc::clone(&registry)).unwrap();
-    let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
+    let sim = BasicSim::new(model.clone(), integrator);
 
     let q_matrix = DMatrix::<f64>::identity(6, 6) * 1.0;
     let qn_matrix = DMatrix::<f64>::identity(6, 6) * 1.0;
@@ -229,7 +229,6 @@ async fn main() {
     let m = 1.0;
     let u_limits = (0.2 * m * c::GRAVITY, 0.6 * m * c::GRAVITY);
     let controller_type = vec![
-        //
         ControllerType::QpLqr,
         ControllerType::QpLqrUlimits(u_limits.0, u_limits.1),
         ControllerType::RiccatiRecursionLQRFinite,
@@ -237,16 +236,16 @@ async fn main() {
         ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(
             u_limits.0,
             u_limits.1,
-            vec![0.1; 4],
+            vec![0.01; 6],
         ),
         ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(
             u_limits.0,
             u_limits.1,
-            vec![0.1],
+            vec![0.01; 6],
         ),
         ControllerType::Mpc,
-        ControllerType::MpcULimitsAndNoise(u_limits.0, u_limits.1, vec![0.0; 4]),
-        ControllerType::MpcUXLimitsAndNoise(u_limits.0, u_limits.1, -0.2, 0.2, vec![0.0; 4]),
+        ControllerType::MpcULimitsAndNoise(u_limits.0, u_limits.1, vec![0.01; 6]),
+        ControllerType::MpcUXLimitsAndNoise(u_limits.0, u_limits.1, -0.2, 0.2, vec![0.01; 6]),
     ];
     env_logger::init();
 

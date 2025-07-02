@@ -84,7 +84,11 @@ impl NoiseSources {
     ///   - `Err(ModelError)`: If the specified noise source index is out of bounds.
     pub fn add_noise(&self, sample: DVector<f64>) -> Result<DVector<f64>, String> {
         if sample.len() != self.0.len() {
-            return Err("Noise source size mismatch.".into());
+            return Err(format!(
+                "Noise source size mismatch. Expected {}, obtained {}",
+                sample.len(),
+                self.0.len()
+            ));
         }
         let mut noise_sample = Vec::new();
         for noise_source in &self.0 {

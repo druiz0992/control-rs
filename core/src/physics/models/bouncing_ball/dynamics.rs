@@ -1,6 +1,5 @@
 use super::model::BouncingBall;
 use super::state::BouncingBallState;
-use crate::physics::ModelError;
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::models::no_input::NoInput;
 use crate::physics::traits::State;
@@ -58,18 +57,6 @@ impl Dynamics for BouncingBall {
         let potential = m * c::GRAVITY * pos_y;
 
         Some(Energy::new(kinetic, potential))
-    }
-
-    fn update(
-        &mut self,
-        params: &[f64],
-        registry: Option<&Arc<ExprRegistry>>,
-    ) -> Result<(), ModelError> {
-        let [m, friction_coeff]: [f64; 2] = params
-            .try_into()
-            .map_err(|_| ModelError::ConfigError("Incorrect number of parameters.".into()))?;
-        *self = BouncingBall::new(m, friction_coeff, registry, true);
-        Ok(())
     }
 }
 

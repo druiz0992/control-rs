@@ -1,7 +1,6 @@
 use super::input::DoublePendulumInput;
 use super::model::DoublePendulum;
 use super::state::DoublePendulumState;
-use crate::physics::ModelError;
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Dynamics, State};
 use crate::physics::{constants as c, energy::Energy};
@@ -77,18 +76,6 @@ impl Dynamics for DoublePendulum {
 
     fn state_dims(&self) -> (usize, usize) {
         (DoublePendulumState::dim_q(), DoublePendulumState::dim_v())
-    }
-
-    fn update(
-        &mut self,
-        params: &[f64],
-        registry: Option<&Arc<ExprRegistry>>,
-    ) -> Result<(), ModelError> {
-        let [m1, m2, l1, l2, air_resistance_coeff]: [f64; 5] = params
-            .try_into()
-            .map_err(|_| ModelError::ConfigError("Incorrect number of parameters.".into()))?;
-        *self = DoublePendulum::new(m1, m2, l1, l2, air_resistance_coeff, registry);
-        Ok(())
     }
 }
 

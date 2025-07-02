@@ -63,12 +63,9 @@ where
     let mut b_mat: Vec<DMatrix<f64>> = Vec::with_capacity(n_op);
     let dt = general_options.get_dt();
 
-    let mut real_params_opt: Option<Vec<f64>> = None;
     let labels = S::Model::labels();
     let real_params = sim.model().vectorize(labels);
-    let estimated_params = if let Some(estimated_params) = general_options.get_estimated_params() {
-        real_params_opt = Some(real_params);
-        sim.update_model(estimated_params)?;
+    let model_params = if let Some(estimated_params) = general_options.get_estimated_params() {
         estimated_params
     } else {
         real_params.as_slice()
@@ -76,42 +73,11 @@ where
 
     for k in 0..n_op {
         let mut vals = general_options.concatenate_operating_point(k)?;
-        vals.extend_from_slice(estimated_params);
+        vals.extend_from_slice(model_params);
         vals.extend_from_slice(&[dt]);
         a_mat.push(jacobian_x_fn.evaluate(&vals)?);
         b_mat.push(jacobian_u_fn.evaluate(&vals)?);
     }
 
-    if let Some(real_params) = real_params_opt {
-        sim.update_model(&real_params)?;
-    }
-
     Ok((a_mat, b_mat))
 }
-/*
-/// Adds gaussian noise to controller input and returns the updated input sample
-pub fn add_noise_to_inputs<S: PhysicsSim>(
-    std_dev: f64,
-    inputs: Vec<ControllerInput<S>>,
-) -> Result<Vec<ControllerInput<S>>, ModelError> {
-    let noise_source = NoiseSource::new(std_dev)?;
-
-    Ok(inputs
-        .iter()
-        .map(|s| ControllerInput::<S>::from_slice(noise_source.add_noise(s.to_vector()).as_slice()))
-        .collect())
-}
-
-/// Adds gaussian noise to controller state and returns the updated state sample
-pub fn add_noise_to_states<S: PhysicsSim>(
-    std_dev: f64,
-    states: Vec<ControllerState<S>>,
-) -> Result<Vec<ControllerState<S>>, ModelError> {
-    let noise_source = NoiseSource::new(std_dev)?;
-
-    Ok(states
-        .iter()
-        .map(|s| ControllerState::<S>::from_slice(noise_source.add_noise(s.to_vector()).as_slice()))
-        .collect())
-}
-        */

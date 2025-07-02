@@ -1,9 +1,10 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use crate::physics::discretizer::utils::{extend_vals, extend_vars};
 use crate::physics::discretizer::{CodeGenerator, SymbolicDiscretizer};
 use crate::physics::models::state::SymbolicResult;
-use crate::physics::traits::{Discretizer, State};
+use crate::physics::traits::{Discretizer};
 use crate::physics::{ModelError, constants as c, traits::SymbolicDynamics};
 use crate::utils::evaluable::EvaluableMatrixFn;
 use crate::utils::{Identifiable, Labelizable};
@@ -50,14 +51,7 @@ impl<D: SymbolicDynamics> RK4Symbolic<D> {
         dynamics = dynamics.add(&state).wrap();
         let step_func = dynamics.to_fn(&registry)?;
 
-        // vars
-        let mut vars = state.to_vec();
-        let input = registry.get_vector(c::INPUT_SYMBOLIC)?;
-        vars.extend_from_slice(&input.to_vec());
-        let model_params = registry.get_vector(c::MODEL_SYMBOLIC)?;
-        vars.extend_from_slice(&model_params.to_vec());
-        vars.extend_from_slice(&[dt]);
-
+        let vars = extend_vars(&registry)?;
         let step_func = SymbolicFunction::new(step_func, &vars);
 
         Ok(Self {
@@ -77,14 +71,7 @@ impl<D: SymbolicDynamics + Labelizable> Discretizer<D> for RK4Symbolic<D> {
         input: Option<&D::Input>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
-        let mut vals = state.to_vec();
-        if let Some(u) = input {
-            vals.extend_from_slice(&u.to_vec());
-        } else {
-            vals.extend_from_slice(&D::Input::default().to_vec())
-        }
-        vals.extend_from_slice(&model.vectorize(D::labels()));
-        vals.extend_from_slice(&[dt]);
+        let vals = extend_vals(model, state, input, dt);
 
         Ok(SymbolicResult::new(self.step_func.eval(&vals)).try_into_eval_result()?)
     }

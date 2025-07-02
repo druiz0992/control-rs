@@ -1,11 +1,11 @@
 use super::state::BouncingBallState;
-use symbolic_services::symbolic::{ExprMatrix, ExprRegistry, ExprScalar, ExprVector};
 use crate::physics::constants as c;
 use crate::physics::traits::State;
 use crate::utils::{Identifiable, Labelizable};
 use macros::LabelOps;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use symbolic_services::symbolic::{ExprMatrix, ExprRegistry, ExprScalar, ExprVector};
 
 #[derive(Debug, Serialize, Deserialize, Clone, LabelOps)]
 pub struct BouncingBall {
@@ -32,6 +32,8 @@ impl BouncingBall {
             let dim_q = BouncingBallState::dim_q();
             registry.insert_vector(c::STATE_Q_SYMBOLIC, &labels[..dim_q]);
             registry.insert_vector(c::STATE_V_SYMBOLIC, &labels[dim_q..]);
+            registry.insert_vector(c::MODEL_SYMBOLIC, BouncingBall::labels());
+            registry.insert_vector(c::INPUT_SYMBOLIC, &[""]);
         }
         model
     }

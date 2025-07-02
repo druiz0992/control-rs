@@ -44,7 +44,7 @@ async fn build_sim(integrator: IntegratorType) {
     let states = match integrator {
         IntegratorType::BackwardEuler => {
             let integrator = BackwardEuler::new(&model, Arc::clone(&registry), None).unwrap();
-            let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
+            let sim = BasicSim::new(model.clone(), integrator);
             sim.rollout(&state0, None, dt, steps).unwrap()
         }
         IntegratorType::ImplicitMidpoint => {
@@ -55,7 +55,7 @@ async fn build_sim(integrator: IntegratorType) {
                 .unwrap();
             let integrator =
                 ImplicitMidpoint::new(&model, Arc::clone(&registry), Some(solver_options)).unwrap();
-            let sim = BasicSim::new(model.clone(), integrator, Some(Arc::clone(&registry)));
+            let sim = BasicSim::new(model.clone(), integrator);
             sim.rollout(&state0, None, dt, steps).unwrap()
         }
     };

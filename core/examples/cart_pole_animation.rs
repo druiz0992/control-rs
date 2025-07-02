@@ -30,7 +30,7 @@ async fn main() {
     // Initialize RK4 discretizer
     let integrator = RK4::<CartPole>::new(&model).unwrap();
     // Initialize Simulator
-    let sim = BasicSim::new(model.clone(), integrator, None);
+    let sim = BasicSim::new(model.clone(), integrator);
 
     // Starting from initial state, rollout simulation for 500 ticks @ 100 Hz
     let states = sim.rollout(&state0, None, 0.01, 500).unwrap();

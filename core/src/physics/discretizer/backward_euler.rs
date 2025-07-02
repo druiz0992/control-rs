@@ -4,14 +4,14 @@ use super::utils;
 use crate::physics::models::dynamics::SymbolicDynamics;
 use crate::physics::traits::{Discretizer, LinearDynamics, State};
 use crate::physics::{ModelError, constants as c};
+use crate::utils::Labelizable;
 use solvers::NewtonSolverSymbolic;
 use solvers::dtos::OptimizerConfig;
 use solvers::linear_solver::LinearResidual;
 use solvers::{LinearSolver, RootFinder};
-use symbolic_services::symbolic::{ExprRegistry, ExprScalar};
-use crate::utils::Labelizable;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use symbolic_services::symbolic::{ExprRegistry, ExprScalar};
 
 const DEFAULT_TOLERANCE: f64 = 1e-3;
 // Backward Euler residual:
@@ -71,17 +71,17 @@ impl<D: SymbolicDynamics> BackwardEuler<D> {
     }
 }
 
-impl<D: SymbolicDynamics> Discretizer<D> for BackwardEuler<D> {
+impl<D: SymbolicDynamics + Labelizable> Discretizer<D> for BackwardEuler<D> {
     fn step(
         &self,
-        _model: &D,
+        model: &D,
         state: &D::State,
-        _input: Option<&D::Input>,
+        input: Option<&D::Input>,
         dt: f64,
     ) -> Result<D::State, ModelError> {
         let v_dims = D::State::dim_v();
         let (next_v, status, _mus, _lambdas) =
-            utils::step_intrinsic(state, dt, &self.solver, &self.registry)?;
+            utils::step_intrinsic(model, state, input, dt, &self.solver, &self.registry)?;
         if v_dims == 0 {
             return Ok(D::State::from_vec(next_v));
         }
