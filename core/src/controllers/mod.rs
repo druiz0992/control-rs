@@ -1,5 +1,5 @@
 pub mod constraints;
-pub mod indirect_shooting;
+pub mod ddp;
 pub mod options;
 pub mod qp_lqr;
 pub mod qp_mpc;
@@ -8,7 +8,6 @@ pub mod trajectory;
 pub mod utils;
 
 pub use constraints::ConstraintTransform;
-pub use indirect_shooting::IndirectShooting;
 use nalgebra::{DMatrix, DVector};
 pub use options::ControllerOptions;
 pub use qp_lqr::lqr::QPLQR;

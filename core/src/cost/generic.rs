@@ -68,6 +68,7 @@ where
     _phantom_s: PhantomData<S>,
     _phantom_i: PhantomData<I>,
 }
+
 impl<S, I> GenericCost<S, I>
 where
     S: State,
@@ -95,7 +96,6 @@ where
         }
 
         let options = options.unwrap_or_default();
-
         let state_dim = S::dim_q() + S::dim_v();
         let input_dim = I::dim_q() + I::dim_v();
 
@@ -110,10 +110,9 @@ where
             ));
         }
 
-        if let (Some(state_traj), Some(input_traj)) = (
-            options.state_traj_ref.as_ref(),
-            options.input_traj_ref.as_ref(),
-        ) {
+        if let (Some(state_traj), Some(input_traj)) =
+            (&options.state_traj_ref, &options.input_traj_ref)
+        {
             if state_traj.len() != input_traj.len() + 1 {
                 return Err(ModelError::ConfigError(
                     "State trajectory should have one more element than Input trajectory".into(),
@@ -121,22 +120,19 @@ where
             }
         }
 
-        if options.state_traj_ref.as_ref().is_some() && options.linear_term_flag {
+        if options.linear_term_flag
+            && (options.state_traj_ref.is_some() || options.input_traj_ref.is_some())
+        {
             return Err(ModelError::ConfigError(
-                "Can't provide reference state if linear term flag is enabled".into(),
-            ));
-        }
-        if options.input_traj_ref.as_ref().is_some() && options.linear_term_flag {
-            return Err(ModelError::ConfigError(
-                "Can't provide reference input if linear term flag is enabled".into(),
+                "Can't provide reference state or input if linear term flag is enabled".into(),
             ));
         }
 
-        let state_traj_ref_vec: Option<Vec<DVector<f64>>> = options
+        let state_traj_ref_vec = options
             .state_traj_ref
             .map(|traj| traj.iter().map(|s| s.to_vector()).collect());
 
-        let input_traj_ref_vec: Option<Vec<DVector<f64>>> = options
+        let input_traj_ref_vec = options
             .input_traj_ref
             .map(|traj| traj.iter().map(|s| s.to_vector()).collect());
 
@@ -150,6 +146,10 @@ where
             _phantom_i: PhantomData,
         })
     }
+
+    fn cost_term(diff: &DVector<f64>, weight: &DMatrix<f64>) -> f64 {
+        (diff.transpose() * (weight * diff))[0]
+    }
 }
 
 impl<S, I> CostFunction for GenericCost<S, I>
@@ -160,120 +160,89 @@ where
     type State = S;
     type Input = I;
 
-    fn cost(&self, state: &[S], input: &DMatrix<f64>) -> Result<f64, ModelError> {
-        if input.ncols() + 1 != state.len() {
-            return Err(ModelError::ConfigError(
-                "State trajectory needs to have one more element than input trajectory".into(),
-            ));
+    fn stage_cost(&self, state: &[S], input: &[I], idx: usize) -> Result<(f64, f64), ModelError> {
+        if idx >= state.len() || idx >= input.len() {
+            return Err(ModelError::ConfigError(format!(
+                "Cannot access element {} in state/input",
+                idx
+            )));
         }
 
-        if let Some(state_traj_ref) = self.state_traj_ref_vec.as_ref() {
-            if state_traj_ref.len() != state.len() {
-                return Err(ModelError::ConfigError(
-                    "Mismatch in state trajectory length".into(),
-                ));
-            }
-        }
+        let state_vec = state[idx].to_vector();
+        let ref_state = self
+            .state_traj_ref_vec
+            .as_ref()
+            .map(|v| &v[idx])
+            .cloned()
+            .unwrap_or_else(|| DVector::zeros(state_vec.len()));
 
-        if let Some(input_traj_ref) = self.input_traj_ref_vec.as_ref() {
-            if input_traj_ref.len() != input.len() {
-                return Err(ModelError::ConfigError(
-                    "Mismatch in input trajectory length".into(),
-                ));
-            }
-        }
+        let input_vec = input[idx].to_vector();
+        let ref_input = self
+            .input_traj_ref_vec
+            .as_ref()
+            .map(|v| &v[idx])
+            .cloned()
+            .unwrap_or_else(|| DVector::zeros(input_vec.len()));
 
-        let input_cost: f64 = input
-            .column_iter()
-            .take(state.len() - 1)
-            .enumerate()
-            .map(|(i, v)| {
-                let ref_input = if let Some(ref_vec) = self.input_traj_ref_vec.as_ref() {
-                    &ref_vec[i]
-                } else {
-                    // Assume dimensions from current input vector
-                    &DVector::zeros(v.len())
-                };
+        let state_cost = Self::cost_term(&(state_vec - ref_state), &self.q_matrix);
+        let input_cost = Self::cost_term(&(input_vec - ref_input), &self.r_matrix);
 
-                let diff = v - ref_input;
-                let grad = &self.r_matrix * &diff;
-                (v.transpose() * &grad)[(0, 0)]
-            })
-            .sum();
+        Ok((state_cost, input_cost))
+    }
 
-        let state_cost: f64 = state
-            .iter()
-            .take(state.len() - 1)
-            .enumerate()
-            .map(|(i, s)| {
-                let v = s.to_vector();
-                let ref_state = if let Some(ref_vec) = self.state_traj_ref_vec.as_ref() {
-                    &ref_vec[i]
-                } else {
-                    // Assume dimensions from current input vector
-                    &DVector::zeros(v.len())
-                };
-                let diff = &v - ref_state;
-                let grad = &self.q_matrix * &diff;
-                (diff.transpose() * &grad)[(0, 0)]
-            })
-            .sum();
-        let staging_cost = 0.5 * (state_cost + input_cost);
-
+    fn terminal_cost(&self, state: &[S]) -> Result<f64, ModelError> {
         let final_state = state
             .last()
             .expect("state vec should never be empty")
             .to_vector();
 
-        let final_ref_state = if let Some(ref state_vec) = self.state_traj_ref_vec {
-            state_vec
-                .last()
-                .expect("state_traj_ref_vec should not be empty when Some")
-        } else {
-            &DVector::zeros(final_state.len())
-        };
+        let ref_state = self
+            .state_traj_ref_vec
+            .as_ref()
+            .and_then(|v| v.last())
+            .cloned()
+            .unwrap_or_else(|| DVector::zeros(final_state.len()));
 
-        let diff = final_state - final_ref_state;
-        let grad = &self.qn_matrix * &diff;
-
-        let terminal_cost = (0.5 * diff.transpose() * &grad)[(0, 0)];
-
-        Ok(staging_cost + terminal_cost)
+        Ok(Self::cost_term(&(final_state - ref_state), &self.qn_matrix))
     }
 
-    fn stage_cost_gradient(&self, state: &S, state_idx: usize) -> Result<DVector<f64>, ModelError> {
-        if let Some(state_traj_ref) = self.state_traj_ref_vec.as_ref() {
-            if state_idx >= state_traj_ref.len() {
-                return Err(ModelError::ConfigError(
-                    "Mismatch in state trajectory length".into(),
-                ));
-            }
-        }
+    fn stage_cost_gradient(
+        &self,
+        state: &S,
+        input: &I,
+        idx: usize,
+    ) -> Result<(DVector<f64>, DVector<f64>), ModelError> {
+        let state_vec = state.to_vector();
+        let ref_state = self
+            .state_traj_ref_vec
+            .as_ref()
+            .and_then(|v| v.get(idx))
+            .cloned()
+            .unwrap_or_else(|| DVector::zeros(state_vec.len()));
 
-        let v = state.to_vector();
-        let ref_state = if let Some(ref_vec) = self.state_traj_ref_vec.as_ref() {
-            &ref_vec[state_idx]
-        } else {
-            // Assume dimensions from current input vector
-            &DVector::zeros(v.len())
-        };
+        let input_vec = input.to_vector();
+        let ref_input = self
+            .input_traj_ref_vec
+            .as_ref()
+            .and_then(|v| v.get(idx))
+            .cloned()
+            .unwrap_or_else(|| DVector::zeros(input_vec.len()));
 
-        let diff = &v - ref_state;
-        Ok(&self.q_matrix * &diff)
+        Ok((
+            &self.q_matrix * (state_vec - ref_state),
+            &self.r_matrix * (input_vec - ref_input),
+        ))
     }
 
     fn terminal_cost_gradient(&self, state: &Self::State) -> DVector<f64> {
-        let v = state.to_vector();
-        let final_ref_state = if let Some(ref_vec) = self.state_traj_ref_vec.as_ref() {
-            ref_vec
-                .last()
-                .expect("state_traj_vec should never be empty")
-        } else {
-            // Assume dimensions from current input vector
-            &DVector::zeros(v.len())
-        };
-        let diff = &v - final_ref_state;
-        &self.qn_matrix * diff
+        let state_vec = state.to_vector();
+        let ref_state = self
+            .state_traj_ref_vec
+            .as_ref()
+            .and_then(|v| v.last())
+            .cloned()
+            .unwrap_or_else(|| DVector::zeros(state_vec.len()));
+        &self.qn_matrix * (state_vec - ref_state)
     }
 
     fn get_q(&self) -> Option<&DMatrix<f64>> {
@@ -287,40 +256,38 @@ where
     }
 
     fn update_q(&mut self, q: DMatrix<f64>) -> Result<(), ModelError> {
-        if q.nrows() != self.q_matrix.nrows() || q.ncols() != self.q_matrix.ncols() {
+        if q.shape() != self.q_matrix.shape() {
             return Err(ModelError::ConfigError(format!(
-                "Incorrect Q Dimensions. Expecting {}, Obtained {}",
-                q.nrows(),
-                self.q_matrix.ncols()
+                "Incorrect Q Dimensions. Expecting {:?}, Obtained {:?}",
+                self.q_matrix.shape(),
+                q.shape()
             )));
         }
         self.q_matrix = q;
-
         Ok(())
     }
+
     fn update_qn(&mut self, qn: DMatrix<f64>) -> Result<(), ModelError> {
-        if qn.nrows() != self.qn_matrix.nrows() || qn.ncols() != self.qn_matrix.ncols() {
+        if qn.shape() != self.qn_matrix.shape() {
             return Err(ModelError::ConfigError(format!(
-                "Incorrect Qn Dimensions. Expecting {}, Obtained {}",
-                qn.nrows(),
-                self.qn_matrix.ncols()
+                "Incorrect Qn Dimensions. Expecting {:?}, Obtained {:?}",
+                self.qn_matrix.shape(),
+                qn.shape()
             )));
         }
         self.qn_matrix = qn;
-
         Ok(())
     }
 
     fn update_r(&mut self, r: DMatrix<f64>) -> Result<(), ModelError> {
-        if r.nrows() != self.r_matrix.nrows() || r.ncols() != self.r_matrix.ncols() {
+        if r.shape() != self.r_matrix.shape() {
             return Err(ModelError::ConfigError(format!(
-                "Incorrect R Dimensions. Expecting {}, Obtained {}",
-                r.nrows(),
-                self.r_matrix.ncols()
+                "Incorrect R Dimensions. Expecting {:?}, Obtained {:?}",
+                self.r_matrix.shape(),
+                r.shape()
             )));
         }
         self.r_matrix = r;
-
         Ok(())
     }
 }
@@ -387,9 +354,9 @@ mod tests {
                 .unwrap();
 
         let states = vec![MockState::new(1.0, 2.0), MockState::new(1.5, 2.5)];
-        let inputs = DMatrix::from_columns(&[MockInput::new(0.1).to_vector()]);
+        let inputs = vec![MockInput::new(0.1)];
 
-        let result = cost.cost(&states, &inputs);
+        let result = cost.total_cost(&states, &inputs);
         assert!(result.is_ok());
     }
 
@@ -406,12 +373,9 @@ mod tests {
                 .unwrap();
 
         let states = vec![MockState::new(1.0, 2.0), MockState::new(3.0, 4.0)]; // Mismatch in length
-        let inputs = DMatrix::from_columns(&[
-            MockInput::new(0.1).to_vector(),
-            MockInput::new(0.3).to_vector(),
-        ]);
+        let inputs = vec![MockInput::new(0.1), MockInput::new(0.3)];
 
-        let result = cost.cost(&states, &inputs);
+        let result = cost.total_cost(&states, &inputs);
         assert!(result.is_err());
     }
 }

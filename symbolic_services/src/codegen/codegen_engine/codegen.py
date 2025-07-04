@@ -10,13 +10,16 @@ from sympy.parsing.sympy_parser import (
     parse_expr, standard_transformations, implicit_multiplication_application
 )
 from sympy.printing import ccode
+from concurrent.futures import ProcessPoolExecutor
+import itertools
+
 
 
 
 def build_c_function(expr_str, var_names, func_name):
     """    Build a C function from a symbolic expression."""
-    vars = symbols(var_names)
-    symbol_map = dict(zip(var_names, vars))
+    sym_vars = symbols(var_names)
+    symbol_map = dict(zip(var_names, sym_vars))
 
     function_map = {
         "sin": sin, "cos": cos, "tan": tan,
@@ -232,6 +235,11 @@ def add_mods(mod_name, out_dir):
     for mod_name in ["ffi", "pub codegen_export"]:
         ensure_mod_declaration(os.path.join(current_path, "mod.rs"), mod_name, is_pub=False)
 
+def process_cell(i, j, cell, func_name, var_names):
+    fname = f"{func_name}_{i}_{j}"
+    proto, code = build_c_function(cell, var_names, fname)
+    return fname, proto, code
+
 
 if __name__ == "__main__":
     import sys, json
@@ -245,12 +253,23 @@ if __name__ == "__main__":
     out_dir = data['out_dir']
     mod_name = data['mod_name']
 
+    def process_cell_wrapper(args):
+        i, j, cell = args
+        return process_cell(i, j, cell, func_name, var_names)
 
     all_funcs = []
     all_prototypes = []
     all_func_names = []
 
     expr = normalize_expr(expr)
+
+    with ProcessPoolExecutor() as executor:
+        results = list(executor.map(
+            process_cell_wrapper,
+            ((i, j, expr[i][j]) for i in range(len(expr)) for j in range(len(expr[i])))
+        ))
+
+    """
     for i, row in enumerate(expr):
         for j, cell in enumerate(row):
             fname = f"{func_name}_{i}_{j}"
@@ -258,8 +277,11 @@ if __name__ == "__main__":
             all_funcs.append(code)
             all_prototypes.append(proto)
             all_func_names.append(fname)
-
-
+    """
+    for fname, proto, code in results:
+        all_func_names.append(fname)
+        all_prototypes.append(proto)
+        all_funcs.append(code)
 
 
     out_folder = os.path.join(out_dir, "src")

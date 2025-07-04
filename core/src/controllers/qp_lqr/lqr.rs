@@ -98,7 +98,7 @@ where
     S::Discretizer: Discretizer<S::Model>,
 {
     fn from_parts(
-        mut sim: S,
+        sim: S,
         cost_fn: CostFn<S>,
         jacobian_x_fn: EvaluableMatrixFn,
         jacobian_u_fn: EvaluableMatrixFn,
@@ -111,7 +111,7 @@ where
             + 1;
 
         let (state_mat, control_mat) = linearize(
-            &mut sim,
+            &sim,
             &jacobian_x_fn,
             &jacobian_u_fn,
             n_steps,
@@ -237,7 +237,7 @@ where
         general_params: &ControllerOptions<S>,
     ) -> Result<(), ModelError> {
         let (state_mat, control_mat) = linearize(
-            &mut self.sim,
+            &self.sim,
             &self.jacobian_x_fn,
             &self.jacobian_u_fn,
             self.n_steps,

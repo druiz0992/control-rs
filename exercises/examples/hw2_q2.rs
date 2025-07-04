@@ -151,7 +151,7 @@ fn convex_trajopt(
     // sim
     let df_du = Arc::new(ffi_codegen::rk4::cartpole::rk4_cartpole_jacobian_u);
     let df_dx = Arc::new(ffi_codegen::rk4::cartpole::rk4_cartpole_jacobian_x);
-    let integrator = RK4Numeric::new(model, df_dx, df_du).unwrap();
+    let integrator = RK4Numeric::new(model, df_dx, df_du, None).unwrap();
     let sim = BasicSim::new(model.clone(), integrator);
     registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
 
@@ -196,7 +196,8 @@ fn convex_mpc(
     // sim
     let df_du = Arc::new(ffi_codegen::rk4::cartpole::rk4_cartpole_jacobian_u);
     let df_dx = Arc::new(ffi_codegen::rk4::cartpole::rk4_cartpole_jacobian_x);
-    let integrator = RK4Numeric::new(model, df_dx, df_du).unwrap();
+    let integrator =
+        RK4Numeric::new(model, df_dx, df_du, None).unwrap();
     let sim = BasicSim::new(model.clone(), integrator);
     registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
 
@@ -242,7 +243,7 @@ fn fhlqr(
     // sim
     let df_du = Arc::new(ffi_codegen::rk4::cartpole::rk4_cartpole_jacobian_u);
     let df_dx = Arc::new(ffi_codegen::rk4::cartpole::rk4_cartpole_jacobian_x);
-    let integrator = RK4Numeric::new(model, df_dx, df_du).unwrap();
+    let integrator = RK4Numeric::new(model, df_dx, df_du, None).unwrap();
     let sim = BasicSim::new(model.clone(), integrator);
     registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
 

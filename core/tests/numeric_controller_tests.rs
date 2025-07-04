@@ -8,11 +8,11 @@ use control_rs::physics::discretizer::RK4Numeric;
 use control_rs::physics::models::quadrotor_2d::{Quadrotor2D, Quadrotor2DInput, Quadrotor2DState};
 use control_rs::physics::simulator::BasicSim;
 use control_rs::physics::traits::State;
-use symbolic_services::symbolic::ExprRegistry;
 use control_rs::utils::Labelizable;
 use nalgebra::{DMatrix, dvector};
 use osqp::Settings;
 use std::sync::Arc;
+use symbolic_services::symbolic::ExprRegistry;
 
 enum ControllerType {
     QpLqr,
@@ -53,7 +53,7 @@ fn numeric_controller_setup(controller_type: ControllerType) {
     let df_du = Arc::new(ffi_codegen::rk4::quadrotor_2d::rk4_quadrotor_2d_jacobian_u);
     let df_dx = Arc::new(ffi_codegen::rk4::quadrotor_2d::rk4_quadrotor_2d_jacobian_x);
 
-    let integrator = RK4Numeric::new(&model, df_dx, df_du).unwrap();
+    let integrator = RK4Numeric::new(&model, df_dx, df_du, None).unwrap();
     let sim = BasicSim::new(model.clone(), integrator);
 
     let q_matrix = DMatrix::<f64>::identity(6, 6) * 1.0;

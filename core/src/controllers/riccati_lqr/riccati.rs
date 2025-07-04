@@ -176,7 +176,7 @@ where
             / self.options.get_general().get_dt()) as usize
             + 1;
         let (a_mat, b_mat) = linearize(
-            &mut self.sim,
+            &self.sim,
             &self.jacobian_x_fn,
             &self.jacobian_u_fn,
             n_steps,

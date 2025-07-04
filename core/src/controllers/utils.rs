@@ -45,9 +45,12 @@ pub fn extend_vector<T: State>(vec: &[T], start: usize, end: usize) -> Vec<DVect
 }
 
 type LinearDynamicsEvaluation = (Vec<DMatrix<f64>>, Vec<DMatrix<f64>>);
+type LinearDynamicsSingleEvaluation = (DMatrix<f64>, DMatrix<f64>);
+type LinearDynamicsSecondOrderSingleEvaluation =
+    (DMatrix<f64>, DMatrix<f64>, DMatrix<f64>, DMatrix<f64>);
 
 pub(crate) fn linearize<S>(
-    sim: &mut S,
+    sim: &S,
     jacobian_x_fn: &EvaluableMatrixFn,
     jacobian_u_fn: &EvaluableMatrixFn,
     n_steps: usize,
@@ -80,4 +83,68 @@ where
     }
 
     Ok((a_mat, b_mat))
+}
+
+pub(crate) fn linearize_one<S>(
+    sim: &S,
+    jacobian_x_fn: &EvaluableMatrixFn,
+    jacobian_u_fn: &EvaluableMatrixFn,
+    idx: usize,
+    general_options: &ControllerOptions<S>,
+) -> Result<LinearDynamicsSingleEvaluation, ModelError>
+where
+    S: PhysicsSim,
+    S::Model: Dynamics + Labelizable,
+    S::Discretizer: Discretizer<S::Model>,
+{
+    let dt = general_options.get_dt();
+    let labels = S::Model::labels();
+    let real_params = sim.model().vectorize(labels);
+    let model_params = if let Some(estimated_params) = general_options.get_estimated_params() {
+        estimated_params
+    } else {
+        real_params.as_slice()
+    };
+
+    let mut vals = general_options.concatenate_operating_point(idx)?;
+    vals.extend_from_slice(model_params);
+    vals.extend_from_slice(&[dt]);
+    let a_mat = jacobian_x_fn.evaluate(&vals)?;
+    let b_mat = jacobian_u_fn.evaluate(&vals)?;
+
+    Ok((a_mat, b_mat))
+}
+
+pub(crate) fn linearize_second_order_one<S>(
+    sim: &S,
+    hessian_xx_fn: &EvaluableMatrixFn,
+    hessian_xu_fn: &EvaluableMatrixFn,
+    hessian_ux_fn: &EvaluableMatrixFn,
+    hessian_uu_fn: &EvaluableMatrixFn,
+    idx: usize,
+    general_options: &ControllerOptions<S>,
+) -> Result<LinearDynamicsSecondOrderSingleEvaluation, ModelError>
+where
+    S: PhysicsSim,
+    S::Model: Dynamics + Labelizable,
+    S::Discretizer: Discretizer<S::Model>,
+{
+    let dt = general_options.get_dt();
+    let labels = S::Model::labels();
+    let real_params = sim.model().vectorize(labels);
+    let model_params = if let Some(estimated_params) = general_options.get_estimated_params() {
+        estimated_params
+    } else {
+        real_params.as_slice()
+    };
+
+    let mut vals = general_options.concatenate_operating_point(idx)?;
+    vals.extend_from_slice(model_params);
+    vals.extend_from_slice(&[dt]);
+    let a_x = hessian_xx_fn.evaluate(&vals)?;
+    let a_u = hessian_xu_fn.evaluate(&vals)?;
+    let b_x = hessian_ux_fn.evaluate(&vals)?;
+    let b_u = hessian_uu_fn.evaluate(&vals)?;
+
+    Ok((a_x, a_u, b_x, b_u))
 }

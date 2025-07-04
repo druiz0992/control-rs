@@ -3,9 +3,7 @@ use control_rs::controllers::qp_mpc::ConvexMpc;
 use control_rs::controllers::qp_mpc::options::ConvexMpcOptions;
 use control_rs::controllers::riccati_lqr::RiccatiRecursion;
 use control_rs::controllers::riccati_lqr::options::RiccatiLQROptions;
-use control_rs::controllers::{
-    ConstraintTransform, Controller, ControllerOptions, IndirectShooting, QPLQR,
-};
+use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions, QPLQR};
 use control_rs::cost::generic::{GenericCost, GenericCostOptions};
 use control_rs::physics::discretizer::ZOH;
 use control_rs::physics::models::{LtiInput, LtiModel, LtiState};
@@ -17,7 +15,6 @@ use std::io::{self, Write};
 
 #[derive(Debug, Clone)]
 enum LinearControllerType {
-    IndirectShootingLqr,
     QpLqr,
     QpLqrUlimits(f64, f64),
     RiccatiRecursionLQRFinite,
@@ -62,10 +59,6 @@ fn build_sim(controller_type: LinearControllerType) {
         .set_time_horizon(sim_time)
         .unwrap();
     let mut controller: LinearContoller = match controller_type {
-        LinearControllerType::IndirectShootingLqr => Box::new(
-            IndirectShooting::new_linear(sim, Box::new(cost.clone()), Some(general_options))
-                .unwrap(),
-        ),
         LinearControllerType::QpLqr => {
             let osqp_settings = Settings::default().verbose(false);
             let qp_options = QPOptions::default()
@@ -165,7 +158,6 @@ fn build_sim(controller_type: LinearControllerType) {
 
 fn main() {
     let controller_type = vec![
-        LinearControllerType::IndirectShootingLqr,
         LinearControllerType::QpLqr,
         LinearControllerType::QpLqrUlimits(-0.5, 0.5),
         LinearControllerType::RiccatiRecursionLQRFinite,
