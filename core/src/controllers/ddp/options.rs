@@ -1,3 +1,5 @@
+use osqp::Settings;
+
 use crate::controllers::ControllerOptions;
 use crate::physics::traits::PhysicsSim;
 
@@ -6,22 +8,25 @@ const DEFAULT_MAX_ITERS_LINESEARCH: usize = 20;
 const DEFAULT_TOL: f64 = 1e-3;
 pub struct DDPOptions<S: PhysicsSim> {
     pub general: ControllerOptions<S>,
-    pub ilqr_enable: bool,
+    pub ddp_enable: bool,
     pub max_iters: usize,
     pub max_iters_linesearch: usize,
     pub tol: f64,
     pub verbose: bool,
+    pub osqp_settings: Settings,
 }
 
 impl<S: PhysicsSim> Default for DDPOptions<S> {
     fn default() -> Self {
+        let osqp_settings = Settings::default().verbose(false);
         Self {
             general: ControllerOptions::<S>::default(),
-            ilqr_enable: false,
+            ddp_enable: false,
             max_iters: DEFAULT_MAX_ITERS,
             max_iters_linesearch: DEFAULT_MAX_ITERS_LINESEARCH,
             tol: DEFAULT_TOL,
             verbose: false,
+            osqp_settings,
         }
     }
 }
@@ -34,8 +39,8 @@ where
         &self.general
     }
 
-    pub fn get_ilqr_enable(&self) -> bool {
-        self.ilqr_enable
+    pub fn get_ddp_enable(&self) -> bool {
+        self.ddp_enable
     }
 
     pub fn get_max_iters(&self) -> usize {
@@ -54,15 +59,19 @@ where
         self.verbose
     }
 
+    pub fn get_osqp_settings(&self) -> Settings {
+        self.osqp_settings.clone()
+    }
+
     pub fn set_general(self, general: ControllerOptions<S>) -> Self {
         let mut new = self;
         new.general = general;
         new
     }
 
-    pub fn set_ilqr_enable(self, enable: bool) -> Self {
+    pub fn set_ddp_enable(self, enable: bool) -> Self {
         let mut new = self;
-        new.ilqr_enable = enable;
+        new.ddp_enable = enable;
         new
     }
 
@@ -87,6 +96,12 @@ where
     pub fn set_verbose(self, flag: bool) -> Self {
         let mut new = self;
         new.verbose = flag;
+        new
+    }
+
+    pub fn set_osqp_settings(self, settings: Settings) -> Self {
+        let mut new = self;
+        new.osqp_settings = settings;
         new
     }
 }

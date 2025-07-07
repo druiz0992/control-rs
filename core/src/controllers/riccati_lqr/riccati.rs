@@ -1,16 +1,14 @@
 use super::options::RiccatiLQROptions;
 use crate::controllers::riccati_lqr::recursion;
-use crate::controllers::utils::linearize;
 use crate::controllers::{
-    Controller, ControllerInput, ControllerState, CostFn, TrajectoryHistory, into_clamped_input,
-    try_into_noisy_state,
+    Controller, ControllerInput, ControllerState, CostFn, JacobianFns, TrajectoryHistory,
+    into_clamped_input, try_into_noisy_state,
 };
 use crate::physics::ModelError;
 use crate::physics::discretizer::{LinearDiscretizer, NumericDiscretizer, SymbolicDiscretizer};
 use crate::physics::models::Dynamics;
 use crate::physics::traits::{Discretizer, LinearDynamics, PhysicsSim, State, SymbolicDynamics};
 use crate::utils::Labelizable;
-use crate::utils::evaluable::EvaluableMatrixFn;
 use crate::utils::noise::NoiseSources;
 use general::helpers::get_or_first;
 use nalgebra::{DMatrix, DVector};
@@ -23,8 +21,7 @@ pub struct RiccatiRecursion<S: PhysicsSim> {
 
     n_steps: usize,
 
-    jacobian_u_fn: EvaluableMatrixFn,
-    jacobian_x_fn: EvaluableMatrixFn,
+    jacobian_fns: JacobianFns,
 
     options: RiccatiLQROptions<S>,
 }
@@ -42,7 +39,9 @@ where
     ) -> Result<Self, ModelError> {
         let jacobian_u_fn = sim.discretizer().jacobian_u()?;
         let jacobian_x_fn = sim.discretizer().jacobian_x()?;
-        RiccatiRecursion::from_parts(sim, cost_fn, jacobian_x_fn, jacobian_u_fn, options)
+
+        let jacobian_fns = JacobianFns::new(jacobian_x_fn, jacobian_u_fn);
+        RiccatiRecursion::from_parts(sim, cost_fn, jacobian_fns, options)
     }
 }
 
@@ -59,7 +58,10 @@ where
     ) -> Result<Self, ModelError> {
         let jacobian_u_fn = sim.discretizer().jacobian_u();
         let jacobian_x_fn = sim.discretizer().jacobian_x();
-        RiccatiRecursion::from_parts(sim, cost_fn, jacobian_x_fn, jacobian_u_fn, options)
+
+        let jacobian_fns = JacobianFns::new(jacobian_x_fn, jacobian_u_fn);
+
+        RiccatiRecursion::from_parts(sim, cost_fn, jacobian_fns, options)
     }
 }
 impl<S> RiccatiRecursion<S>
@@ -75,7 +77,10 @@ where
     ) -> Result<Self, ModelError> {
         let jacobian_u_fn = sim.discretizer().jacobian_u();
         let jacobian_x_fn = sim.discretizer().jacobian_x();
-        RiccatiRecursion::from_parts(sim, cost_fn, jacobian_x_fn, jacobian_u_fn, options)
+
+        let jacobian_fns = JacobianFns::new(jacobian_x_fn, jacobian_u_fn);
+
+        RiccatiRecursion::from_parts(sim, cost_fn, jacobian_fns, options)
     }
 }
 
@@ -88,8 +93,7 @@ where
     fn from_parts(
         sim: S,
         cost_fn: CostFn<S>,
-        jacobian_x_fn: EvaluableMatrixFn,
-        jacobian_u_fn: EvaluableMatrixFn,
+        jacobian_fns: JacobianFns,
         options: Option<RiccatiLQROptions<S>>,
     ) -> Result<Self, ModelError> {
         let options = options.unwrap_or_default();
@@ -104,8 +108,7 @@ where
             k_ss: DMatrix::default(),
             p_ss: DMatrix::default(),
             n_steps,
-            jacobian_x_fn,
-            jacobian_u_fn,
+            jacobian_fns,
         })
     }
 
@@ -175,13 +178,9 @@ where
         let n_steps = (self.options.get_general().get_time_horizon()
             / self.options.get_general().get_dt()) as usize
             + 1;
-        let (a_mat, b_mat) = linearize(
-            &self.sim,
-            &self.jacobian_x_fn,
-            &self.jacobian_u_fn,
-            n_steps,
-            self.options.get_general(),
-        )?;
+        let (a_mat, b_mat) =
+            self.jacobian_fns
+                .linearize_full(&self.sim, n_steps, self.options.get_general())?;
         let k_seq = self.compute_gain(&a_mat, &b_mat)?;
 
         let x_ref = self.options.general.get_x_ref();

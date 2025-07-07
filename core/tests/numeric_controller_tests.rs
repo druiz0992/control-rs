@@ -244,7 +244,7 @@ fn numeric_controller_setup(controller_type: ControllerType, tol: f64) {
                 .unwrap();
             let ilqr_options = DDPOptions::<Sim<Quadrotor2D>>::default()
                 .set_general(general_options)
-                .set_ilqr_enable(true);
+                .set_ddp_enable(false);
             let controller = DDP::new_numeric(sim, Box::new(cost.clone()), ilqr_options).unwrap();
             Box::new(controller)
         }
@@ -273,7 +273,8 @@ fn numeric_controller_setup(controller_type: ControllerType, tol: f64) {
                 .set_time_horizon(sim_time)
                 .unwrap();
             let ddp_options =
-                DDPOptions::<Sim<Quadrotor2D>>::default().set_general(general_options);
+                DDPOptions::<Sim<Quadrotor2D>>::default().set_general(general_options)
+                .set_ddp_enable(true);
             let controller = DDP::new_numeric(sim, Box::new(cost.clone()), ddp_options).unwrap();
             Box::new(controller)
         }

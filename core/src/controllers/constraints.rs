@@ -151,7 +151,7 @@ impl ConstraintTransform {
         (self.lb.as_slice(), self.ub.as_slice())
     }
 
-    fn expand_bounds(&self, n_steps: usize) -> (DVector<f64>, DVector<f64>) {
+    pub fn expand_bounds(&self, n_steps: usize) -> (DVector<f64>, DVector<f64>) {
         let one_v = DVector::from_column_slice(&vec![1.0; n_steps]);
         let lb = vector::kron(&one_v, &self.lb);
         let ub = vector::kron(&one_v, &self.ub);

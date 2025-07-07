@@ -1,16 +1,14 @@
 use super::options::QPOptions;
 use super::utils;
-use crate::controllers::utils::linearize;
 use crate::controllers::{
-    Controller, ControllerInput, ControllerOptions, ControllerState, CostFn, SteppableController,
-    TrajectoryHistory, UpdatableController,
+    Controller, ControllerInput, ControllerOptions, ControllerState, CostFn, JacobianFns,
+    SteppableController, TrajectoryHistory, UpdatableController,
 };
 use crate::physics::ModelError;
 use crate::physics::discretizer::{LinearDiscretizer, NumericDiscretizer, SymbolicDiscretizer};
 use crate::physics::models::Dynamics;
 use crate::physics::traits::{Discretizer, LinearDynamics, PhysicsSim, State, SymbolicDynamics};
 use crate::utils::Labelizable;
-use crate::utils::evaluable::EvaluableMatrixFn;
 use general::{helpers::get_or_first, matrix, vector};
 use nalgebra::{DMatrix, DVector};
 use solvers::osqp::builder::QPParams;
@@ -27,8 +25,7 @@ pub struct QPLQR<S: PhysicsSim> {
 
     state_mat: Vec<DMatrix<f64>>,
 
-    jacobian_x_fn: EvaluableMatrixFn,
-    jacobian_u_fn: EvaluableMatrixFn,
+    jacobian_fns: JacobianFns,
 
     cost_fn: CostFn<S>,
 
@@ -47,10 +44,12 @@ where
         x0: &ControllerState<S>,
         options: Option<QPOptions<S>>,
     ) -> Result<(Self, QPParams), ModelError> {
-        let jacobian_u = sim.discretizer().jacobian_u();
-        let jacobian_x = sim.discretizer().jacobian_x();
+        let jacobian_u_fn = sim.discretizer().jacobian_u();
+        let jacobian_x_fn = sim.discretizer().jacobian_x();
 
-        QPLQR::from_parts(sim, cost_fn, jacobian_x, jacobian_u, x0, options)
+        let jacobian_fns = JacobianFns::new(jacobian_x_fn, jacobian_u_fn);
+
+        QPLQR::from_parts(sim, cost_fn, jacobian_fns, x0, options)
     }
 }
 impl<S> QPLQR<S>
@@ -65,10 +64,12 @@ where
         x0: &ControllerState<S>,
         options: Option<QPOptions<S>>,
     ) -> Result<(Self, QPParams), ModelError> {
-        let jacobian_u = sim.discretizer().jacobian_u()?;
-        let jacobian_x = sim.discretizer().jacobian_x()?;
+        let jacobian_u_fn = sim.discretizer().jacobian_u()?;
+        let jacobian_x_fn = sim.discretizer().jacobian_x()?;
 
-        QPLQR::from_parts(sim, cost_fn, jacobian_x, jacobian_u, x0, options)
+        let jacobian_fns = JacobianFns::new(jacobian_x_fn, jacobian_u_fn);
+
+        QPLQR::from_parts(sim, cost_fn, jacobian_fns, x0, options)
     }
 }
 
@@ -84,10 +85,12 @@ where
         x0: &ControllerState<S>,
         options: Option<QPOptions<S>>,
     ) -> Result<(Self, QPParams), ModelError> {
-        let jacobian_u = sim.discretizer().jacobian_u();
-        let jacobian_x = sim.discretizer().jacobian_x();
+        let jacobian_u_fn = sim.discretizer().jacobian_u();
+        let jacobian_x_fn = sim.discretizer().jacobian_x();
 
-        QPLQR::from_parts(sim, cost_fn, jacobian_x, jacobian_u, x0, options)
+        let jacobian_fns = JacobianFns::new(jacobian_x_fn, jacobian_u_fn);
+
+        QPLQR::from_parts(sim, cost_fn, jacobian_fns, x0, options)
     }
 }
 
@@ -100,8 +103,7 @@ where
     fn from_parts(
         sim: S,
         cost_fn: CostFn<S>,
-        jacobian_x_fn: EvaluableMatrixFn,
-        jacobian_u_fn: EvaluableMatrixFn,
+        jacobian_fns: JacobianFns,
         x0: &ControllerState<S>,
         options: Option<QPOptions<S>>,
     ) -> Result<(Self, QPParams), ModelError> {
@@ -110,13 +112,8 @@ where
             as usize
             + 1;
 
-        let (state_mat, control_mat) = linearize(
-            &sim,
-            &jacobian_x_fn,
-            &jacobian_u_fn,
-            n_steps,
-            options.get_general(),
-        )?;
+        let (state_mat, control_mat) =
+            jacobian_fns.linearize_full(&sim, n_steps, options.get_general())?;
 
         let state_dim = ControllerState::<S>::dim_q() + ControllerState::<S>::dim_v();
         let input_dim = ControllerInput::<S>::dim_q();
@@ -169,8 +166,7 @@ where
                 u_ref,
                 state_mat, // A
                 cost_fn,   // can get Q, Qn, R
-                jacobian_u_fn,
-                jacobian_x_fn,
+                jacobian_fns,
                 options,
             },
             updatable_qp_params,
@@ -236,13 +232,9 @@ where
         a_mat: &mut DMatrix<f64>,
         general_params: &ControllerOptions<S>,
     ) -> Result<(), ModelError> {
-        let (state_mat, control_mat) = linearize(
-            &self.sim,
-            &self.jacobian_x_fn,
-            &self.jacobian_u_fn,
-            self.n_steps,
-            general_params,
-        )?;
+        let (state_mat, control_mat) =
+            self.jacobian_fns
+                .linearize_full(&self.sim, self.n_steps, general_params)?;
         let c = utils::build_c(&state_mat, &control_mat, self.n_steps - 1);
         a_mat.view_mut((0, 0), (c.nrows(), c.ncols())).copy_from(&c);
         Ok(())

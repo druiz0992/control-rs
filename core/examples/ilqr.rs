@@ -1,7 +1,7 @@
 use control_rs::animation::{Animation, macroquad::Macroquad};
 use control_rs::controllers::ddp::DDPOptions;
 use control_rs::controllers::ddp::controller::DDP;
-use control_rs::controllers::{Controller, ControllerOptions};
+use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions};
 use control_rs::cost::GenericCostOptions;
 use control_rs::cost::generic::GenericCost;
 use control_rs::physics::constants as c;
@@ -20,6 +20,7 @@ use symbolic_services::symbolic::ExprRegistry;
 enum ControllerType {
     Ilqr,
     Ddp,
+    IlqrULimits(f64, f64),
 }
 
 // Example iterates over all implemented linear controllers
@@ -91,15 +92,29 @@ async fn build_sim(controller_type: ControllerType) {
         ControllerType::Ilqr => {
             let ilqr_options = DDPOptions::<Sim<Quadrotor2D>>::default()
                 .set_general(general_options)
-                .set_verbose(true).set_ilqr_enable(true);
+                .set_verbose(true)
+                .set_ddp_enable(false);
             let controller = DDP::new_numeric(sim, Box::new(cost.clone()), ilqr_options).unwrap();
             Box::new(controller)
         }
         ControllerType::Ddp => {
             let ddp_options = DDPOptions::<Sim<Quadrotor2D>>::default()
                 .set_general(general_options)
-                .set_verbose(true);
+                .set_verbose(true)
+                .set_ddp_enable(true);
             let controller = DDP::new_numeric(sim, Box::new(cost.clone()), ddp_options).unwrap();
+            Box::new(controller)
+        }
+        ControllerType::IlqrULimits(lower_u, upper_u) => {
+            let input_constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>(
+                (lower_u, upper_u),
+            );
+            let general_options = general_options.set_u_limits(input_constraints);
+            let ilqr_options = DDPOptions::<Sim<Quadrotor2D>>::default()
+                .set_general(general_options)
+                .set_verbose(true)
+                .set_ddp_enable(false);
+            let controller = DDP::new_numeric(sim, Box::new(cost.clone()), ilqr_options).unwrap();
             Box::new(controller)
         }
     };
@@ -123,9 +138,13 @@ async fn build_sim(controller_type: ControllerType) {
 
 #[macroquad::main("Physics Quadrotor")]
 async fn main() {
-    let m = 1.0;
-    let u_limits = (0.2 * m * c::GRAVITY, 0.6 * m * c::GRAVITY);
-    let controller_type = vec![ControllerType::Ilqr, ControllerType::Ddp];
+    let u_limits = (-8.0, 8.0);
+    let controller_type = vec![
+        ControllerType::Ddp,
+        ControllerType::Ilqr,
+        ControllerType::IlqrULimits(u_limits.0, u_limits.1),
+    ];
+    //let controller_type = vec![ControllerType::Ddp];
     env_logger::init();
 
     for controller in controller_type {

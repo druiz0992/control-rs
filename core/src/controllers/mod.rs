@@ -1,5 +1,7 @@
 pub mod constraints;
 pub mod ddp;
+pub mod hessians;
+pub mod jacobians;
 pub mod options;
 pub mod qp_lqr;
 pub mod qp_mpc;
@@ -8,6 +10,8 @@ pub mod trajectory;
 pub mod utils;
 
 pub use constraints::ConstraintTransform;
+pub use hessians::HessianFns;
+pub use jacobians::JacobianFns;
 use nalgebra::{DMatrix, DVector};
 pub use options::ControllerOptions;
 pub use qp_lqr::lqr::QPLQR;

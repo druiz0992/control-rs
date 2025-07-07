@@ -1,5 +1,7 @@
 use nalgebra::{DMatrix, DVector};
 
+const LAMBDA_REG_COEFF: f64 = 1.0;
+
 /// Constructs a block diagonal matrix from a slice of matrices.
 ///
 /// - **Parameters**:
@@ -249,6 +251,21 @@ pub fn apply_commutation(n: usize, m: usize, vec: &DVector<f64>) -> DVector<f64>
 
     let a_t = a.transpose();
     DVector::from_column_slice(a_t.as_slice())
+}
+
+pub fn invert(q: DMatrix<f64>) -> DMatrix<f64> {
+    let eig = q.symmetric_eigen();
+    let mut evals = eig.eigenvalues;
+
+    for i in 0..evals.len() {
+        if evals[i] < 0.0 {
+            evals[i] = 0.0;
+        }
+        evals[i] += LAMBDA_REG_COEFF;
+    }
+
+    let inv_evals = evals.map(|x| 1.0 / x);
+    &eig.eigenvectors * DMatrix::from_diagonal(&inv_evals) * eig.eigenvectors.transpose()
 }
 
 #[cfg(test)]
