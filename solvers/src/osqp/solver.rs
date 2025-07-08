@@ -56,6 +56,16 @@ impl OSQPSolverHandle {
         let mut h = self.solver.lock().unwrap();
         h.problem.update_bounds(l, u);
     }
+
+    pub fn warm_start_primal(&self, primal: &[f64]) {
+        let mut h = self.solver.lock().unwrap();
+        h.problem.warm_start_x(primal);
+    }
+
+    pub fn warm_start_dual(&self, dual: &[f64]) {
+        let mut h = self.solver.lock().unwrap();
+        h.problem.warm_start_y(dual);
+    }
 }
 
 impl OSQPSolver {
@@ -84,7 +94,7 @@ fn status_to_result(status: Status, n_eq: usize) -> Result<SolverResult, SolverE
             let primal = solution.x().to_vec();
             let lm = solution.y().to_vec();
             let lm_mus = LagrangianMultiplier::Mus(lm[..n_eq].to_vec());
-            let lm_lambdas = LagrangianMultiplier::Mus(lm[n_eq..].to_vec());
+            let lm_lambdas = LagrangianMultiplier::Lambdas(lm[n_eq..].to_vec());
 
             let kkt_conditions = KktConditionsStatus {
                 stationarity: 0.0,

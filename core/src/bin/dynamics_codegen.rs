@@ -23,6 +23,8 @@ fn build_rk4_double_pendulum() {
 
     integrator.to_numeric_jacobian_x().unwrap();
     integrator.to_numeric_jacobian_u().unwrap();
+    integrator.to_numeric_da().unwrap();
+    integrator.to_numeric_db().unwrap();
 }
 
 fn build_rk4_cart_pole() {
@@ -42,6 +44,8 @@ fn build_rk4_cart_pole() {
 
     integrator.to_numeric_jacobian_x().unwrap();
     integrator.to_numeric_jacobian_u().unwrap();
+    integrator.to_numeric_da().unwrap();
+    integrator.to_numeric_db().unwrap();
 }
 
 fn build_rk4_quadrotor_2d() {
@@ -54,6 +58,8 @@ fn build_rk4_quadrotor_2d() {
 
     integrator.to_numeric_jacobian_x().unwrap();
     integrator.to_numeric_jacobian_u().unwrap();
+    integrator.to_numeric_da().unwrap();
+    integrator.to_numeric_db().unwrap();
 }
 
 fn clean_ffi_codegen() {
@@ -91,17 +97,16 @@ fn main() {
         println!("Available models: double_pendulum, cart_pole, quadrotor_2d");
         return;
     }
-
-    if args.is_empty() || args.contains(&"double_pendulum".to_string()) {
-        build_rk4_double_pendulum();
+    if args.is_empty() || args.contains(&"quadrotor_2d".to_string()) {
+        build_rk4_quadrotor_2d();
     }
 
     if args.is_empty() || args.contains(&"cart_pole".to_string()) {
         build_rk4_cart_pole();
     }
 
-    if args.is_empty() || args.contains(&"quadrotor_2d".to_string()) {
-        build_rk4_quadrotor_2d();
+    if args.is_empty() || args.contains(&"double_pendulum".to_string()) {
+        build_rk4_double_pendulum();
     }
 
     clean_ffi_codegen();

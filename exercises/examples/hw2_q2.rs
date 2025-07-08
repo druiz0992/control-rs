@@ -4,7 +4,7 @@ use control_rs::controllers::qp_lqr::{QPLQR, QPOptions};
 use control_rs::controllers::qp_mpc::{ConvexMpc, ConvexMpcOptions};
 use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursion};
 use control_rs::controllers::utils::clamp_input_vector;
-use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions};
+use control_rs::controllers::{ConstraintAffine, Controller, ControllerOptions};
 use control_rs::cost::GenericCost;
 use control_rs::physics::discretizer::{RK4Numeric, RK4Symbolic};
 use control_rs::physics::models::{CartPole, CartPoleInput, CartPoleState};
@@ -32,7 +32,7 @@ async fn generate_reference_traj(
     let desired_energy = Energy::new(0.0, 0.2 * c::GRAVITY * 0.5);
     let u_limits = (-14.0, 14.0);
     let constraints =
-        ConstraintTransform::new_uniform_bounds_input::<Sim>((u_limits.0, u_limits.1));
+        ConstraintAffine::new_uniform_bounds_input::<Sim>((u_limits.0, u_limits.1));
     let mut traj_options = TrajOptions::new()
         .set_u_limits(constraints)
         .set_tf(21.0)
@@ -151,7 +151,7 @@ fn convex_trajopt(
     // sim
     let df_du = Arc::new(ffi_codegen::rk4::cartpole::rk4_cartpole_jacobian_u);
     let df_dx = Arc::new(ffi_codegen::rk4::cartpole::rk4_cartpole_jacobian_x);
-    let integrator = RK4Numeric::new(model, df_dx, df_du).unwrap();
+    let integrator = RK4Numeric::new(model, df_dx, df_du, None).unwrap();
     let sim = BasicSim::new(model.clone(), integrator);
     registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
 
@@ -196,7 +196,8 @@ fn convex_mpc(
     // sim
     let df_du = Arc::new(ffi_codegen::rk4::cartpole::rk4_cartpole_jacobian_u);
     let df_dx = Arc::new(ffi_codegen::rk4::cartpole::rk4_cartpole_jacobian_x);
-    let integrator = RK4Numeric::new(model, df_dx, df_du).unwrap();
+    let integrator =
+        RK4Numeric::new(model, df_dx, df_du, None).unwrap();
     let sim = BasicSim::new(model.clone(), integrator);
     registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
 
@@ -242,7 +243,7 @@ fn fhlqr(
     // sim
     let df_du = Arc::new(ffi_codegen::rk4::cartpole::rk4_cartpole_jacobian_u);
     let df_dx = Arc::new(ffi_codegen::rk4::cartpole::rk4_cartpole_jacobian_x);
-    let integrator = RK4Numeric::new(model, df_dx, df_du).unwrap();
+    let integrator = RK4Numeric::new(model, df_dx, df_du, None).unwrap();
     let sim = BasicSim::new(model.clone(), integrator);
     registry.insert_var(c::TIME_DELTA_SYMBOLIC, dt);
 
@@ -434,7 +435,7 @@ async fn main() {
 
     let u_limits = (-3.0, 3.0);
     let constraints =
-        ConstraintTransform::new_uniform_bounds_input::<Sim>((u_limits.0, u_limits.1));
+        ConstraintAffine::new_uniform_bounds_input::<Sim>((u_limits.0, u_limits.1));
 
     let traj_options = TrajOptions::new()
         .set_finite_horizon(false)

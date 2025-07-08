@@ -8,6 +8,10 @@ pub struct RK4Numeric<D: Dynamics> {
     rk4: RK4<D>,
     df_dx: NumericFunction,
     df_du: NumericFunction,
+    d2f_dxx: Option<NumericFunction>,
+    d2f_dxu: Option<NumericFunction>,
+    d2f_dux: Option<NumericFunction>,
+    d2f_duu: Option<NumericFunction>,
 }
 
 impl<D: Dynamics> RK4Numeric<D> {
@@ -15,13 +19,36 @@ impl<D: Dynamics> RK4Numeric<D> {
         model: &D,
         df_dx: NumericFunction,
         df_du: NumericFunction,
+        d2f: Option<(
+            NumericFunction,
+            NumericFunction,
+            NumericFunction,
+            NumericFunction,
+        )>,
     ) -> Result<Self, ModelError> {
         let (_, v_dims) = model.state_dims();
         if v_dims > 0 {
             return Err(ModelError::Unexpected("Insuported Discretizer".into()));
         }
         let rk4 = RK4::new(model)?;
-        Ok(Self { rk4, df_du, df_dx })
+        let (d2f_dxx, d2f_dxu, d2f_dux, d2f_duu) = match d2f {
+            Some((dxx, dxu, dux, duu)) => (
+                Some(dxx),
+                Some(dxu),
+                Some(dux),
+                Some(duu),
+            ),
+            None => (None, None, None, None),
+        };
+        Ok(Self {
+            rk4,
+            df_du,
+            df_dx,
+            d2f_dxx,
+            d2f_dxu,
+            d2f_dux,
+            d2f_duu,
+        })
     }
 }
 
@@ -44,5 +71,29 @@ impl<D: Dynamics> NumericDiscretizer<D> for RK4Numeric<D> {
 
     fn jacobian_x(&self) -> EvaluableMatrixFn {
         Box::new(Arc::clone(&self.df_dx))
+    }
+
+    fn hessian_uu(&self) -> Option<EvaluableMatrixFn> {
+        self.d2f_duu
+            .as_ref()
+            .map(|arc| Box::new(Arc::clone(arc)) as EvaluableMatrixFn)
+    }
+
+    fn hessian_ux(&self) -> Option<EvaluableMatrixFn> {
+        self.d2f_dux
+            .as_ref()
+            .map(|arc| Box::new(Arc::clone(arc)) as EvaluableMatrixFn)
+    }
+
+    fn hessian_xu(&self) -> Option<EvaluableMatrixFn> {
+        self.d2f_dxu
+            .as_ref()
+            .map(|arc| Box::new(Arc::clone(arc)) as EvaluableMatrixFn)
+    }
+
+    fn hessian_xx(&self) -> Option<EvaluableMatrixFn> {
+        self.d2f_dxx
+            .as_ref()
+            .map(|arc| Box::new(Arc::clone(arc)) as EvaluableMatrixFn)
     }
 }

@@ -209,7 +209,7 @@ mod tests {
             registry.insert_var("air_resistance_coeff", air_resistance_coeff);
             registry.insert_var("u1", u1);
 
-            let cart_pole = CartPole::new(pole_mass, cart_mass, friction_coeff, air_resistance_coeff, l, Some(&registry));
+            let cart_pole = CartPole::new(pole_mass, cart_mass, l, friction_coeff, air_resistance_coeff, Some(&registry));
 
             let state = CartPoleState::new(pos_x, v_x, theta, omega);
             let input = CartPoleInput::new(u1);

@@ -9,6 +9,7 @@ pub struct CodegenRequest {
     pub func_name: String,
     pub out_dir: String,
     pub mod_name: String,
+    pub parallel: bool,
 }
 
 impl CodegenRequest {
@@ -18,6 +19,7 @@ impl CodegenRequest {
         func_name: &str,
         out_dir: &str,
         mod_name: &str,
+        parallel: bool,
     ) -> Self {
         Self {
             expr,
@@ -25,6 +27,7 @@ impl CodegenRequest {
             func_name: func_name.into(),
             out_dir: out_dir.into(),
             mod_name: mod_name.into(),
+            parallel,
         }
     }
 }

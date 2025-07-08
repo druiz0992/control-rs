@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::physics::discretizer::utils::{extend_vals, extend_vars};
 use crate::physics::discretizer::{CodeGenerator, SymbolicDiscretizer};
 use crate::physics::models::state::SymbolicResult;
-use crate::physics::traits::{Discretizer};
+use crate::physics::traits::Discretizer;
 use crate::physics::{ModelError, constants as c, traits::SymbolicDynamics};
 use crate::utils::evaluable::EvaluableMatrixFn;
 use crate::utils::{Identifiable, Labelizable};
@@ -123,8 +123,10 @@ impl<D: SymbolicDynamics + Labelizable + Identifiable> CodeGenerator<D> for RK4S
         let mod_name = &format!("rk4/{}", D::name());
         let func_name = &format!("rk4_{}_jacobian_x", D::name());
 
+        println!("Computing df_dx...");
         let jacobian_x_expr = self.dynamics.jacobian(&state_symbol)?;
-        jacobian_x_expr.rustify(&jacobian_symbols, func_name, mod_name)?;
+        println!("Rustifying df_dx...");
+        jacobian_x_expr.rustify(&jacobian_symbols, func_name, mod_name, true)?;
 
         Ok(())
     }
@@ -140,8 +142,57 @@ impl<D: SymbolicDynamics + Labelizable + Identifiable> CodeGenerator<D> for RK4S
         let mod_name = &format!("rk4/{}", D::name());
         let func_name = &format!("rk4_{}_jacobian_u", D::name());
 
+        println!("Computing df_du...");
         let jacobian_u_expr = self.dynamics.jacobian(&input_symbol)?;
-        jacobian_u_expr.rustify(&jacobian_symbols, func_name, mod_name)?;
+        println!("Rustifying df_du...");
+        jacobian_u_expr.rustify(&jacobian_symbols, func_name, mod_name, true)?;
+
+        Ok(())
+    }
+
+    fn to_numeric_da(&self) -> Result<(), ModelError> {
+        let params = ExprVector::new(D::labels());
+        let state_symbol = self.registry.get_vector(c::STATE_SYMBOLIC).unwrap();
+        let input_symbol = self.registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
+        let jacobian_symbols = state_symbol
+            .extend(&input_symbol)
+            .extend(&params)
+            .extend(&ExprVector::new(&[c::TIME_DELTA_SYMBOLIC]));
+        let mod_name = &format!("rk4/{}", D::name());
+        let d2f_dxx = &format!("rk4_{}_d2f_dxx", D::name());
+        let d2f_dxu = &format!("rk4_{}_d2f_dxu", D::name());
+
+        println!("Computing d2f_dxx and d2f_dxu...");
+        let db = self
+            .dynamics
+            .hessian(&state_symbol, &[state_symbol.clone(), input_symbol])?;
+        println!("Rustifying d2f_dxx...");
+        db[0].rustify(&jacobian_symbols, d2f_dxx, mod_name, true)?;
+        println!("Rustifying d2f_dxu...");
+        db[1].rustify(&jacobian_symbols, d2f_dxu, mod_name, true)?;
+
+        Ok(())
+    }
+    fn to_numeric_db(&self) -> Result<(), ModelError> {
+        let params = ExprVector::new(D::labels());
+        let state_symbol = self.registry.get_vector(c::STATE_SYMBOLIC).unwrap();
+        let input_symbol = self.registry.get_vector(c::INPUT_SYMBOLIC).unwrap();
+        let jacobian_symbols = state_symbol
+            .extend(&input_symbol)
+            .extend(&params)
+            .extend(&ExprVector::new(&[c::TIME_DELTA_SYMBOLIC]));
+        let mod_name = &format!("rk4/{}", D::name());
+        let d2f_dux = &format!("rk4_{}_d2f_dux", D::name());
+        let d2f_duu = &format!("rk4_{}_d2f_duu", D::name());
+
+        println!("Computing d2f_duu and d2f_dux...");
+        let db = self
+            .dynamics
+            .hessian(&input_symbol, &[input_symbol.clone(), state_symbol])?;
+        println!("Rustifying d2f_duu...");
+        db[0].rustify(&jacobian_symbols, d2f_duu, mod_name, true)?;
+        println!("Rustifying d2f_dux...");
+        db[1].rustify(&jacobian_symbols, d2f_dux, mod_name, true)?;
 
         Ok(())
     }

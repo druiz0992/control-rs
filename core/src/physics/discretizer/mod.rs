@@ -42,10 +42,24 @@ pub trait LinearDiscretizer<D: LinearDynamics>: Discretizer<D> {
 pub trait NumericDiscretizer<D: Dynamics>: Discretizer<D> {
     fn jacobian_x(&self) -> EvaluableMatrixFn;
     fn jacobian_u(&self) -> EvaluableMatrixFn;
+    fn hessian_xx(&self) -> Option<EvaluableMatrixFn> {
+        None
+    }
+    fn hessian_xu(&self) -> Option<EvaluableMatrixFn> {
+        None
+    }
+    fn hessian_ux(&self) -> Option<EvaluableMatrixFn> {
+        None
+    }
+    fn hessian_uu(&self) -> Option<EvaluableMatrixFn> {
+        None
+    }
 }
 
 /// Generation of code that converts Discretizer symbolic expression into numeric function
 pub trait CodeGenerator<D: SymbolicDynamics>: SymbolicDiscretizer<D> {
     fn to_numeric_jacobian_x(&self) -> Result<(), ModelError>;
     fn to_numeric_jacobian_u(&self) -> Result<(), ModelError>;
+    fn to_numeric_da(&self) -> Result<(), ModelError>;
+    fn to_numeric_db(&self) -> Result<(), ModelError>;
 }

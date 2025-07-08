@@ -17,14 +17,14 @@ pub type QpConstraints = (DVector<f64>, DMatrix<f64>, DVector<f64>);
 /// and expanded bounds for multiple steps.
 
 #[derive(Clone, Debug)]
-pub struct ConstraintTransform {
+pub struct ConstraintAffine {
     lb: DVector<f64>,
     ub: DVector<f64>,
     transform: DMatrix<f64>,
 }
 
-impl ConstraintTransform {
-    /// Creates a new `ConstraintTransform` for input dimensions with specified bounds and transformation matrix.
+impl ConstraintAffine {
+    /// Creates a new `ConstraintAffine` for input dimensions with specified bounds and transformation matrix.
     pub fn new_bounds_input<S: PhysicsSim>(
         lb: LowerBoundVector,
         ub: UpperBoundVector,
@@ -39,12 +39,12 @@ impl ConstraintTransform {
         }
         Self::new_bounds(lb, ub, transform)
     }
-    /// Creates a new `ConstraintTransform` for input dimensions with uniform bounds.
+    /// Creates a new `ConstraintAffine` for input dimensions with uniform bounds.
     pub fn new_uniform_bounds_input<S: PhysicsSim>(limit: ConstraintBound) -> Self {
         let input_dim = ControllerInput::<S>::dim_q();
         Self::new_uniform_bounds(limit, input_dim)
     }
-    /// Creates a new `ConstraintTransform` for state dimensions with uniform bounds.
+    /// Creates a new `ConstraintAffine` for state dimensions with uniform bounds.
     pub fn new_uniform_bounds_state<S: PhysicsSim>(limit: ConstraintBound) -> Self {
         let state_dim = ControllerState::<S>::dim_q() + ControllerState::<S>::dim_v();
         Self::new_uniform_bounds(limit, state_dim)
@@ -84,7 +84,7 @@ impl ConstraintTransform {
         Self::new_bounds(lb, ub, transform)
     }
 
-    /// Creates a new `ConstraintTransform` for input dimensions with element-wise bounds.
+    /// Creates a new `ConstraintAffine` for input dimensions with element-wise bounds.
     pub fn new_elementwise_bounds_input<S: PhysicsSim>(
         lb: LowerBoundVector,
         ub: UpperBoundVector,
@@ -99,7 +99,7 @@ impl ConstraintTransform {
         Self::new_elementwise_bounds(lb, ub)
     }
 
-    /// Creates a new `ConstraintTransform` for state dimensions with element-wise bounds.
+    /// Creates a new `ConstraintAffine` for state dimensions with element-wise bounds.
     pub fn new_elementwise_bounds_state<S: PhysicsSim>(
         lb: LowerBoundVector,
         ub: UpperBoundVector,
@@ -151,7 +151,7 @@ impl ConstraintTransform {
         (self.lb.as_slice(), self.ub.as_slice())
     }
 
-    fn expand_bounds(&self, n_steps: usize) -> (DVector<f64>, DVector<f64>) {
+    pub fn expand_bounds(&self, n_steps: usize) -> (DVector<f64>, DVector<f64>) {
         let one_v = DVector::from_column_slice(&vec![1.0; n_steps]);
         let lb = vector::kron(&one_v, &self.lb);
         let ub = vector::kron(&one_v, &self.ub);
@@ -204,7 +204,7 @@ mod tests {
     fn test_new_uniform_bounds_input() {
         let limit = (0.0, 1.0);
 
-        let transform = ConstraintTransform::new_uniform_bounds_input::<MockPhysicsSim>(limit);
+        let transform = ConstraintAffine::new_uniform_bounds_input::<MockPhysicsSim>(limit);
 
         assert_eq!(
             transform.lb.len(),
@@ -221,7 +221,7 @@ mod tests {
     #[test]
     fn test_new_uniform_bounds_state() {
         let limit = (-1.0, 1.0);
-        let transform = ConstraintTransform::new_uniform_bounds_state::<MockPhysicsSim>(limit);
+        let transform = ConstraintAffine::new_uniform_bounds_state::<MockPhysicsSim>(limit);
 
         let expected_dim =
             ControllerState::<MockPhysicsSim>::dim_q() + ControllerState::<MockPhysicsSim>::dim_v();
@@ -236,7 +236,7 @@ mod tests {
         let lb = DVector::from_column_slice(&[0.0, 0.1]);
         let ub = DVector::from_column_slice(&[1.0, 1.1]);
 
-        let transform = ConstraintTransform::new_elementwise_bounds_input::<MockPhysicsSim>(
+        let transform = ConstraintAffine::new_elementwise_bounds_input::<MockPhysicsSim>(
             lb.clone(),
             ub.clone(),
         )
@@ -251,7 +251,7 @@ mod tests {
         let lb = DVector::from_column_slice(&[-1.0, -0.5, 0.0, 0.5, 0.3, -3.2]);
         let ub = DVector::from_column_slice(&[1.0, 1.5, 2.0, 2.5, 2.1, 3.1]);
 
-        let transform = ConstraintTransform::new_elementwise_bounds_state::<MockPhysicsSim>(
+        let transform = ConstraintAffine::new_elementwise_bounds_state::<MockPhysicsSim>(
             lb.clone(),
             ub.clone(),
         )
@@ -265,7 +265,7 @@ mod tests {
     fn test_expand_bounds() {
         let lb = DVector::from_column_slice(&[0.0, 0.1]);
         let ub = DVector::from_column_slice(&[1.0, 1.1]);
-        let transform = ConstraintTransform {
+        let transform = ConstraintAffine {
             lb: lb.clone(),
             ub: ub.clone(),
             transform: DMatrix::identity(2, 2),
@@ -282,7 +282,7 @@ mod tests {
     fn test_expand_input() {
         let lb = DVector::from_column_slice(&[0.0, 0.1]);
         let ub = DVector::from_column_slice(&[1.0, 1.1]);
-        let transform = ConstraintTransform {
+        let transform = ConstraintAffine {
             lb: lb.clone(),
             ub: ub.clone(),
             transform: DMatrix::identity(2, 2),
@@ -301,7 +301,7 @@ mod tests {
     fn test_expand_state() {
         let lb = DVector::from_column_slice(&[0.0, 0.1, 0.2, 0.1, 1.0, -2.1]);
         let ub = DVector::from_column_slice(&[1.0, 1.1, 1.2, 0.0, 1.0, 0.1]);
-        let transform = ConstraintTransform {
+        let transform = ConstraintAffine {
             lb: lb.clone(),
             ub: ub.clone(),
             transform: DMatrix::identity(6, 6),
@@ -322,7 +322,7 @@ mod tests {
         let idx = 1;
 
         let transform =
-            ConstraintTransform::new_single_bound_input::<MockPhysicsSim>(limit, idx).unwrap();
+            ConstraintAffine::new_single_bound_input::<MockPhysicsSim>(limit, idx).unwrap();
 
         let input_dim = ControllerInput::<MockPhysicsSim>::dim_q();
         assert_eq!(transform.lb.len(), 1);
@@ -345,7 +345,7 @@ mod tests {
         let idx = 2;
 
         let transform =
-            ConstraintTransform::new_single_bound_state::<MockPhysicsSim>(limit, idx).unwrap();
+            ConstraintAffine::new_single_bound_state::<MockPhysicsSim>(limit, idx).unwrap();
 
         let state_dim =
             ControllerState::<MockPhysicsSim>::dim_q() + ControllerState::<MockPhysicsSim>::dim_v();

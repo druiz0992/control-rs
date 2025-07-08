@@ -1,4 +1,4 @@
-use control_rs::{controllers::ConstraintTransform, physics::traits::State};
+use control_rs::{controllers::ConstraintAffine, physics::traits::State};
 use nalgebra::DMatrix;
 
 const DEFAULT_QF_FACTOR: f64 = 5.0;
@@ -24,7 +24,7 @@ pub struct TrajOptions<S, I> {
     pub finite_horizon_flag: bool,
     pub mpc_horizon: f64,
     pub estimated_parameters: Option<Vec<f64>>,
-    pub u_limits: Option<ConstraintTransform>,
+    pub u_limits: Option<ConstraintAffine>,
 }
 
 impl<S: Default + Clone + State, I: Default + Clone + State> TrajOptions<S, I> {
@@ -91,7 +91,7 @@ impl<S: Default + Clone + State, I: Default + Clone + State> TrajOptions<S, I> {
         new.estimated_parameters = Some(params);
         new
     }
-    pub fn set_u_limits(self, constraints: ConstraintTransform) -> Self {
+    pub fn set_u_limits(self, constraints: ConstraintAffine) -> Self {
         let mut new = self;
         new.u_limits = Some(constraints);
         new

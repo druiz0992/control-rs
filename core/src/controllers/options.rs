@@ -1,4 +1,4 @@
-use super::ConstraintTransform;
+use super::ConstraintAffine;
 use crate::controllers::{ControllerInput, ControllerState};
 use crate::physics::ModelError;
 use crate::physics::traits::PhysicsSim;
@@ -38,8 +38,8 @@ pub struct ControllerOptions<S: PhysicsSim> {
 
     /// closed loop options
     noise: Option<Vec<f64>>,
-    u_limits: Option<ConstraintTransform>,
-    x_limits: Option<ConstraintTransform>,
+    u_limits: Option<ConstraintAffine>,
+    x_limits: Option<ConstraintAffine>,
 }
 
 impl<S: PhysicsSim> Clone for ControllerOptions<S> {
@@ -106,10 +106,10 @@ where
         self.noise.clone()
     }
 
-    pub fn get_u_limits(&self) -> Option<&ConstraintTransform> {
+    pub fn get_u_limits(&self) -> Option<&ConstraintAffine> {
         self.u_limits.as_ref()
     }
-    pub fn get_x_limits(&self) -> Option<&ConstraintTransform> {
+    pub fn get_x_limits(&self) -> Option<&ConstraintAffine> {
         self.x_limits.as_ref()
     }
     pub fn get_dt(&self) -> f64 {
@@ -163,13 +163,13 @@ where
         new
     }
 
-    pub fn set_u_limits(self, u_limits: ConstraintTransform) -> Self {
+    pub fn set_u_limits(self, u_limits: ConstraintAffine) -> Self {
         let mut new = self;
         new.u_limits = Some(u_limits);
         new
     }
 
-    pub fn set_x_limits(self, x_limits: ConstraintTransform) -> Self {
+    pub fn set_x_limits(self, x_limits: ConstraintAffine) -> Self {
         let mut new = self;
         new.x_limits = Some(x_limits);
         new

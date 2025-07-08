@@ -4,7 +4,7 @@ use std::io::{self, BufReader, Write};
 use control_rs::controllers::qp_lqr::QPOptions;
 use control_rs::controllers::qp_mpc::{ConvexMpc, ConvexMpcOptions};
 use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursion};
-use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions, QPLQR};
+use control_rs::controllers::{ConstraintAffine, Controller, ControllerOptions, QPLQR};
 use control_rs::cost::GenericCost;
 use control_rs::physics::discretizer::{RK4, ZOH};
 use control_rs::physics::models::{LtiInput, LtiModel, LtiState};
@@ -266,7 +266,7 @@ fn main() {
     let x_ref =
         load_traj::<SpaceXDragonState>("./exercises/examples/data/spacex_x_traj1.dat").unwrap();
 
-    let constraints = ConstraintTransform::new_uniform_bounds_input::<Sim>(u_limits);
+    let constraints = ConstraintAffine::new_uniform_bounds_input::<Sim>(u_limits);
     let traj_options = TrajOptions::new()
         .set_plot_flag(true)
         .set_tf(tf)

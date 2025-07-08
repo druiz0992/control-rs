@@ -270,6 +270,20 @@ impl ExprVector {
         }
     }
 
+    pub fn hessian(
+        &self,
+        vars1: &ExprVector,
+        vars2: &[ExprVector],
+    ) -> Result<Vec<ExprMatrix>, SymbolicError> {
+        let mut hessians = Vec::with_capacity(vars2.len());
+        let jacobian = self.jacobian(vars1)?;
+        let vec_jacobian = jacobian.vectorize();
+        for vars in vars2 {
+            hessians.push(vec_jacobian.jacobian(vars)?);
+        }
+        Ok(hessians)
+    }
+
     pub fn build_next(&self) -> Self {
         ExprVector::from_string(
             &self

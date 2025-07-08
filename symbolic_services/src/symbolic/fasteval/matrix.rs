@@ -249,6 +249,16 @@ impl ExprMatrix {
         }
     }
 
+    pub fn vectorize(&self) -> ExprVector {
+        let (rows, cols) = self.n_dims();
+        let mut vec = Vec::with_capacity(rows * cols);
+        for col in 0..cols {
+            for row in 0..rows {
+                vec.push(self.matrix[row][col].clone());
+            }
+        }
+        ExprVector::from_vec(vec)
+    }
     /// Builds the Karush-Kuhn-Tucker (KKT) Jacobian matrix from the Lagrangian Hessian
     /// and the equality constraint Jacobian. This matrix is used in optimization problems
     /// to solve systems of equations that arise in constrained optimization.
@@ -368,6 +378,7 @@ impl ExprMatrix {
         vars: &ExprVector,
         func_name: &str,
         mod_name: &str,
+        parallel_flag: bool,
     ) -> Result<(), SymbolicError> {
         let req = CodegenRequest::new(
             ExprRecord::Matrix(self.clone()),
@@ -375,6 +386,7 @@ impl ExprMatrix {
             func_name,
             CODEGEN_OUT_DIR,
             mod_name,
+            parallel_flag,
         );
 
         PythonClient::new()
