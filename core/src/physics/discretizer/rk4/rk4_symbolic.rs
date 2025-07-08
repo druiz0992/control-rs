@@ -126,7 +126,7 @@ impl<D: SymbolicDynamics + Labelizable + Identifiable> CodeGenerator<D> for RK4S
         println!("Computing df_dx...");
         let jacobian_x_expr = self.dynamics.jacobian(&state_symbol)?;
         println!("Rustifying df_dx...");
-        jacobian_x_expr.rustify(&jacobian_symbols, func_name, mod_name)?;
+        jacobian_x_expr.rustify(&jacobian_symbols, func_name, mod_name, true)?;
 
         Ok(())
     }
@@ -145,7 +145,7 @@ impl<D: SymbolicDynamics + Labelizable + Identifiable> CodeGenerator<D> for RK4S
         println!("Computing df_du...");
         let jacobian_u_expr = self.dynamics.jacobian(&input_symbol)?;
         println!("Rustifying df_du...");
-        jacobian_u_expr.rustify(&jacobian_symbols, func_name, mod_name)?;
+        jacobian_u_expr.rustify(&jacobian_symbols, func_name, mod_name, true)?;
 
         Ok(())
     }
@@ -167,9 +167,9 @@ impl<D: SymbolicDynamics + Labelizable + Identifiable> CodeGenerator<D> for RK4S
             .dynamics
             .hessian(&state_symbol, &[state_symbol.clone(), input_symbol])?;
         println!("Rustifying d2f_dxx...");
-        db[0].rustify(&jacobian_symbols, d2f_dxx, mod_name)?;
+        db[0].rustify(&jacobian_symbols, d2f_dxx, mod_name, true)?;
         println!("Rustifying d2f_dxu...");
-        db[1].rustify(&jacobian_symbols, d2f_dxu, mod_name)?;
+        db[1].rustify(&jacobian_symbols, d2f_dxu, mod_name, true)?;
 
         Ok(())
     }
@@ -190,9 +190,9 @@ impl<D: SymbolicDynamics + Labelizable + Identifiable> CodeGenerator<D> for RK4S
             .dynamics
             .hessian(&input_symbol, &[input_symbol.clone(), state_symbol])?;
         println!("Rustifying d2f_duu...");
-        db[0].rustify(&jacobian_symbols, d2f_duu, mod_name)?;
+        db[0].rustify(&jacobian_symbols, d2f_duu, mod_name, true)?;
         println!("Rustifying d2f_dux...");
-        db[1].rustify(&jacobian_symbols, d2f_dux, mod_name)?;
+        db[1].rustify(&jacobian_symbols, d2f_dux, mod_name, true)?;
 
         Ok(())
     }

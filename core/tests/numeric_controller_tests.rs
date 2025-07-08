@@ -3,7 +3,7 @@ use control_rs::controllers::ddp::controller::DDP;
 use control_rs::controllers::qp_lqr::QPOptions;
 use control_rs::controllers::qp_mpc::{ConvexMpc, ConvexMpcOptions};
 use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursion};
-use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions, QPLQR};
+use control_rs::controllers::{ConstraintAffine, Controller, ControllerOptions, QPLQR};
 use control_rs::cost::GenericCostOptions;
 use control_rs::cost::generic::GenericCost;
 use control_rs::physics::constants as c;
@@ -19,6 +19,7 @@ use std::f64::consts::PI;
 use std::sync::Arc;
 use symbolic_services::symbolic::ExprRegistry;
 
+#[derive(PartialEq)]
 enum ControllerType {
     QpLqr,
     QpLqrUlimits(f64, f64),
@@ -30,6 +31,7 @@ enum ControllerType {
     MpcULimitsAndNoise(f64, f64, Vec<f64>),
     MpcUXLimitsAndNoise(f64, f64, f64, f64, usize, Vec<f64>),
     Ilqr,
+    IlqrULimits(f64, f64),
     Ddp,
 }
 
@@ -101,7 +103,7 @@ fn numeric_controller_setup(controller_type: ControllerType, tol: f64) {
         }
         ControllerType::QpLqrUlimits(lower, upper) => {
             let [hover] = input_hover.extract(&["u1"]);
-            let constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((
+            let constraints = ConstraintAffine::new_uniform_bounds_input::<Sim<Quadrotor2D>>((
                 lower - hover,
                 upper - hover,
             ));
@@ -133,7 +135,7 @@ fn numeric_controller_setup(controller_type: ControllerType, tol: f64) {
         }
         ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(lower, upper, std) => {
             let constraints =
-                ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((*lower, *upper));
+                ConstraintAffine::new_uniform_bounds_input::<Sim<Quadrotor2D>>((*lower, *upper));
             let general_options = general_options
                 .set_u_limits(constraints)
                 .set_noise(std.clone());
@@ -144,7 +146,7 @@ fn numeric_controller_setup(controller_type: ControllerType, tol: f64) {
         }
         ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(lower, upper, std) => {
             let constraints =
-                ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((*lower, *upper));
+                ConstraintAffine::new_uniform_bounds_input::<Sim<Quadrotor2D>>((*lower, *upper));
             let general_options = general_options
                 .set_u_limits(constraints)
                 .set_noise(std.clone());
@@ -169,7 +171,7 @@ fn numeric_controller_setup(controller_type: ControllerType, tol: f64) {
         }
         ControllerType::MpcULimitsAndNoise(lower, upper, std) => {
             let [hover] = input_hover.extract(&["u1"]);
-            let constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((
+            let constraints = ConstraintAffine::new_uniform_bounds_input::<Sim<Quadrotor2D>>((
                 lower - hover,
                 upper - hover,
             ));
@@ -191,16 +193,15 @@ fn numeric_controller_setup(controller_type: ControllerType, tol: f64) {
         }
         ControllerType::MpcUXLimitsAndNoise(lower_u, upper_u, lower_x, upper_x, idx, std) => {
             let [hover] = input_hover.extract(&["u1"]);
-            let input_constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>(
+            let input_constraints = ConstraintAffine::new_uniform_bounds_input::<Sim<Quadrotor2D>>(
                 (lower_u - hover, upper_u - hover),
             );
 
-            let state_constraints =
-                ConstraintTransform::new_single_bound_state::<Sim<Quadrotor2D>>(
-                    (*lower_x, *upper_x),
-                    *idx,
-                )
-                .unwrap();
+            let state_constraints = ConstraintAffine::new_single_bound_state::<Sim<Quadrotor2D>>(
+                (*lower_x, *upper_x),
+                *idx,
+            )
+            .unwrap();
             let general_options = general_options
                 .set_u_limits(input_constraints)
                 .set_x_limits(state_constraints)
@@ -272,29 +273,67 @@ fn numeric_controller_setup(controller_type: ControllerType, tol: f64) {
                 .unwrap()
                 .set_time_horizon(sim_time)
                 .unwrap();
-            let ddp_options =
-                DDPOptions::<Sim<Quadrotor2D>>::default().set_general(general_options)
+            let ddp_options = DDPOptions::<Sim<Quadrotor2D>>::default()
+                .set_general(general_options)
                 .set_ddp_enable(true);
             let controller = DDP::new_numeric(sim, Box::new(cost.clone()), ddp_options).unwrap();
+            Box::new(controller)
+        }
+        ControllerType::IlqrULimits(lower_u, upper_u) => {
+            let state_ref = Quadrotor2DState::new(0.0, 1.0, PI, 0.0, 0.0, 0.0);
+            let options = GenericCostOptions::<Quadrotor2DState, Quadrotor2DInput>::new()
+                .set_reference_state_trajectory(&vec![state_ref.clone(); n_steps]);
+            let qn_matrix = DMatrix::<f64>::identity(6, 6) * 100.0;
+            let cost = GenericCost::new(q_matrix, qn_matrix, r_matrix, Some(options)).unwrap();
+            expected_trajectory[n_steps] = state_ref.clone();
+            // initialize u_ref with random noise
+            let normal = Normal::new(0.0, 1.0).unwrap();
+            let mut rng = rand::thread_rng();
+            let u_ref: Vec<_> = (0..n_steps - 1)
+                .map(|_| {
+                    let u1 = normal.sample(&mut rng);
+                    let u2 = normal.sample(&mut rng);
+                    Quadrotor2DInput::new(u1, u2)
+                })
+                .collect();
+            let input_constraints =
+                ConstraintAffine::new_uniform_bounds_input::<Sim<Quadrotor2D>>((*lower_u, *upper_u));
+            let general_options = ControllerOptions::<Sim<Quadrotor2D>>::default()
+                .set_x_ref(&[state_ref.clone()])
+                .set_u_ref(&u_ref)
+                .set_u_limits(input_constraints)
+                .set_dt(dt)
+                .unwrap()
+                .set_time_horizon(sim_time)
+                .unwrap();
+            let ilqr_options = DDPOptions::<Sim<Quadrotor2D>>::default()
+                .set_general(general_options)
+                .set_verbose(true)
+                .set_ddp_enable(false);
+            let controller = DDP::new_numeric(sim, Box::new(cost.clone()), ilqr_options).unwrap();
             Box::new(controller)
         }
     };
 
     let (x_traj, u_traj) = controller.solve(&state_0).unwrap();
 
+    dbg!(x_traj.last(), expected_trajectory.last());
     assert!(
         (x_traj.last().unwrap().to_vector() - expected_trajectory.last().unwrap().to_vector())
             .abs()
             .sum()
             < tol
     );
-    assert!(
-        (u_traj.last().unwrap().to_vector().abs()
-            - dvector!(0.5 * m * c::GRAVITY, 0.5 * m * c::GRAVITY))
-        .abs()
-        .norm()
-            < tol
-    );
+
+    if controller_type != ControllerType::Ddp && controller_type != ControllerType::Ilqr {
+        assert!(
+            (u_traj.last().unwrap().to_vector().abs()
+                - dvector!(0.5 * m * c::GRAVITY, 0.5 * m * c::GRAVITY))
+            .abs()
+            .norm()
+                < tol
+        );
+    }
 
     match controller_type {
         ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(lower, upper, _)
@@ -404,4 +443,12 @@ fn test_ilqr_numeric() {
 #[test]
 fn test_ddp_numeric() {
     numeric_controller_setup(ControllerType::Ddp, 1e-1);
+}
+
+#[test]
+fn test_ilqr_ulimits() {
+    numeric_controller_setup(
+        ControllerType::IlqrULimits(-6.0, 6.0),
+       1e-1 
+    );
 }

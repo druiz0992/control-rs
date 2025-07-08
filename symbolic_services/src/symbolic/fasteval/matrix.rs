@@ -378,6 +378,7 @@ impl ExprMatrix {
         vars: &ExprVector,
         func_name: &str,
         mod_name: &str,
+        parallel_flag: bool,
     ) -> Result<(), SymbolicError> {
         let req = CodegenRequest::new(
             ExprRecord::Matrix(self.clone()),
@@ -385,6 +386,7 @@ impl ExprMatrix {
             func_name,
             CODEGEN_OUT_DIR,
             mod_name,
+            parallel_flag,
         );
 
         PythonClient::new()

@@ -1,7 +1,7 @@
 use control_rs::animation::{Animation, macroquad::Macroquad};
 use control_rs::controllers::ddp::DDPOptions;
 use control_rs::controllers::ddp::controller::DDP;
-use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions};
+use control_rs::controllers::{ConstraintAffine, Controller, ControllerOptions};
 use control_rs::cost::GenericCostOptions;
 use control_rs::cost::generic::GenericCost;
 use control_rs::physics::constants as c;
@@ -106,9 +106,8 @@ async fn build_sim(controller_type: ControllerType) {
             Box::new(controller)
         }
         ControllerType::IlqrULimits(lower_u, upper_u) => {
-            let input_constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>(
-                (lower_u, upper_u),
-            );
+            let input_constraints =
+                ConstraintAffine::new_uniform_bounds_input::<Sim<Quadrotor2D>>((lower_u, upper_u));
             let general_options = general_options.set_u_limits(input_constraints);
             let ilqr_options = DDPOptions::<Sim<Quadrotor2D>>::default()
                 .set_general(general_options)

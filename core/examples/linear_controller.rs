@@ -3,7 +3,7 @@ use control_rs::controllers::qp_mpc::ConvexMpc;
 use control_rs::controllers::qp_mpc::options::ConvexMpcOptions;
 use control_rs::controllers::riccati_lqr::RiccatiRecursion;
 use control_rs::controllers::riccati_lqr::options::RiccatiLQROptions;
-use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions, QPLQR};
+use control_rs::controllers::{ConstraintAffine, Controller, ControllerOptions, QPLQR};
 use control_rs::cost::generic::{GenericCost, GenericCostOptions};
 use control_rs::physics::discretizer::ZOH;
 use control_rs::physics::models::{LtiInput, LtiModel, LtiState};
@@ -75,7 +75,7 @@ fn build_sim(controller_type: LinearControllerType) {
         }
         LinearControllerType::QpLqrUlimits(lower, upper) => {
             let constraints =
-                ConstraintTransform::new_uniform_bounds_input::<LtiSim>((lower, upper));
+                ConstraintAffine::new_uniform_bounds_input::<LtiSim>((lower, upper));
             let general_options = general_options.set_u_limits(constraints);
             let osqp_settings = Settings::default().verbose(false);
             let qp_options = QPOptions::<LtiSim>::default()
@@ -105,7 +105,7 @@ fn build_sim(controller_type: LinearControllerType) {
         }
         LinearControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(lower, upper, std) => {
             let constraints =
-                ConstraintTransform::new_uniform_bounds_input::<LtiSim>((lower, upper));
+                ConstraintAffine::new_uniform_bounds_input::<LtiSim>((lower, upper));
             let general_options = general_options.set_u_limits(constraints).set_noise(std);
             let options = RiccatiLQROptions::enable_finite_horizon().set_general(general_options);
             Box::new(
@@ -114,7 +114,7 @@ fn build_sim(controller_type: LinearControllerType) {
         }
         LinearControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(lower, upper, std) => {
             let constraints =
-                ConstraintTransform::new_uniform_bounds_input::<LtiSim>((lower, upper));
+                ConstraintAffine::new_uniform_bounds_input::<LtiSim>((lower, upper));
             let general_options = general_options.set_u_limits(constraints).set_noise(std);
             let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
             Box::new(
@@ -133,7 +133,7 @@ fn build_sim(controller_type: LinearControllerType) {
         }
         LinearControllerType::MpcLinearULimitsAndNoise(lower, upper, std) => {
             let constraints =
-                ConstraintTransform::new_uniform_bounds_input::<LtiSim>((lower, upper));
+                ConstraintAffine::new_uniform_bounds_input::<LtiSim>((lower, upper));
             let general_options = general_options.set_u_limits(constraints).set_noise(std);
             let osqp_settings = Settings::default().verbose(false).eps_abs(1e-7);
             let options = ConvexMpcOptions::default()

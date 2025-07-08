@@ -1,5 +1,5 @@
 use general::matrix::{self, compute_comm_kron_product};
-use nalgebra::{DMatrix, DVector, SymmetricEigen};
+use nalgebra::{Cholesky, DMatrix, DVector, SymmetricEigen};
 
 use crate::controllers::ddp::utils;
 
@@ -50,10 +50,9 @@ impl Q {
     /// Regularizes the Q-function Hessian blocks to ensure positive definiteness.
     ///
     /// This method checks whether the full Q-function Hessian (composed of `q_xx`, `q_xu`, `q_ux`, and `q_uu`)
-    /// is symmetric positive definite by forming the full matrix:
-    ///
-    ///     [ q_xx   q_xu ]
-    ///     [ q_ux   q_uu ]
+    /// is symmetric positive definite by forming the full matrix: 
+    ///  [ q_xx   q_xu ]
+    ///  [ q_ux   q_uu ]
     ///
     /// If the matrix is not positive definite (i.e., it has non-positive eigenvalues),
     /// the function adds a regularization term `β * I` to the diagonal of `q_xx` and `q_uu`,
@@ -125,11 +124,11 @@ impl Q {
     /// - `d` is the feedforward control vector
     pub (super) fn compute_unconstrained_gains(&mut self, q_u: &DVector<f64>) -> (DMatrix<f64>, DVector<f64>) {
         self.regularize();
-        let lu = self.q_uu.clone().lu();
-        let feedforward_control = lu.solve(q_u).expect("Matrix is singular!");
-        let feedback_gain = lu.solve(&self.q_ux).expect("Matrix is singular!");
+        if let Some(cholesky) = Cholesky::new(self.q_uu.clone()) {
+          return (cholesky.solve(&self.q_ux), cholesky.solve(q_u));
+        }
+        panic!("QUu Matrix is singular!");
 
-        (feedback_gain, feedforward_control)
     }
 
     pub(super) fn compute_gains_via_inverse(
@@ -195,7 +194,12 @@ impl Q {
             quu_free[(i, i)] += lambda;
         }
 
-        let k_free = quu_free.lu().solve(&qux_free).unwrap();
+        let k_free = if let Some(cholesky) = Cholesky::new(quu_free.clone()) {
+            cholesky.solve(&qux_free)
+
+        } else {
+          quu_free.lu().solve(&qux_free).unwrap()
+        };
 
         let mut feedback_gain = DMatrix::<f64>::zeros(n_u, n_x);
         for (i_f, &i) in free_indices.iter().enumerate() {

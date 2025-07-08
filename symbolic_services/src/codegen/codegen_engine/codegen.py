@@ -111,7 +111,7 @@ def build_ffi_header(func_names, out_dir):
 
 
 
-def build_codegen_export(func_name, all_func_names, mod_name,  out_dir):
+def build_codegen_export(func_name, all_func_names, mod_name,  out_dir, parallel = False):
     eval_fns = []
 
     os.makedirs(out_dir, exist_ok=True)
@@ -141,7 +141,9 @@ def build_codegen_export(func_name, all_func_names, mod_name,  out_dir):
     with open(codegen_export_file, "a") as f:
         if os.path.getsize(codegen_export_file) == 0:
             # Write headers only if file was empty
-            f.write(f"use rayon::prelude::*;\nuse nalgebra::DMatrix;\nuse crate::{mod_name}::ffi::*;\n\n")
+            if parallel:
+                f.write(f"use rayon::prelude::*;\n")
+            f.write(f"use nalgebra::DMatrix;\nuse crate::{mod_name}::ffi::*;\n\n")
 
         f.write(f"{fn_signature} -> DMatrix<f64> {{\n")
         f.write(f"   let rows = {m};\n")
@@ -155,13 +157,20 @@ def build_codegen_export(func_name, all_func_names, mod_name,  out_dir):
             f.write(f"        ({name} as unsafe extern \"C\" fn(*const f64) -> f64, {i},{j}),\n")
         f.write("    ];\n")
         f.write("    let mut mat = DMatrix::from_element(rows, cols, 0.0);\n")
-        f.write("    let results: Vec<(usize, usize, f64)> = entries\n")
-        f.write("        .par_iter()\n")
-        f.write("        .map(|(f, i, j)| (*i, *j, unsafe {f(args.as_ptr()) }))\n")
-        f.write("        .collect();\n")
-        f.write("    for (i, j, val) in results {\n")
-        f.write("        mat[(i,j)] = val;\n")
-        f.write("    }\n")
+
+        if parallel:
+            f.write("    let results: Vec<(usize, usize, f64)> = entries\n")
+            f.write("        .par_iter()\n")
+            f.write("        .map(|(f, i, j)| (*i, *j, unsafe {f(args.as_ptr()) }))\n")
+            f.write("        .collect();\n")
+            f.write("    for (i, j, val) in results {\n")
+            f.write("        mat[(i,j)] = val;\n")
+            f.write("    }\n")
+        else:
+            f.write("    for (f, i, j) in entries {\n")
+            f.write("        let val = unsafe { f(args.as_ptr()) };\n")
+            f.write("        mat[(i,j)] = val;\n")
+            f.write("    }\n")
         f.write("    mat\n}\n\n")
 
 def normalize_expr(expr):
@@ -252,6 +261,7 @@ if __name__ == "__main__":
     func_name = data['func_name']
     out_dir = data['out_dir']
     mod_name = data['mod_name']
+    parallel = data.get('parallel', False)
 
     def process_cell_wrapper(args):
         i, j, cell = args
@@ -291,7 +301,7 @@ if __name__ == "__main__":
 
     build_c_h_files(all_funcs, all_prototypes, func_name, c_folder)
     build_ffi_header(all_func_names, mod_folder)
-    build_codegen_export(func_name, all_func_names, mod_name, mod_folder)
+    build_codegen_export(func_name, all_func_names, mod_name, mod_folder, parallel)
     add_mods(mod_name, out_folder)
 
 

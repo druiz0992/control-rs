@@ -9,7 +9,7 @@ pub mod riccati_lqr;
 pub mod trajectory;
 pub mod utils;
 
-pub use constraints::ConstraintTransform;
+pub use constraints::ConstraintAffine;
 pub use hessians::HessianFns;
 pub use jacobians::JacobianFns;
 use nalgebra::{DMatrix, DVector};
@@ -65,7 +65,7 @@ fn state_from_slice<S: PhysicsSim>(slice: &[f64]) -> ControllerState<S> {
 
 fn into_clamped_input<S: PhysicsSim>(
     vector: DVector<f64>,
-    u_limits: Option<&ConstraintTransform>,
+    u_limits: Option<&ConstraintAffine>,
 ) -> ControllerInput<S> {
     input_from_slice::<S>(utils::clamp_input_vector(vector, u_limits).as_slice())
 }

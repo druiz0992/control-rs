@@ -2,7 +2,7 @@ use control_rs::animation::{Animation, macroquad::Macroquad};
 use control_rs::controllers::qp_lqr::{QPLQR, QPOptions};
 use control_rs::controllers::qp_mpc::{ConvexMpc, ConvexMpcOptions};
 use control_rs::controllers::riccati_lqr::{RiccatiLQROptions, RiccatiRecursion};
-use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions};
+use control_rs::controllers::{ConstraintAffine, Controller, ControllerOptions};
 use control_rs::cost::generic::GenericCost;
 use control_rs::physics::constants as c;
 use control_rs::physics::discretizer::RK4Symbolic;
@@ -96,7 +96,7 @@ async fn build_sim(controller_type: ControllerType) {
         }
         ControllerType::QpLqrUlimits(lower_u, upper_u) => {
             let [hover] = input_hover.extract(&["u1"]);
-            let input_constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>(
+            let input_constraints = ConstraintAffine::new_uniform_bounds_input::<Sim<Quadrotor2D>>(
                 (lower_u - hover, upper_u - hover),
             );
             let general_options = general_options.set_u_limits(input_constraints);
@@ -127,7 +127,7 @@ async fn build_sim(controller_type: ControllerType) {
         }
         ControllerType::RiccatiRecursionLQRFiniteULimitsAndNoise(lower, upper, std) => {
             let constraints =
-                ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((lower, upper));
+                ConstraintAffine::new_uniform_bounds_input::<Sim<Quadrotor2D>>((lower, upper));
             let general_options = general_options.set_u_limits(constraints).set_noise(std);
             let options = RiccatiLQROptions::enable_finite_horizon().set_general(general_options);
             Box::new(
@@ -136,7 +136,7 @@ async fn build_sim(controller_type: ControllerType) {
         }
         ControllerType::RiccatiRecursionLQRInfiniteULimitsAndNoise(lower, upper, std) => {
             let constraints =
-                ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>((lower, upper));
+                ConstraintAffine::new_uniform_bounds_input::<Sim<Quadrotor2D>>((lower, upper));
             let general_options = general_options.set_u_limits(constraints).set_noise(std);
             let options = RiccatiLQROptions::enable_infinite_horizon().set_general(general_options);
             Box::new(
@@ -158,7 +158,7 @@ async fn build_sim(controller_type: ControllerType) {
         }
         ControllerType::MpcULimitsAndNoise(lower, upper, std) => {
             let [hover] = input_hover.extract(&["u1"]);
-            let input_constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>(
+            let input_constraints = ConstraintAffine::new_uniform_bounds_input::<Sim<Quadrotor2D>>(
                 (lower - hover, upper - hover),
             );
 
@@ -179,12 +179,12 @@ async fn build_sim(controller_type: ControllerType) {
         }
         ControllerType::MpcUXLimitsAndNoise(lower_u, upper_u, lower_x, upper_x, std) => {
             let [hover] = input_hover.extract(&["u1"]);
-            let input_constraints = ConstraintTransform::new_uniform_bounds_input::<Sim<Quadrotor2D>>(
+            let input_constraints = ConstraintAffine::new_uniform_bounds_input::<Sim<Quadrotor2D>>(
                 (lower_u - hover, upper_u - hover),
             );
 
             let state_constraints =
-                ConstraintTransform::new_single_bound_state::<Sim<Quadrotor2D>>(
+                ConstraintAffine::new_single_bound_state::<Sim<Quadrotor2D>>(
                     (lower_x, upper_x),
                     2,
                 )

@@ -3,9 +3,9 @@ use osqp::Settings;
 use crate::controllers::ControllerOptions;
 use crate::physics::traits::PhysicsSim;
 
-const DEFAULT_MAX_ITERS: usize = 250;
+const DEFAULT_MAX_ITERS: usize = 450;
 const DEFAULT_MAX_ITERS_LINESEARCH: usize = 20;
-const DEFAULT_TOL: f64 = 1e-3;
+const DEFAULT_TOL: f64 = 1e-5;
 pub struct DDPOptions<S: PhysicsSim> {
     pub general: ControllerOptions<S>,
     pub ddp_enable: bool,

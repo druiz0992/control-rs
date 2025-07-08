@@ -255,6 +255,7 @@ where
             .rollout(initial_state, Some(&self.u_traj), dt, self.n_steps)?;
 
         let mut stats;
+        let mut last_delta_cost = 0.0;
         for niter in 0..max_iters {
             let delta_cost = self.backward_pass()?;
             stats = self.forward_pass()?;
@@ -277,6 +278,10 @@ where
                 }
                 break;
             }
+            if (delta_cost - last_delta_cost).abs() < self.options.get_tol() {
+                break;
+            }
+            last_delta_cost = delta_cost;
         }
         Ok((self.x_traj.clone(), self.u_traj.clone()))
     }

@@ -1,12 +1,9 @@
-use super::ConstraintTransform;
+use super::ConstraintAffine;
 use crate::physics::traits::State;
 use nalgebra::DVector;
 
 /// Clamps an input vector within given limits
-pub fn clamp_input_vector(
-    input: DVector<f64>,
-    limits: Option<&ConstraintTransform>,
-) -> DVector<f64> {
+pub fn clamp_input_vector(input: DVector<f64>, limits: Option<&ConstraintAffine>) -> DVector<f64> {
     if let Some(constraint) = limits {
         let (lower, upper) = constraint.bounds_as_slice();
         DVector::from_iterator(

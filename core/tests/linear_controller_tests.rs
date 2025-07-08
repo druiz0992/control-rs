@@ -3,7 +3,7 @@ use control_rs::controllers::qp_mpc::ConvexMpc;
 use control_rs::controllers::qp_mpc::options::ConvexMpcOptions;
 use control_rs::controllers::riccati_lqr::RiccatiRecursion;
 use control_rs::controllers::riccati_lqr::options::RiccatiLQROptions;
-use control_rs::controllers::{ConstraintTransform, Controller, ControllerOptions, QPLQR};
+use control_rs::controllers::{ConstraintAffine, Controller, ControllerOptions, QPLQR};
 use control_rs::cost::generic::{GenericCost, GenericCostOptions};
 use control_rs::physics::discretizer::ZOH;
 use control_rs::physics::models::{LtiInput, LtiModel, LtiState};
@@ -69,7 +69,7 @@ fn linear_controller_setup(controller_type: LinearControllerType) {
         }
         LinearControllerType::QpLqrUlimits(lower, upper) => {
             let contraints =
-                ConstraintTransform::new_uniform_bounds_input::<LtiSim>((*lower, *upper));
+                ConstraintAffine::new_uniform_bounds_input::<LtiSim>((*lower, *upper));
             let general_options = general_options.set_u_limits(contraints);
             let osqp_settings = Settings::default().verbose(false);
             let qp_options = QPOptions::<LtiSim>::default()
@@ -110,7 +110,7 @@ fn linear_controller_setup(controller_type: LinearControllerType) {
         }
         LinearControllerType::MpcLinearULimitsAndNoise(lower, upper, std) => {
             let constraints =
-                ConstraintTransform::new_uniform_bounds_input::<LtiSim>((*lower, *upper));
+                ConstraintAffine::new_uniform_bounds_input::<LtiSim>((*lower, *upper));
             let general_options = general_options
                 .set_u_limits(constraints)
                 .set_noise(std.clone());
